@@ -27,6 +27,7 @@
 - `freetype`
 - `zlib`
 - `pkgconf`
+- `openjdk`
 - `bazel@8`
 
 其中 Homebrew `v8` 的默认路径是：
@@ -140,6 +141,35 @@ cmake -S . -B build \
 不同平台和不同构建产物的库名可能不同。比如一些 V8/Skia 构建方式会要求额外链接 `icu*`、`absl_*`、`harfbuzz`、`png`、`zlib`、`freetype` 等库，这部分需要按你的本地产物补齐。当前仓库内的最小 Bazel 产物已经把这套工程需要的链接项稳定下来。
 
 ## 构建
+
+一键安装并完成最小可运行构建：
+
+```bash
+./scripts/bootstrap.sh
+```
+
+如果你想直接构建 release：
+
+```bash
+./scripts/bootstrap.sh release
+```
+
+这个脚本会完成：
+
+- 安装 Homebrew 依赖
+- 配置 Bazel 所需的 `JAVA_HOME`
+- 初始化 `third_party/skia` 子模块
+- 构建最小 Skia 产物
+- 配置并编译主工程
+- 运行冒烟测试
+
+如果仓库里已经存在可用的 Skia 产物，脚本会直接复用；如果你要强制重新构建 Skia：
+
+```bash
+FORCE_SKIA_BUILD=1 ./scripts/bootstrap.sh
+```
+
+单独构建时也可以用下面的命令：
 
 ```bash
 cmake --preset dev
