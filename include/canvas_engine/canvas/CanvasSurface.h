@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 
+#include "include/core/SkPixmap.h"
 #include "include/core/SkSurface.h"
 
 namespace canvas_engine {
@@ -14,6 +15,7 @@ class CanvasSurface {
   int width() const { return width_; }
   int height() const { return height_; }
   SkCanvas* canvas() const { return surface_->getCanvas(); }
+  bool PeekPixels(SkPixmap* pixmap) const { return surface_ && surface_->peekPixels(pixmap); }
 
   bool Resize(int width, int height);
   bool SavePng(const std::string& output_path) const;

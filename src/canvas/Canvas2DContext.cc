@@ -7,6 +7,12 @@
 #include <optional>
 #include <string>
 
+#if defined(__APPLE__)
+#include <CoreFoundation/CoreFoundation.h>
+#include <CoreGraphics/CoreGraphics.h>
+#include <CoreText/CoreText.h>
+#endif
+
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
 #include "include/core/SkFontMetrics.h"
@@ -64,6 +70,136 @@ std::optional<float> ParseFontSize(std::string_view font) {
 float ComputeShadowSigma(float blur) {
   return std::max(0.0f, blur * 0.5f);
 }
+
+std::string Trim(std::string_view value) {
+  std::size_t begin = 0;
+  while (begin < value.size() &&
+         std::isspace(static_cast<unsigned char>(value[begin]))) {
+    ++begin;
+  }
+  std::size_t end = value.size();
+  while (end > begin &&
+         std::isspace(static_cast<unsigned char>(value[end - 1]))) {
+    --end;
+  }
+  return std::string(value.substr(begin, end - begin));
+}
+
+std::string StripQuotes(std::string_view value) {
+  if (value.size() >= 2 &&
+      ((value.front() == '"' && value.back() == '"') ||
+       (value.front() == '\'' && value.back() == '\''))) {
+    return std::string(value.substr(1, value.size() - 2));
+  }
+  return std::string(value);
+}
+
+std::string ParseFontFamily(std::string_view font) {
+  const std::string css = Trim(font);
+  const std::size_t px = ToLower(css).find("px");
+  if (px == std::string::npos) {
+    return "Helvetica";
+  }
+
+  std::string families = Trim(css.substr(px + 2));
+  if (families.empty()) {
+    return "Helvetica";
+  }
+
+  const std::size_t comma = families.find(',');
+  if (comma != std::string::npos) {
+    families = families.substr(0, comma);
+  }
+  families = StripQuotes(Trim(families));
+  const std::string lower = ToLower(families);
+  if (lower == "sans-serif" || lower == "system-ui" || lower == "-apple-system") {
+    return "Helvetica";
+  }
+  if (lower == "serif") {
+    return "Times New Roman";
+  }
+  if (lower == "monospace") {
+    return "Menlo";
+  }
+  return families.empty() ? "Helvetica" : families;
+}
+
+#if defined(__APPLE__)
+struct ScopedCFTypeRef {
+  ScopedCFTypeRef() = default;
+  explicit ScopedCFTypeRef(CFTypeRef value) : value(value) {}
+  ~ScopedCFTypeRef() {
+    if (value != nullptr) {
+      CFRelease(value);
+    }
+  }
+
+  CFTypeRef value = nullptr;
+};
+
+CFAttributedStringRef CreateAttributedString(std::string_view text,
+                                             std::string_view family,
+                                             float font_size,
+                                             SkColor color,
+                                             float global_alpha) {
+  ScopedCFTypeRef text_ref(
+      CFStringCreateWithBytes(nullptr,
+                              reinterpret_cast<const UInt8*>(text.data()),
+                              static_cast<CFIndex>(text.size()),
+                              kCFStringEncodingUTF8, false));
+  ScopedCFTypeRef family_ref(
+      CFStringCreateWithCString(nullptr, std::string(family).c_str(),
+                                kCFStringEncodingUTF8));
+  if (text_ref.value == nullptr || family_ref.value == nullptr) {
+    return nullptr;
+  }
+
+  CTFontRef font = CTFontCreateWithName(
+      static_cast<CFStringRef>(family_ref.value), font_size, nullptr);
+  if (font == nullptr) {
+    return nullptr;
+  }
+
+  const CGFloat alpha =
+      (static_cast<CGFloat>(SkColorGetA(color)) / 255.0f) * global_alpha;
+  CGColorRef fill_color = CGColorCreateGenericRGB(
+      static_cast<CGFloat>(SkColorGetR(color)) / 255.0f,
+      static_cast<CGFloat>(SkColorGetG(color)) / 255.0f,
+      static_cast<CGFloat>(SkColorGetB(color)) / 255.0f, alpha);
+  if (fill_color == nullptr) {
+    CFRelease(font);
+    return nullptr;
+  }
+
+  const void* keys[] = {kCTFontAttributeName, kCTForegroundColorAttributeName};
+  const void* values[] = {font, fill_color};
+  CFDictionaryRef attributes = CFDictionaryCreate(
+      nullptr, keys, values, 2, &kCFTypeDictionaryKeyCallBacks,
+      &kCFTypeDictionaryValueCallBacks);
+  CGColorRelease(fill_color);
+  CFRelease(font);
+  if (attributes == nullptr) {
+    return nullptr;
+  }
+
+  CFAttributedStringRef attributed =
+      CFAttributedStringCreate(nullptr, static_cast<CFStringRef>(text_ref.value),
+                               attributes);
+  CFRelease(attributes);
+  return attributed;
+}
+
+CTLineRef CreateTextLine(std::string_view text, std::string_view family,
+                         float font_size, SkColor color, float global_alpha) {
+  ScopedCFTypeRef attributed(
+      CreateAttributedString(text, family, font_size, color, global_alpha));
+  if (attributed.value == nullptr) {
+    return nullptr;
+  }
+  return CTLineCreateWithAttributedString(
+      static_cast<CFAttributedStringRef>(attributed.value));
+}
+#endif
 
 }  // namespace
 
@@ -369,6 +505,21 @@ void Canvas2DContext::Stroke() {
 Canvas2DContext::TextMetrics Canvas2DContext::MeasureText(
     std::string_view text) const {
   TextMetrics metrics;
+#if defined(__APPLE__)
+  const std::string family = ParseFontFamily(state_.font_css);
+  ScopedCFTypeRef line(CreateTextLine(text, family, state_.font_size,
+                                      state_.fill_style, state_.global_alpha));
+  if (line.value != nullptr) {
+    CGFloat ascent = 0.0;
+    CGFloat descent = 0.0;
+    CGFloat leading = 0.0;
+    metrics.width = static_cast<float>(CTLineGetTypographicBounds(
+        static_cast<CTLineRef>(line.value), &ascent, &descent, &leading));
+    metrics.actual_bounding_box_ascent = static_cast<float>(ascent);
+    metrics.actual_bounding_box_descent = static_cast<float>(descent);
+    return metrics;
+  }
+#endif
   const SkFont font = MakeFont();
   SkRect bounds;
   metrics.width = font.measureText(text.data(), text.size(),
@@ -449,6 +600,91 @@ void Canvas2DContext::ConfigurePaint(SkPaint* paint) const {
 
 void Canvas2DContext::DrawText(std::string_view text, float x, float y,
                                const SkPaint& paint) const {
+#if defined(__APPLE__)
+  SkPixmap pixmap;
+  if (surface_->PeekPixels(&pixmap)) {
+    CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
+    if (color_space != nullptr) {
+      const CGBitmapInfo bitmap_info = static_cast<CGBitmapInfo>(
+          static_cast<unsigned>(kCGBitmapByteOrder32Little) |
+          static_cast<unsigned>(kCGImageAlphaPremultipliedFirst));
+      CGContextRef cg = CGBitmapContextCreate(
+          const_cast<void*>(pixmap.addr()), pixmap.width(), pixmap.height(), 8,
+          pixmap.rowBytes(), color_space, bitmap_info);
+      CGColorSpaceRelease(color_space);
+
+      if (cg != nullptr) {
+        CGContextSetShouldAntialias(cg, true);
+        CGContextSetAllowsAntialiasing(cg, true);
+        const SkMatrix matrix = surface_->canvas()->getTotalMatrix();
+        CGContextSetTextMatrix(cg, CGAffineTransformIdentity);
+
+        const TextMetrics text_metrics = MeasureText(text);
+        float draw_x = x;
+        if (state_.text_align == "center") {
+          draw_x -= text_metrics.width * 0.5f;
+        } else if (state_.text_align == "right" || state_.text_align == "end") {
+          draw_x -= text_metrics.width;
+        }
+
+        float baseline_y = y;
+        if (state_.text_baseline == "top" || state_.text_baseline == "hanging") {
+          baseline_y += text_metrics.actual_bounding_box_ascent;
+        } else if (state_.text_baseline == "middle") {
+          baseline_y += (text_metrics.actual_bounding_box_ascent -
+                         text_metrics.actual_bounding_box_descent) *
+                        0.5f;
+        } else if (state_.text_baseline == "bottom" ||
+                   state_.text_baseline == "ideographic") {
+          baseline_y -= text_metrics.actual_bounding_box_descent;
+        }
+
+        const std::string family = ParseFontFamily(state_.font_css);
+        ScopedCFTypeRef line(CreateTextLine(
+            text, family, state_.font_size,
+            paint.getStyle() == SkPaint::kStroke_Style ? state_.stroke_style
+                                                       : state_.fill_style,
+            state_.global_alpha));
+        if (line.value != nullptr) {
+          std::array<SkPoint, 1> source_points = {SkPoint::Make(draw_x, baseline_y)};
+          std::array<SkPoint, 1> device_points;
+          matrix.mapPoints(device_points, source_points);
+          const SkPoint device_point = device_points[0];
+          const CGFloat cg_x = static_cast<CGFloat>(device_point.x());
+          const CGFloat cg_y =
+              static_cast<CGFloat>(pixmap.height() - device_point.y());
+
+          if ((SkColorGetA(state_.shadow_color) > 0) &&
+              (state_.shadow_blur > 0.0f || state_.shadow_offset_x != 0.0f ||
+               state_.shadow_offset_y != 0.0f)) {
+            CGColorRef shadow_color = CGColorCreateGenericRGB(
+                static_cast<CGFloat>(SkColorGetR(state_.shadow_color)) / 255.0f,
+                static_cast<CGFloat>(SkColorGetG(state_.shadow_color)) / 255.0f,
+                static_cast<CGFloat>(SkColorGetB(state_.shadow_color)) / 255.0f,
+                (static_cast<CGFloat>(SkColorGetA(state_.shadow_color)) / 255.0f) *
+                    state_.global_alpha);
+            if (shadow_color != nullptr) {
+              CGContextSetShadowWithColor(
+                  cg,
+                  CGSizeMake(static_cast<CGFloat>(state_.shadow_offset_x),
+                             static_cast<CGFloat>(-state_.shadow_offset_y)),
+                  static_cast<CGFloat>(state_.shadow_blur), shadow_color);
+              CGColorRelease(shadow_color);
+            }
+          }
+
+          CGContextSetTextPosition(cg, cg_x, cg_y);
+          CTLineDraw(static_cast<CTLineRef>(line.value), cg);
+          CGContextRelease(cg);
+          return;
+        }
+
+        CGContextRelease(cg);
+      }
+    }
+  }
+#endif
+
   const SkFont font = MakeFont();
   SkFontMetrics metrics;
   font.getMetrics(&metrics);
