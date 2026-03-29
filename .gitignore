@@ -1,0 +1,19 @@
+.DS_Store
+
+# CMake build trees
+/build/
+/build-*/
+/cmake-build-*/
+
+# Generated output
+/output/
+
+# Local editor and cache files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.AppleDouble
+.LSOverride

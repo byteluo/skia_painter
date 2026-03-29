@@ -1,0 +1,135 @@
+cmake_minimum_required(VERSION 3.20)
+
+project(skia_canvas_engine LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(V8_INCLUDE_DIRS "" CACHE STRING "Semicolon-separated V8 include directories")
+set(V8_LINK_DIRECTORIES "" CACHE STRING "Semicolon-separated V8 library directories")
+set(V8_LIBRARIES "" CACHE STRING "Semicolon-separated V8 libraries or targets")
+set(V8_COMPILE_DEFINITIONS "" CACHE STRING "Semicolon-separated V8 compile definitions")
+
+set(SKIA_INCLUDE_DIRS "" CACHE STRING "Semicolon-separated Skia include directories")
+set(SKIA_LINK_DIRECTORIES "" CACHE STRING "Semicolon-separated Skia library directories")
+set(SKIA_LIBRARIES "" CACHE STRING "Semicolon-separated Skia libraries or targets")
+
+if(APPLE)
+  if("${V8_INCLUDE_DIRS}" STREQUAL "" AND EXISTS "/opt/homebrew/opt/v8/include")
+    set(V8_INCLUDE_DIRS "/opt/homebrew/opt/v8/include")
+  endif()
+  if("${V8_LINK_DIRECTORIES}" STREQUAL "" AND EXISTS "/opt/homebrew/opt/v8/lib")
+    set(V8_LINK_DIRECTORIES "/opt/homebrew/opt/v8/lib;/opt/homebrew/opt/v8/libexec")
+  endif()
+  if("${V8_LIBRARIES}" STREQUAL "" AND EXISTS "/opt/homebrew/opt/v8/lib/libv8.dylib")
+    set(V8_LIBRARIES "v8;v8_libplatform;v8_libbase")
+  endif()
+  if("${V8_COMPILE_DEFINITIONS}" STREQUAL "" AND EXISTS "/opt/homebrew/opt/v8/include")
+    set(V8_COMPILE_DEFINITIONS
+      "V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH;V8_ENABLE_SANDBOX;CPPGC_POINTER_COMPRESSION")
+  endif()
+endif()
+
+set(SKIA_LOCAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/skia")
+set(SKIA_LOCAL_CORE "${SKIA_LOCAL_ROOT}/bazel-bin/src/core/libcore.a")
+set(SKIA_LOCAL_BASE "${SKIA_LOCAL_ROOT}/bazel-bin/src/base/libbase.a")
+set(SKIA_LOCAL_SKCMS "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.o")
+set(SKIA_LOCAL_SKCMS_BASELINE
+    "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.o")
+
+if("${SKIA_INCLUDE_DIRS}" STREQUAL "" AND EXISTS "${SKIA_LOCAL_ROOT}/include/core/SkCanvas.h")
+  set(SKIA_INCLUDE_DIRS "${SKIA_LOCAL_ROOT}")
+endif()
+
+if("${SKIA_LIBRARIES}" STREQUAL "" AND
+   EXISTS "${SKIA_LOCAL_CORE}" AND
+   EXISTS "${SKIA_LOCAL_BASE}" AND
+   EXISTS "${SKIA_LOCAL_SKCMS}" AND
+   EXISTS "${SKIA_LOCAL_SKCMS_BASELINE}")
+  set(SKIA_LIBRARIES
+    "${SKIA_LOCAL_CORE};${SKIA_LOCAL_BASE};${SKIA_LOCAL_SKCMS};${SKIA_LOCAL_SKCMS_BASELINE}")
+endif()
+
+foreach(required_var
+    V8_INCLUDE_DIRS
+    V8_LIBRARIES
+    SKIA_INCLUDE_DIRS
+    SKIA_LIBRARIES)
+  if("${${required_var}}" STREQUAL "")
+    message(FATAL_ERROR
+      "${required_var} is empty. Configure this project with explicit V8/Skia include paths and libraries.")
+  endif()
+endforeach()
+
+find_package(Threads REQUIRED)
+include(CTest)
+include(GNUInstallDirs)
+
+add_executable(canvas_engine
+  src/main.cc
+  src/canvas/CanvasSurface.cc
+  src/canvas/Canvas2DContext.cc
+  src/canvas/ColorParser.cc
+  src/runtime/ScriptEngine.cc
+)
+
+target_include_directories(canvas_engine
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${V8_INCLUDE_DIRS}
+    ${SKIA_INCLUDE_DIRS}
+)
+
+if(NOT "${V8_COMPILE_DEFINITIONS}" STREQUAL "")
+  target_compile_definitions(canvas_engine PRIVATE ${V8_COMPILE_DEFINITIONS})
+endif()
+
+if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
+  target_link_directories(canvas_engine PRIVATE ${V8_LINK_DIRECTORIES})
+endif()
+
+if(NOT "${SKIA_LINK_DIRECTORIES}" STREQUAL "")
+  target_link_directories(canvas_engine PRIVATE ${SKIA_LINK_DIRECTORIES})
+endif()
+
+target_link_libraries(canvas_engine
+  PRIVATE
+    ${V8_LIBRARIES}
+    ${SKIA_LIBRARIES}
+    Threads::Threads
+)
+
+if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
+  set_target_properties(canvas_engine PROPERTIES
+    BUILD_RPATH "${V8_LINK_DIRECTORIES}"
+    INSTALL_RPATH "${V8_LINK_DIRECTORIES}"
+  )
+endif()
+
+if(APPLE)
+  target_link_libraries(canvas_engine
+    PRIVATE
+      "-framework CoreFoundation"
+      "-framework CoreGraphics"
+      "-framework ImageIO"
+      "-framework CoreText"
+      "-framework CoreServices"
+  )
+elseif(UNIX)
+  target_link_libraries(canvas_engine PRIVATE dl m)
+endif()
+
+install(TARGETS canvas_engine
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+if(BUILD_TESTING)
+  add_test(
+    NAME smoke
+    COMMAND canvas_engine ${CMAKE_CURRENT_SOURCE_DIR}/examples/smoke.js
+  )
+  set_tests_properties(smoke PROPERTIES
+    PASS_REGULAR_EXPRESSION "smoke"
+  )
+endif()
