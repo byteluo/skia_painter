@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "scripts": {
+    "inspect:echarts-canvas-api": "node scripts/inspect_echarts_canvas_api.js"
+  },
+  "dependencies": {
+    "echarts": "^6.0.0"
+  }
+}

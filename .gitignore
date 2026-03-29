@@ -11,6 +11,7 @@
 # Local editor and cache files
 .idea/
 .vscode/
+node_modules/
 *.swp
 *.swo
 

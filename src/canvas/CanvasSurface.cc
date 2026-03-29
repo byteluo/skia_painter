@@ -16,22 +16,42 @@
 
 namespace canvas_engine {
 
-CanvasSurface::CanvasSurface(int width, int height, sk_sp<SkSurface> surface)
-    : width_(width), height_(height), surface_(std::move(surface)) {}
+namespace {
 
-std::shared_ptr<CanvasSurface> CanvasSurface::CreateRaster(int width, int height) {
+sk_sp<SkSurface> CreateRasterSurface(int width, int height) {
   if (width <= 0 || height <= 0) {
     return nullptr;
   }
 
   SkImageInfo image_info = SkImageInfo::MakeN32Premul(width, height);
-  auto surface = SkSurfaces::Raster(image_info);
+  return SkSurfaces::Raster(image_info);
+}
+
+}  // namespace
+
+CanvasSurface::CanvasSurface(int width, int height, sk_sp<SkSurface> surface)
+    : width_(width), height_(height), surface_(std::move(surface)) {}
+
+std::shared_ptr<CanvasSurface> CanvasSurface::CreateRaster(int width, int height) {
+  auto surface = CreateRasterSurface(width, height);
   if (!surface) {
     return nullptr;
   }
 
   return std::shared_ptr<CanvasSurface>(
       new CanvasSurface(width, height, std::move(surface)));
+}
+
+bool CanvasSurface::Resize(int width, int height) {
+  auto surface = CreateRasterSurface(width, height);
+  if (!surface) {
+    return false;
+  }
+
+  width_ = width;
+  height_ = height;
+  surface_ = std::move(surface);
+  return true;
 }
 
 bool CanvasSurface::SavePng(const std::string& output_path) const {

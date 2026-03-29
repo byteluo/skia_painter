@@ -15,6 +15,7 @@ class CanvasSurface {
   int height() const { return height_; }
   SkCanvas* canvas() const { return surface_->getCanvas(); }
 
+  bool Resize(int width, int height);
   bool SavePng(const std::string& output_path) const;
 
  private:
