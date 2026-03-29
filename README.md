@@ -1,13 +1,13 @@
 # Skia Painter
 
-一个基于 `C++ + V8 + Skia` 的最小 Canvas 后端引擎骨架。它提供：
+一个基于 `C++ + V8 + Skia` 的 Canvas 后端引擎骨架。它现在已经能直接承载 `ECharts` 的 canvas 渲染链路，并导出 PNG。它提供：
 
 - 通过 `V8` 执行 JavaScript
 - 通过 `Skia` 完成 2D 栅格绘制
-- 一个最小 `Canvas` / `CanvasRenderingContext2D` 运行时
+- 一个可运行 `ECharts` 的 `Canvas` / `CanvasRenderingContext2D` 运行时
 - 将渲染结果导出为 PNG
 
-当前实现的 API 范围是“可运行的最小内核”，方便你继续扩展到更完整的 HTML Canvas 语义。
+当前实现的 API 范围依然不是完整 HTML Canvas 规范，但已经覆盖了一批足以驱动 `ECharts` 实际绘图的宿主和 2D 接口。
 
 ## 仓库约定
 
@@ -49,33 +49,65 @@
 
 - `./build/dev/canvas_engine examples/smoke.js`
 - `./build/dev/canvas_engine examples/demo.js`
+- `./build/dev/canvas_engine examples/echarts_bar.js`
 - 成功生成 `output/demo.png`
+- 成功生成 `output/echarts_bar.png`
 
 ## 已实现能力
 
 - `new Canvas(width, height)`
 - `canvas.getContext("2d")`
 - `canvas.saveToPng(path)`
+- `canvas.setAttribute(name, value)`
+- `canvas.addEventListener(...)`
+- `canvas.removeEventListener(...)`
 - `ctx.fillStyle`
 - `ctx.strokeStyle`
 - `ctx.lineWidth`
+- `ctx.font`
+- `ctx.textAlign`
+- `ctx.textBaseline`
+- `ctx.globalAlpha`
+- `ctx.globalCompositeOperation`
+- `ctx.lineCap`
+- `ctx.lineJoin`
+- `ctx.miterLimit`
+- `ctx.shadowBlur`
+- `ctx.shadowColor`
+- `ctx.shadowOffsetX`
+- `ctx.shadowOffsetY`
 - `ctx.save()`
 - `ctx.restore()`
 - `ctx.translate(x, y)`
 - `ctx.scale(x, y)`
 - `ctx.rotate(radians)`
+- `ctx.transform(a, b, c, d, e, f)`
+- `ctx.setTransform(a, b, c, d, e, f)`
+- `ctx.resetTransform()`
 - `ctx.clearRect(x, y, w, h)`
 - `ctx.fillRect(x, y, w, h)`
 - `ctx.strokeRect(x, y, w, h)`
 - `ctx.beginPath()`
 - `ctx.moveTo(x, y)`
 - `ctx.lineTo(x, y)`
+- `ctx.rect(x, y, w, h)`
 - `ctx.arc(x, y, radius, startAngle, endAngle, counterClockwise = false)`
 - `ctx.closePath()`
 - `ctx.fill()`
 - `ctx.stroke()`
+- `ctx.measureText(text)`
+- `ctx.fillText(text, x, y)`
+- `ctx.strokeText(text, x, y)`
 - `print(...)`
 - `console.log(...)`
+- `console.warn(...)`
+- `console.error(...)`
+- `loadScript(path)`
+- `setTimeout(...)`
+- `clearTimeout(...)`
+- `requestAnimationFrame(...)`
+- `cancelAnimationFrame(...)`
+- `performance.now()`
 
 ## 目录结构
 
@@ -84,7 +116,9 @@
 ├── CMakeLists.txt
 ├── README.md
 ├── examples
-│   └── demo.js
+│   ├── demo.js
+│   ├── echarts_bar.js
+│   └── smoke.js
 ├── include
 │   └── canvas_engine
 │       ├── canvas
@@ -141,6 +175,12 @@ cmake -S . -B build \
 不同平台和不同构建产物的库名可能不同。比如一些 V8/Skia 构建方式会要求额外链接 `icu*`、`absl_*`、`harfbuzz`、`png`、`zlib`、`freetype` 等库，这部分需要按你的本地产物补齐。当前仓库内的最小 Bazel 产物已经把这套工程需要的链接项稳定下来。
 
 ## 构建
+
+如果你需要跑 `ECharts` 示例，先安装 JS 依赖：
+
+```bash
+npm install
+```
 
 一键安装并完成最小可运行构建：
 
@@ -223,11 +263,53 @@ wrote output/demo.png
 ./scripts/run_demo.sh
 ```
 
+运行 `ECharts` 示例：
+
+```bash
+./build/dev/canvas_engine examples/echarts_bar.js
+```
+
+脚本会输出：
+
+```text
+wrote output/echarts_bar.png
+```
+
+## ECharts 集成方式
+
+当前推荐的接入方式是直接加载 `ECharts` 的 UMD 构建，并通过宿主提供的 `Canvas` 对象作为渲染目标：
+
+```js
+loadScript("../node_modules/echarts/dist/echarts.js");
+
+const canvas = new Canvas(960, 540);
+
+echarts.setPlatformAPI({
+  createCanvas() {
+    return new Canvas(960, 540);
+  }
+});
+
+const chart = echarts.init(canvas, null, {
+  renderer: "canvas",
+  width: 960,
+  height: 540
+});
+```
+
+这条链路依赖三层能力已经接通：
+
+- `loadScript(path)` 负责把 UMD 包加载进当前 V8 上下文
+- `Canvas` / `CanvasRenderingContext2D` 提供 zrender 实际调用的 2D 接口
+- `canvas.saveToPng(path)` 把最终结果导出为 PNG
+
 ## 示例脚本
 
 见 [examples/demo.js](/Users/treecat/Desktop/skia-painter/examples/demo.js)。
 
 最小冒烟脚本见 [examples/smoke.js](/Users/treecat/Desktop/skia-painter/examples/smoke.js)。
+
+`ECharts` 集成示例见 [examples/echarts_bar.js](/Users/treecat/Desktop/skia-painter/examples/echarts_bar.js)。
 
 ## Git 提交建议
 
@@ -245,9 +327,9 @@ git submodule update --init --recursive
 
 ## 后续扩展建议
 
-- 增加 `fillText` / `strokeText`，对接 `SkFont`、`SkTypeface`
 - 增加 `Path2D`
-- 增加图片解码与 `drawImage`
-- 增加渐变、阴影、合成模式
+- 增加图片解码、`Image` 与 `drawImage`
+- 增加渐变、pattern 和更多路径语义
 - 增加 `ImageData` 和像素级读写
-- 增加事件循环，把它嵌入更完整的 JS 宿主环境
+- 把定时器从“立即执行宿主 stub”升级为真正事件循环
+- 继续补齐更接近浏览器 / node-canvas 的兼容层

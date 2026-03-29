@@ -1,5 +1,6 @@
 #include "canvas_engine/runtime/ScriptEngine.h"
 
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -26,6 +27,8 @@ struct ContextHandle {
 constexpr v8::EmbedderDataTypeTag kCanvasHandleTag = 1;
 constexpr v8::EmbedderDataTypeTag kContextHandleTag = 2;
 
+using Clock = std::chrono::steady_clock;
+
 template <typename T>
 T* Unwrap(v8::Isolate* isolate, v8::Local<v8::Object> object,
           v8::EmbedderDataTypeTag tag) {
@@ -33,7 +36,8 @@ T* Unwrap(v8::Isolate* isolate, v8::Local<v8::Object> object,
       object->GetAlignedPointerFromInternalField(isolate, 0, tag));
 }
 
-v8::Local<v8::String> ToV8String(v8::Isolate* isolate, const std::string& value) {
+v8::Local<v8::String> ToV8String(v8::Isolate* isolate,
+                                 const std::string& value) {
   return v8::String::NewFromUtf8(isolate, value.c_str()).ToLocalChecked();
 }
 
@@ -103,8 +107,7 @@ void ThrowTypeError(v8::Isolate* isolate, const char* message) {
 }
 
 void ThrowError(v8::Isolate* isolate, const std::string& message) {
-  isolate->ThrowException(
-      v8::Exception::Error(ToV8String(isolate, message)));
+  isolate->ThrowException(v8::Exception::Error(ToV8String(isolate, message)));
 }
 
 std::string FormatException(v8::Isolate* isolate, v8::TryCatch* try_catch) {
@@ -119,7 +122,8 @@ std::string FormatException(v8::Isolate* isolate, v8::TryCatch* try_catch) {
   }
 
   auto message = try_catch->Message();
-  v8::String::Utf8Value script_name(isolate, message->GetScriptOrigin().ResourceName());
+  v8::String::Utf8Value script_name(
+      isolate, message->GetScriptOrigin().ResourceName());
   const int line = message->GetLineNumber(context).FromMaybe(0);
   output << (*script_name ? *script_name : "<script>") << ":" << line << ": "
          << (*exception ? *exception : "Unknown exception");
@@ -146,6 +150,29 @@ void PrintArgs(const v8::FunctionCallbackInfo<v8::Value>& info) {
   std::fflush(stdout);
 }
 
+double NowMilliseconds() {
+  const auto now = Clock::now().time_since_epoch();
+  return std::chrono::duration<double, std::milli>(now).count();
+}
+
+bool ExtractSixNumbers(const v8::FunctionCallbackInfo<v8::Value>& info,
+                       float* a, float* b, float* c, float* d, float* e,
+                       float* f) {
+  double values[6] = {0, 0, 0, 0, 0, 0};
+  for (int i = 0; i < 6; ++i) {
+    if (!ExtractDouble(info, i, &values[i])) {
+      return false;
+    }
+  }
+  *a = static_cast<float>(values[0]);
+  *b = static_cast<float>(values[1]);
+  *c = static_cast<float>(values[2]);
+  *d = static_cast<float>(values[3]);
+  *e = static_cast<float>(values[4]);
+  *f = static_cast<float>(values[5]);
+  return true;
+}
+
 }  // namespace
 
 struct ScriptEngine::CanvasHandle {
@@ -162,9 +189,11 @@ ScriptEngine::ScriptEngine() {
 
   const std::string v8_data_dir = DetectV8DataDir();
   if (!v8_data_dir.empty()) {
-    const auto icu_data_path = (std::filesystem::path(v8_data_dir) / "icudtl.dat").string();
+    const auto icu_data_path =
+        (std::filesystem::path(v8_data_dir) / "icudtl.dat").string();
     v8::V8::InitializeICU(icu_data_path.c_str());
-    if (std::filesystem::exists(std::filesystem::path(v8_data_dir) / "snapshot_blob.bin")) {
+    if (std::filesystem::exists(std::filesystem::path(v8_data_dir) /
+                                "snapshot_blob.bin")) {
       v8::V8::InitializeExternalStartupData(v8_data_dir.c_str());
     }
   } else {
@@ -207,35 +236,73 @@ ScriptEngine::~ScriptEngine() {
 }
 
 bool ScriptEngine::RunScriptFile(const std::string& script_path) {
-  std::string source;
-  if (!ReadFile(script_path, &source)) {
-    std::cerr << "failed to read script: " << script_path << std::endl;
-    return false;
-  }
-
   v8::Isolate::Scope isolate_scope(isolate_);
   v8::HandleScope handle_scope(isolate_);
   auto context = context_.Get(isolate_);
   v8::Context::Scope context_scope(context);
 
+  v8::Local<v8::Value> result;
+  const auto resolved = ResolveScriptPath(script_path);
+  if (!ExecuteScriptFile(resolved, &result)) {
+    std::cerr << last_error_ << std::endl;
+    return false;
+  }
+
+  return true;
+}
+
+bool ScriptEngine::ExecuteScriptFile(const std::filesystem::path& script_path,
+                                     v8::Local<v8::Value>* out_result) {
+  last_error_.clear();
+
+  std::string source;
+  if (!ReadFile(script_path.string(), &source)) {
+    last_error_ = "failed to read script: " + script_path.string();
+    return false;
+  }
+
+  auto context = context_.Get(isolate_);
+  v8::Context::Scope context_scope(context);
   v8::TryCatch try_catch(isolate_);
+
+  script_stack_.push_back(script_path);
+  const auto pop_path = [this]() { script_stack_.pop_back(); };
+
   auto source_string = ToV8String(isolate_, source);
-  auto resource_name = ToV8String(isolate_, script_path);
+  auto resource_name = ToV8String(isolate_, script_path.string());
   v8::ScriptOrigin origin(resource_name);
 
   v8::Local<v8::Script> script;
   if (!v8::Script::Compile(context, source_string, &origin).ToLocal(&script)) {
-    std::cerr << FormatException(isolate_, &try_catch) << std::endl;
+    last_error_ = FormatException(isolate_, &try_catch);
+    pop_path();
     return false;
   }
 
   v8::Local<v8::Value> result;
   if (!script->Run(context).ToLocal(&result)) {
-    std::cerr << FormatException(isolate_, &try_catch) << std::endl;
+    last_error_ = FormatException(isolate_, &try_catch);
+    pop_path();
     return false;
   }
 
+  pop_path();
+  if (out_result != nullptr) {
+    *out_result = result;
+  }
   return true;
+}
+
+std::filesystem::path ScriptEngine::ResolveScriptPath(
+    const std::string& script_path) const {
+  std::filesystem::path path(script_path);
+  if (path.is_absolute()) {
+    return path.lexically_normal();
+  }
+
+  const auto base = script_stack_.empty() ? std::filesystem::current_path()
+                                          : script_stack_.back().parent_path();
+  return (base / path).lexically_normal();
 }
 
 v8::Local<v8::Context> ScriptEngine::GetContext() {
@@ -243,25 +310,94 @@ v8::Local<v8::Context> ScriptEngine::GetContext() {
     return context_.Get(isolate_);
   }
 
-  auto global = v8::ObjectTemplate::New(isolate_);
-  global->Set(v8::String::NewFromUtf8Literal(isolate_, "Canvas"),
-              GetCanvasTemplate());
-  auto context = v8::Context::New(isolate_, nullptr, global);
+  auto global_template = v8::ObjectTemplate::New(isolate_);
+  global_template->Set(v8::String::NewFromUtf8Literal(isolate_, "Canvas"),
+                       GetCanvasTemplate());
+
+  auto context = v8::Context::New(isolate_, nullptr, global_template);
   v8::Context::Scope context_scope(context);
+  auto global = context->Global();
 
   auto print = v8::Function::New(context, PrintCallback).ToLocalChecked();
-  context->Global()
-      ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "print"), print)
+  global->Set(context, v8::String::NewFromUtf8Literal(isolate_, "print"), print)
       .Check();
 
   auto console = v8::Object::New(isolate_);
   auto log = v8::Function::New(context, ConsoleLogCallback).ToLocalChecked();
-  console
-      ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "log"), log)
+  console->Set(context, v8::String::NewFromUtf8Literal(isolate_, "log"), log)
       .Check();
-  context->Global()
-      ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "console"),
-            console)
+  console->Set(context, v8::String::NewFromUtf8Literal(isolate_, "warn"), log)
+      .Check();
+  console->Set(context, v8::String::NewFromUtf8Literal(isolate_, "error"), log)
+      .Check();
+  global->Set(context, v8::String::NewFromUtf8Literal(isolate_, "console"),
+              console)
+      .Check();
+
+  global
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "loadScript"),
+            v8::Function::New(context, LoadScriptCallback).ToLocalChecked())
+      .Check();
+  global
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "setTimeout"),
+            v8::Function::New(context, SetTimeoutCallback).ToLocalChecked())
+      .Check();
+  global
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "clearTimeout"),
+            v8::Function::New(context, ClearTimeoutCallback).ToLocalChecked())
+      .Check();
+  global
+      ->Set(context,
+            v8::String::NewFromUtf8Literal(isolate_, "requestAnimationFrame"),
+            v8::Function::New(context, RequestAnimationFrameCallback)
+                .ToLocalChecked())
+      .Check();
+  global
+      ->Set(context,
+            v8::String::NewFromUtf8Literal(isolate_, "cancelAnimationFrame"),
+            v8::Function::New(context, CancelAnimationFrameCallback)
+                .ToLocalChecked())
+      .Check();
+
+  auto performance = v8::Object::New(isolate_);
+  performance
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "now"),
+            v8::Function::New(context, PerformanceNowCallback)
+                .ToLocalChecked())
+      .Check();
+  global
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "performance"),
+            performance)
+      .Check();
+
+  auto navigator = v8::Object::New(isolate_);
+  navigator
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "userAgent"),
+            v8::String::NewFromUtf8Literal(isolate_, "canvas_engine"))
+      .Check();
+  navigator
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "platform"),
+            v8::String::NewFromUtf8Literal(isolate_, "darwin"))
+      .Check();
+  navigator
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "language"),
+            v8::String::NewFromUtf8Literal(isolate_, "en-US"))
+      .Check();
+  global->Set(context, v8::String::NewFromUtf8Literal(isolate_, "navigator"),
+              navigator)
+      .Check();
+
+  global->Set(context, v8::String::NewFromUtf8Literal(isolate_, "window"),
+              global)
+      .Check();
+  global->Set(context, v8::String::NewFromUtf8Literal(isolate_, "self"), global)
+      .Check();
+  global
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "global"), global)
+      .Check();
+  global
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "devicePixelRatio"),
+            v8::Number::New(isolate_, 1.0))
       .Check();
 
   return context;
@@ -276,15 +412,26 @@ v8::Local<v8::FunctionTemplate> ScriptEngine::GetCanvasTemplate() {
   tpl->SetClassName(v8::String::NewFromUtf8Literal(isolate_, "Canvas"));
   tpl->InstanceTemplate()->SetInternalFieldCount(1);
   tpl->InstanceTemplate()->SetNativeDataProperty(
-      v8::String::NewFromUtf8Literal(isolate_, "width"), CanvasWidthGetter);
+      v8::String::NewFromUtf8Literal(isolate_, "width"), CanvasWidthGetter,
+      CanvasWidthSetter);
   tpl->InstanceTemplate()->SetNativeDataProperty(
-      v8::String::NewFromUtf8Literal(isolate_, "height"), CanvasHeightGetter);
+      v8::String::NewFromUtf8Literal(isolate_, "height"), CanvasHeightGetter,
+      CanvasHeightSetter);
   tpl->PrototypeTemplate()->Set(
       isolate_, "getContext",
       v8::FunctionTemplate::New(isolate_, CanvasGetContext));
   tpl->PrototypeTemplate()->Set(
       isolate_, "saveToPng",
       v8::FunctionTemplate::New(isolate_, CanvasSaveToPng));
+  tpl->PrototypeTemplate()->Set(
+      isolate_, "setAttribute",
+      v8::FunctionTemplate::New(isolate_, CanvasSetAttribute));
+  tpl->PrototypeTemplate()->Set(
+      isolate_, "addEventListener",
+      v8::FunctionTemplate::New(isolate_, CanvasAddEventListener));
+  tpl->PrototypeTemplate()->Set(
+      isolate_, "removeEventListener",
+      v8::FunctionTemplate::New(isolate_, CanvasRemoveEventListener));
 
   canvas_template_.Reset(isolate_, tpl);
   return tpl;
@@ -297,7 +444,8 @@ v8::Local<v8::FunctionTemplate> ScriptEngine::GetContext2DTemplate() {
 
   auto tpl = v8::FunctionTemplate::New(isolate_);
   tpl->SetClassName(
-      v8::String::NewFromUtf8Literal(isolate_, "CanvasRenderingContext2D"));
+      v8::String::NewFromUtf8Literal(isolate_,
+                                     "CanvasRenderingContext2D"));
   tpl->InstanceTemplate()->SetInternalFieldCount(1);
   tpl->InstanceTemplate()->SetNativeDataProperty(
       v8::String::NewFromUtf8Literal(isolate_, "fillStyle"), FillStyleGetter,
@@ -308,6 +456,42 @@ v8::Local<v8::FunctionTemplate> ScriptEngine::GetContext2DTemplate() {
   tpl->InstanceTemplate()->SetNativeDataProperty(
       v8::String::NewFromUtf8Literal(isolate_, "lineWidth"), LineWidthGetter,
       LineWidthSetter);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "font"), FontGetter,
+      FontSetter);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "textAlign"), TextAlignGetter,
+      TextAlignSetter);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "textBaseline"),
+      TextBaselineGetter, TextBaselineSetter);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "globalAlpha"),
+      GlobalAlphaGetter, GlobalAlphaSetter);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "globalCompositeOperation"),
+      GlobalCompositeOperationGetter, GlobalCompositeOperationSetter);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "lineCap"), LineCapGetter,
+      LineCapSetter);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "lineJoin"), LineJoinGetter,
+      LineJoinSetter);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "miterLimit"),
+      MiterLimitGetter, MiterLimitSetter);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "shadowBlur"),
+      ShadowBlurGetter, ShadowBlurSetter);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "shadowColor"),
+      ShadowColorGetter, ShadowColorSetter);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "shadowOffsetX"),
+      ShadowOffsetXGetter, ShadowOffsetXSetter);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "shadowOffsetY"),
+      ShadowOffsetYGetter, ShadowOffsetYSetter);
 
   tpl->PrototypeTemplate()->Set(isolate_, "save",
                                 v8::FunctionTemplate::New(isolate_, CtxSave));
@@ -320,6 +504,15 @@ v8::Local<v8::FunctionTemplate> ScriptEngine::GetContext2DTemplate() {
                                 v8::FunctionTemplate::New(isolate_, CtxScale));
   tpl->PrototypeTemplate()->Set(isolate_, "rotate",
                                 v8::FunctionTemplate::New(isolate_, CtxRotate));
+  tpl->PrototypeTemplate()->Set(
+      isolate_, "transform",
+      v8::FunctionTemplate::New(isolate_, CtxTransform));
+  tpl->PrototypeTemplate()->Set(
+      isolate_, "setTransform",
+      v8::FunctionTemplate::New(isolate_, CtxSetTransform));
+  tpl->PrototypeTemplate()->Set(
+      isolate_, "resetTransform",
+      v8::FunctionTemplate::New(isolate_, CtxResetTransform));
   tpl->PrototypeTemplate()->Set(
       isolate_, "clearRect",
       v8::FunctionTemplate::New(isolate_, CtxClearRect));
@@ -338,6 +531,8 @@ v8::Local<v8::FunctionTemplate> ScriptEngine::GetContext2DTemplate() {
   tpl->PrototypeTemplate()->Set(
       isolate_, "lineTo",
       v8::FunctionTemplate::New(isolate_, CtxLineTo));
+  tpl->PrototypeTemplate()->Set(isolate_, "rect",
+                                v8::FunctionTemplate::New(isolate_, CtxRect));
   tpl->PrototypeTemplate()->Set(isolate_, "arc",
                                 v8::FunctionTemplate::New(isolate_, CtxArc));
   tpl->PrototypeTemplate()->Set(
@@ -347,6 +542,15 @@ v8::Local<v8::FunctionTemplate> ScriptEngine::GetContext2DTemplate() {
                                 v8::FunctionTemplate::New(isolate_, CtxFill));
   tpl->PrototypeTemplate()->Set(isolate_, "stroke",
                                 v8::FunctionTemplate::New(isolate_, CtxStroke));
+  tpl->PrototypeTemplate()->Set(
+      isolate_, "measureText",
+      v8::FunctionTemplate::New(isolate_, CtxMeasureText));
+  tpl->PrototypeTemplate()->Set(
+      isolate_, "fillText",
+      v8::FunctionTemplate::New(isolate_, CtxFillText));
+  tpl->PrototypeTemplate()->Set(
+      isolate_, "strokeText",
+      v8::FunctionTemplate::New(isolate_, CtxStrokeText));
 
   context_2d_template_.Reset(isolate_, tpl);
   return tpl;
@@ -356,13 +560,94 @@ ScriptEngine* ScriptEngine::From(v8::Isolate* isolate) {
   return static_cast<ScriptEngine*>(isolate->GetData(0));
 }
 
-void ScriptEngine::PrintCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
+void ScriptEngine::PrintCallback(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
   PrintArgs(info);
 }
 
 void ScriptEngine::ConsoleLogCallback(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   PrintArgs(info);
+}
+
+void ScriptEngine::LoadScriptCallback(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  if (info.Length() < 1 || !info[0]->IsString()) {
+    ThrowTypeError(isolate, "loadScript(path) requires a string path");
+    return;
+  }
+
+  auto* engine = From(isolate);
+  const auto resolved = engine->ResolveScriptPath(ToStdString(isolate, info[0]));
+  v8::Local<v8::Value> result;
+  if (!engine->ExecuteScriptFile(resolved, &result)) {
+    ThrowError(isolate, engine->last_error_);
+    return;
+  }
+
+  info.GetReturnValue().Set(result);
+}
+
+void ScriptEngine::SetTimeoutCallback(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  if (info.Length() < 1 || !info[0]->IsFunction()) {
+    ThrowTypeError(isolate, "setTimeout(callback, delay?) requires a function");
+    return;
+  }
+
+  auto* engine = From(isolate);
+  const std::uint32_t timer_id = engine->next_timer_id_++;
+  auto context = isolate->GetCurrentContext();
+  auto callback = info[0].As<v8::Function>();
+  v8::TryCatch try_catch(isolate);
+  v8::Local<v8::Value> result;
+  if (!callback->Call(context, context->Global(), 0, nullptr).ToLocal(&result)) {
+    ThrowError(isolate, FormatException(isolate, &try_catch));
+    return;
+  }
+
+  info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(isolate, timer_id));
+}
+
+void ScriptEngine::ClearTimeoutCallback(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  info.GetReturnValue().Set(v8::Undefined(info.GetIsolate()));
+}
+
+void ScriptEngine::RequestAnimationFrameCallback(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  if (info.Length() < 1 || !info[0]->IsFunction()) {
+    ThrowTypeError(isolate,
+                   "requestAnimationFrame(callback) requires a function");
+    return;
+  }
+
+  auto* engine = From(isolate);
+  const std::uint32_t timer_id = engine->next_timer_id_++;
+  auto context = isolate->GetCurrentContext();
+  auto callback = info[0].As<v8::Function>();
+  v8::Local<v8::Value> argv[] = {v8::Number::New(isolate, NowMilliseconds())};
+  v8::TryCatch try_catch(isolate);
+  v8::Local<v8::Value> result;
+  if (!callback->Call(context, context->Global(), 1, argv).ToLocal(&result)) {
+    ThrowError(isolate, FormatException(isolate, &try_catch));
+    return;
+  }
+
+  info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(isolate, timer_id));
+}
+
+void ScriptEngine::CancelAnimationFrameCallback(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  info.GetReturnValue().Set(v8::Undefined(info.GetIsolate()));
+}
+
+void ScriptEngine::PerformanceNowCallback(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), NowMilliseconds()));
 }
 
 void ScriptEngine::CanvasConstructor(
@@ -391,6 +676,17 @@ void ScriptEngine::CanvasConstructor(
   engine->canvases_.push_back(std::make_unique<CanvasHandle>(surface));
   auto* handle = engine->canvases_.back().get();
   info.This()->SetAlignedPointerInInternalField(0, handle, kCanvasHandleTag);
+
+  auto context = isolate->GetCurrentContext();
+  info.This()
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate, "style"),
+            v8::Object::New(isolate))
+      .Check();
+  info.This()
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate, "nodeName"),
+            v8::String::NewFromUtf8Literal(isolate, "CANVAS"))
+      .Check();
+
   info.GetReturnValue().Set(info.This());
 }
 
@@ -430,7 +726,12 @@ void ScriptEngine::CanvasGetContext(
     canvas->context_object.Reset(isolate, object);
   }
 
-  info.GetReturnValue().Set(canvas->context_object.Get(isolate));
+  auto context_object = canvas->context_object.Get(isolate);
+  context_object
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate, "canvas"),
+            info.This())
+      .Check();
+  info.GetReturnValue().Set(context_object);
 }
 
 void ScriptEngine::CanvasSaveToPng(
@@ -464,6 +765,27 @@ void ScriptEngine::CanvasWidthGetter(
   info.GetReturnValue().Set(canvas->surface->width());
 }
 
+void ScriptEngine::CanvasWidthSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* canvas =
+      Unwrap<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+  if (!canvas) {
+    return;
+  }
+
+  double width = 0.0;
+  if (!ExtractDouble(info.GetIsolate(), value, &width) ||
+      !canvas->surface->Resize(static_cast<int>(width), canvas->surface->height())) {
+    ThrowTypeError(info.GetIsolate(), "width must be a positive number");
+    return;
+  }
+
+  if (canvas->context_handle) {
+    canvas->context_handle->context->ResetState();
+  }
+}
+
 void ScriptEngine::CanvasHeightGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
@@ -473,6 +795,53 @@ void ScriptEngine::CanvasHeightGetter(
     return;
   }
   info.GetReturnValue().Set(canvas->surface->height());
+}
+
+void ScriptEngine::CanvasHeightSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* canvas =
+      Unwrap<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+  if (!canvas) {
+    return;
+  }
+
+  double height = 0.0;
+  if (!ExtractDouble(info.GetIsolate(), value, &height) ||
+      !canvas->surface->Resize(canvas->surface->width(), static_cast<int>(height))) {
+    ThrowTypeError(info.GetIsolate(), "height must be a positive number");
+    return;
+  }
+
+  if (canvas->context_handle) {
+    canvas->context_handle->context->ResetState();
+  }
+}
+
+void ScriptEngine::CanvasSetAttribute(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  if (info.Length() < 2 || !info[0]->IsString()) {
+    ThrowTypeError(isolate,
+                   "setAttribute(name, value) requires a string name");
+    return;
+  }
+
+  auto context = isolate->GetCurrentContext();
+  info.This()
+      ->Set(context, ToV8String(isolate, ToStdString(isolate, info[0])),
+            info[1])
+      .Check();
+}
+
+void ScriptEngine::CanvasAddEventListener(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  info.GetReturnValue().Set(v8::Undefined(info.GetIsolate()));
+}
+
+void ScriptEngine::CanvasRemoveEventListener(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  info.GetReturnValue().Set(v8::Undefined(info.GetIsolate()));
 }
 
 void ScriptEngine::FillStyleGetter(
@@ -554,6 +923,322 @@ void ScriptEngine::LineWidthSetter(
   }
 }
 
+void ScriptEngine::FontGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  info.GetReturnValue().Set(ToV8String(info.GetIsolate(), handle->context->font()));
+}
+
+void ScriptEngine::FontSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  if (!value->IsString() ||
+      !handle->context->SetFont(ToStdString(info.GetIsolate(), value))) {
+    ThrowTypeError(info.GetIsolate(), "font must contain a valid px size");
+  }
+}
+
+void ScriptEngine::TextAlignGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  info.GetReturnValue().Set(
+      ToV8String(info.GetIsolate(), handle->context->text_align()));
+}
+
+void ScriptEngine::TextAlignSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  if (!value->IsString() ||
+      !handle->context->SetTextAlign(ToStdString(info.GetIsolate(), value))) {
+    ThrowTypeError(info.GetIsolate(), "textAlign must be a valid alignment");
+  }
+}
+
+void ScriptEngine::TextBaselineGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  info.GetReturnValue().Set(
+      ToV8String(info.GetIsolate(), handle->context->text_baseline()));
+}
+
+void ScriptEngine::TextBaselineSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  if (!value->IsString() ||
+      !handle->context->SetTextBaseline(ToStdString(info.GetIsolate(), value))) {
+    ThrowTypeError(info.GetIsolate(),
+                   "textBaseline must be a valid baseline value");
+  }
+}
+
+void ScriptEngine::GlobalAlphaGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  info.GetReturnValue().Set(handle->context->global_alpha());
+}
+
+void ScriptEngine::GlobalAlphaSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  double alpha = 0.0;
+  if (!ExtractDouble(info.GetIsolate(), value, &alpha) ||
+      !handle->context->SetGlobalAlpha(static_cast<float>(alpha))) {
+    ThrowTypeError(info.GetIsolate(), "globalAlpha must be numeric");
+  }
+}
+
+void ScriptEngine::GlobalCompositeOperationGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  info.GetReturnValue().Set(ToV8String(
+      info.GetIsolate(), handle->context->global_composite_operation()));
+}
+
+void ScriptEngine::GlobalCompositeOperationSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  if (!value->IsString() ||
+      !handle->context->SetGlobalCompositeOperation(
+          ToStdString(info.GetIsolate(), value))) {
+    ThrowTypeError(info.GetIsolate(),
+                   "globalCompositeOperation must be supported");
+  }
+}
+
+void ScriptEngine::LineCapGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  info.GetReturnValue().Set(
+      ToV8String(info.GetIsolate(), handle->context->line_cap()));
+}
+
+void ScriptEngine::LineCapSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  if (!value->IsString() ||
+      !handle->context->SetLineCap(ToStdString(info.GetIsolate(), value))) {
+    ThrowTypeError(info.GetIsolate(), "lineCap must be butt, round, or square");
+  }
+}
+
+void ScriptEngine::LineJoinGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  info.GetReturnValue().Set(
+      ToV8String(info.GetIsolate(), handle->context->line_join()));
+}
+
+void ScriptEngine::LineJoinSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  if (!value->IsString() ||
+      !handle->context->SetLineJoin(ToStdString(info.GetIsolate(), value))) {
+    ThrowTypeError(info.GetIsolate(), "lineJoin must be miter, round, or bevel");
+  }
+}
+
+void ScriptEngine::MiterLimitGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  info.GetReturnValue().Set(handle->context->miter_limit());
+}
+
+void ScriptEngine::MiterLimitSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  double miter_limit = 0.0;
+  if (!ExtractDouble(info.GetIsolate(), value, &miter_limit) ||
+      !handle->context->SetMiterLimit(static_cast<float>(miter_limit))) {
+    ThrowTypeError(info.GetIsolate(), "miterLimit must be positive");
+  }
+}
+
+void ScriptEngine::ShadowBlurGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  info.GetReturnValue().Set(handle->context->shadow_blur());
+}
+
+void ScriptEngine::ShadowBlurSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  double shadow_blur = 0.0;
+  if (!ExtractDouble(info.GetIsolate(), value, &shadow_blur) ||
+      !handle->context->SetShadowBlur(static_cast<float>(shadow_blur))) {
+    ThrowTypeError(info.GetIsolate(), "shadowBlur must be non-negative");
+  }
+}
+
+void ScriptEngine::ShadowColorGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  info.GetReturnValue().Set(
+      ToV8String(info.GetIsolate(), handle->context->shadow_color()));
+}
+
+void ScriptEngine::ShadowColorSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  if (!value->IsString() ||
+      !handle->context->SetShadowColor(ToStdString(info.GetIsolate(), value))) {
+    ThrowTypeError(info.GetIsolate(), "shadowColor must be a valid CSS color");
+  }
+}
+
+void ScriptEngine::ShadowOffsetXGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  info.GetReturnValue().Set(handle->context->shadow_offset_x());
+}
+
+void ScriptEngine::ShadowOffsetXSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  double shadow_offset_x = 0.0;
+  if (!ExtractDouble(info.GetIsolate(), value, &shadow_offset_x)) {
+    ThrowTypeError(info.GetIsolate(), "shadowOffsetX must be numeric");
+    return;
+  }
+  handle->context->SetShadowOffsetX(static_cast<float>(shadow_offset_x));
+}
+
+void ScriptEngine::ShadowOffsetYGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  info.GetReturnValue().Set(handle->context->shadow_offset_y());
+}
+
+void ScriptEngine::ShadowOffsetYSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  double shadow_offset_y = 0.0;
+  if (!ExtractDouble(info.GetIsolate(), value, &shadow_offset_y)) {
+    ThrowTypeError(info.GetIsolate(), "shadowOffsetY must be numeric");
+    return;
+  }
+  handle->context->SetShadowOffsetY(static_cast<float>(shadow_offset_y));
+}
+
 void ScriptEngine::CtxSave(const v8::FunctionCallbackInfo<v8::Value>& info) {
   if (auto* handle =
           Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag)) {
@@ -602,6 +1287,50 @@ void ScriptEngine::CtxRotate(const v8::FunctionCallbackInfo<v8::Value>& info) {
     return;
   }
   handle->context->Rotate(static_cast<float>(radians));
+}
+
+void ScriptEngine::CtxTransform(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  float a = 0.0f;
+  float b = 0.0f;
+  float c = 0.0f;
+  float d = 0.0f;
+  float e = 0.0f;
+  float f = 0.0f;
+  if (!handle || !ExtractSixNumbers(info, &a, &b, &c, &d, &e, &f)) {
+    ThrowTypeError(info.GetIsolate(),
+                   "transform(a, b, c, d, e, f) requires six numbers");
+    return;
+  }
+  handle->context->Transform(a, b, c, d, e, f);
+}
+
+void ScriptEngine::CtxSetTransform(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  float a = 0.0f;
+  float b = 0.0f;
+  float c = 0.0f;
+  float d = 0.0f;
+  float e = 0.0f;
+  float f = 0.0f;
+  if (!handle || !ExtractSixNumbers(info, &a, &b, &c, &d, &e, &f)) {
+    ThrowTypeError(info.GetIsolate(),
+                   "setTransform(a, b, c, d, e, f) requires six numbers");
+    return;
+  }
+  handle->context->SetTransform(a, b, c, d, e, f);
+}
+
+void ScriptEngine::CtxResetTransform(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  if (auto* handle =
+          Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag)) {
+    handle->context->ResetTransform();
+  }
 }
 
 void ScriptEngine::CtxClearRect(
@@ -693,6 +1422,24 @@ void ScriptEngine::CtxLineTo(const v8::FunctionCallbackInfo<v8::Value>& info) {
   handle->context->LineTo(static_cast<float>(x), static_cast<float>(y));
 }
 
+void ScriptEngine::CtxRect(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  double x = 0.0;
+  double y = 0.0;
+  double width = 0.0;
+  double height = 0.0;
+  if (!handle || !ExtractDouble(info, 0, &x) || !ExtractDouble(info, 1, &y) ||
+      !ExtractDouble(info, 2, &width) || !ExtractDouble(info, 3, &height)) {
+    ThrowTypeError(info.GetIsolate(),
+                   "rect(x, y, width, height) requires four numbers");
+    return;
+  }
+  handle->context->Rect(static_cast<float>(x), static_cast<float>(y),
+                        static_cast<float>(width),
+                        static_cast<float>(height));
+}
+
 void ScriptEngine::CtxArc(const v8::FunctionCallbackInfo<v8::Value>& info) {
   auto* handle =
       Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
@@ -742,6 +1489,74 @@ void ScriptEngine::CtxStroke(const v8::FunctionCallbackInfo<v8::Value>& info) {
           Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag)) {
     handle->context->Stroke();
   }
+}
+
+void ScriptEngine::CtxMeasureText(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  if (!handle || info.Length() < 1) {
+    ThrowTypeError(info.GetIsolate(), "measureText(text) requires text");
+    return;
+  }
+
+  const auto metrics =
+      handle->context->MeasureText(ToStdString(info.GetIsolate(), info[0]));
+  auto context = info.GetIsolate()->GetCurrentContext();
+  auto object = v8::Object::New(info.GetIsolate());
+  object
+      ->Set(context, v8::String::NewFromUtf8Literal(info.GetIsolate(), "width"),
+            v8::Number::New(info.GetIsolate(), metrics.width))
+      .Check();
+  object
+      ->Set(context,
+            v8::String::NewFromUtf8Literal(info.GetIsolate(),
+                                          "actualBoundingBoxAscent"),
+            v8::Number::New(info.GetIsolate(),
+                            metrics.actual_bounding_box_ascent))
+      .Check();
+  object
+      ->Set(context,
+            v8::String::NewFromUtf8Literal(info.GetIsolate(),
+                                          "actualBoundingBoxDescent"),
+            v8::Number::New(info.GetIsolate(),
+                            metrics.actual_bounding_box_descent))
+      .Check();
+  info.GetReturnValue().Set(object);
+}
+
+void ScriptEngine::CtxFillText(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  double x = 0.0;
+  double y = 0.0;
+  if (!handle || info.Length() < 1 || !ExtractDouble(info, 1, &x) ||
+      !ExtractDouble(info, 2, &y)) {
+    ThrowTypeError(info.GetIsolate(),
+                   "fillText(text, x, y, maxWidth?) requires text and coordinates");
+    return;
+  }
+
+  handle->context->FillText(ToStdString(info.GetIsolate(), info[0]),
+                            static_cast<float>(x), static_cast<float>(y));
+}
+
+void ScriptEngine::CtxStrokeText(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  double x = 0.0;
+  double y = 0.0;
+  if (!handle || info.Length() < 1 || !ExtractDouble(info, 1, &x) ||
+      !ExtractDouble(info, 2, &y)) {
+    ThrowTypeError(info.GetIsolate(),
+                   "strokeText(text, x, y, maxWidth?) requires text and coordinates");
+    return;
+  }
+
+  handle->context->StrokeText(ToStdString(info.GetIsolate(), info[0]),
+                              static_cast<float>(x), static_cast<float>(y));
 }
 
 }  // namespace canvas_engine
