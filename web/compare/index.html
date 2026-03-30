@@ -75,10 +75,14 @@
             </header>
             <div class="viewport">
               <div class="stage">
-                <div class="viewport__surface viewport__surface--image">
+                <div id="engine-surface" class="viewport__surface viewport__surface--image">
                   <img id="engine-image" alt="Engine render output" />
                   <div id="engine-placeholder" class="placeholder">
                     点击“渲染后端 PNG”生成最新导出图
+                  </div>
+                  <div id="engine-loading" class="loading-overlay" aria-live="polite">
+                    <div class="loading-spinner" aria-hidden="true"></div>
+                    <div id="engine-loading-text" class="loading-text">后端 PNG 渲染中…</div>
                   </div>
                 </div>
               </div>
