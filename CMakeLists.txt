@@ -165,4 +165,40 @@ if(BUILD_TESTING)
   set_tests_properties(render_regression_verify PROPERTIES
     DEPENDS render_regression_render
   )
+
+  set(ECHARTS_DIST_PATH
+      "${CMAKE_CURRENT_SOURCE_DIR}/node_modules/echarts/dist/echarts.js")
+  if(EXISTS "${ECHARTS_DIST_PATH}")
+    set(ECHARTS_SUNBURST_REGRESSION_OUTPUT_PNG
+        "${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_sunburst_regression.png")
+    set(ECHARTS_TIMELINE_REGRESSION_OUTPUT_PNG
+        "${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_timeline_regression.png")
+    configure_file(
+      ${CMAKE_CURRENT_SOURCE_DIR}/cmake/echarts_regression.js.in
+      ${CMAKE_CURRENT_BINARY_DIR}/echarts_regression.js
+      @ONLY
+    )
+
+    add_test(
+      NAME echarts_regression_render
+      COMMAND $<TARGET_FILE:canvas_engine>
+              ${CMAKE_CURRENT_BINARY_DIR}/echarts_regression.js
+    )
+    set_tests_properties(echarts_regression_render PROPERTIES
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+      PASS_REGULAR_EXPRESSION
+        "wrote ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_timeline_regression\\.png"
+    )
+
+    add_test(
+      NAME echarts_regression_verify
+      COMMAND ${Python3_EXECUTABLE}
+              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_echarts_regression.py
+              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_sunburst_regression.png
+              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_timeline_regression.png
+    )
+    set_tests_properties(echarts_regression_verify PROPERTIES
+      DEPENDS echarts_regression_render
+    )
+  endif()
 endif()
