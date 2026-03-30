@@ -23,10 +23,12 @@ class ScriptEngine {
 
  private:
   struct CanvasHandle;
+  struct GradientHandle;
 
   v8::Local<v8::Context> GetContext();
   v8::Local<v8::FunctionTemplate> GetCanvasTemplate();
   v8::Local<v8::FunctionTemplate> GetContext2DTemplate();
+  v8::Local<v8::FunctionTemplate> GetGradientTemplate();
   bool ExecuteScriptFile(const std::filesystem::path& script_path,
                          v8::Local<v8::Value>* out_result);
   std::filesystem::path ResolveScriptPath(const std::string& script_path) const;
@@ -136,6 +138,12 @@ class ScriptEngine {
   static void ShadowOffsetYSetter(v8::Local<v8::Name> property,
                                   v8::Local<v8::Value> value,
                                   const v8::PropertyCallbackInfo<void>& info);
+  static void LineDashOffsetGetter(
+      v8::Local<v8::Name> property,
+      const v8::PropertyCallbackInfo<v8::Value>& info);
+  static void LineDashOffsetSetter(
+      v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+      const v8::PropertyCallbackInfo<void>& info);
 
   static void CtxSave(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxRestore(const v8::FunctionCallbackInfo<v8::Value>& info);
@@ -158,9 +166,17 @@ class ScriptEngine {
   static void CtxClip(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxFill(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxStroke(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void CtxSetLineDash(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void CtxGetLineDash(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void CtxCreateLinearGradient(
+      const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void CtxCreateRadialGradient(
+      const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxMeasureText(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxFillText(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxStrokeText(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void GradientAddColorStop(
+      const v8::FunctionCallbackInfo<v8::Value>& info);
 
   std::unique_ptr<v8::Platform> platform_;
   std::unique_ptr<v8::ArrayBuffer::Allocator> allocator_;
@@ -168,10 +184,12 @@ class ScriptEngine {
   v8::Global<v8::Context> context_;
   v8::Global<v8::FunctionTemplate> canvas_template_;
   v8::Global<v8::FunctionTemplate> context_2d_template_;
+  v8::Global<v8::FunctionTemplate> gradient_template_;
   std::vector<std::filesystem::path> script_stack_;
   std::uint32_t next_timer_id_ = 1;
   std::string last_error_;
   std::vector<std::unique_ptr<CanvasHandle>> canvases_;
+  std::vector<std::unique_ptr<GradientHandle>> gradients_;
 };
 
 }  // namespace canvas_engine

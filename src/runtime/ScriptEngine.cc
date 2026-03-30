@@ -1,6 +1,7 @@
 #include "canvas_engine/runtime/ScriptEngine.h"
 
 #include <chrono>
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -9,9 +10,12 @@
 #include <sstream>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "canvas_engine/canvas/Canvas2DContext.h"
 #include "canvas_engine/canvas/CanvasSurface.h"
+#include "canvas_engine/canvas/ColorParser.h"
+#include "include/effects/SkGradient.h"
 
 namespace canvas_engine {
 
@@ -26,6 +30,7 @@ struct ContextHandle {
 
 constexpr v8::EmbedderDataTypeTag kCanvasHandleTag = 1;
 constexpr v8::EmbedderDataTypeTag kContextHandleTag = 2;
+constexpr v8::EmbedderDataTypeTag kGradientHandleTag = 3;
 
 using Clock = std::chrono::steady_clock;
 
@@ -99,6 +104,16 @@ bool ExtractDouble(const v8::FunctionCallbackInfo<v8::Value>& info, int index,
 bool ExtractDouble(v8::Isolate* isolate, v8::Local<v8::Value> value,
                    double* out_value) {
   return value->NumberValue(isolate->GetCurrentContext()).To(out_value);
+}
+
+bool ExtractFloat(v8::Isolate* isolate, v8::Local<v8::Value> value,
+                  float* out_value) {
+  double raw = 0.0;
+  if (!ExtractDouble(isolate, value, &raw)) {
+    return false;
+  }
+  *out_value = static_cast<float>(raw);
+  return true;
 }
 
 void ThrowTypeError(v8::Isolate* isolate, const char* message) {
@@ -184,6 +199,63 @@ struct ScriptEngine::CanvasHandle {
   v8::Global<v8::Object> context_object;
 };
 
+struct ScriptEngine::GradientHandle {
+  enum class Kind {
+    kLinear,
+    kRadial,
+  };
+
+  struct ColorStop {
+    float offset = 0.0f;
+    SkColor color = SK_ColorBLACK;
+  };
+
+  explicit GradientHandle(Kind gradient_kind) : kind(gradient_kind) {}
+
+  sk_sp<SkShader> BuildShader() const {
+    if (stops.empty()) {
+      return nullptr;
+    }
+
+    std::vector<ColorStop> sorted = stops;
+    std::sort(sorted.begin(), sorted.end(),
+              [](const ColorStop& lhs, const ColorStop& rhs) {
+                return lhs.offset < rhs.offset;
+              });
+
+    std::vector<SkScalar> positions;
+    std::vector<SkColor4f> colors4f;
+    positions.reserve(sorted.size());
+    colors4f.reserve(sorted.size());
+    for (const auto& stop : sorted) {
+      colors4f.push_back(SkColor4f::FromColor(stop.color));
+      positions.push_back(stop.offset);
+    }
+
+    SkGradient gradient(
+        SkGradient::Colors(colors4f, positions, SkTileMode::kClamp),
+        SkGradient::Interpolation());
+
+    if (kind == Kind::kLinear) {
+      const SkPoint points[2] = {SkPoint::Make(x0, y0), SkPoint::Make(x1, y1)};
+      return SkShaders::LinearGradient(points, gradient);
+    }
+
+    return SkShaders::TwoPointConicalGradient(SkPoint::Make(x0, y0), r0,
+                                              SkPoint::Make(x1, y1), r1,
+                                              gradient);
+  }
+
+  Kind kind;
+  float x0 = 0.0f;
+  float y0 = 0.0f;
+  float r0 = 0.0f;
+  float x1 = 0.0f;
+  float y1 = 0.0f;
+  float r1 = 0.0f;
+  std::vector<ColorStop> stops;
+};
+
 ScriptEngine::ScriptEngine() {
   v8::V8::SetFatalErrorHandler(V8FatalError);
 
@@ -225,7 +297,9 @@ ScriptEngine::~ScriptEngine() {
     context_.Reset();
     canvas_template_.Reset();
     context_2d_template_.Reset();
+    gradient_template_.Reset();
     canvases_.clear();
+    gradients_.clear();
   }
 
   isolate_->Dispose();
@@ -492,6 +566,9 @@ v8::Local<v8::FunctionTemplate> ScriptEngine::GetContext2DTemplate() {
   tpl->InstanceTemplate()->SetNativeDataProperty(
       v8::String::NewFromUtf8Literal(isolate_, "shadowOffsetY"),
       ShadowOffsetYGetter, ShadowOffsetYSetter);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "lineDashOffset"),
+      LineDashOffsetGetter, LineDashOffsetSetter);
 
   tpl->PrototypeTemplate()->Set(isolate_, "save",
                                 v8::FunctionTemplate::New(isolate_, CtxSave));
@@ -548,6 +625,18 @@ v8::Local<v8::FunctionTemplate> ScriptEngine::GetContext2DTemplate() {
   tpl->PrototypeTemplate()->Set(isolate_, "stroke",
                                 v8::FunctionTemplate::New(isolate_, CtxStroke));
   tpl->PrototypeTemplate()->Set(
+      isolate_, "setLineDash",
+      v8::FunctionTemplate::New(isolate_, CtxSetLineDash));
+  tpl->PrototypeTemplate()->Set(
+      isolate_, "getLineDash",
+      v8::FunctionTemplate::New(isolate_, CtxGetLineDash));
+  tpl->PrototypeTemplate()->Set(
+      isolate_, "createLinearGradient",
+      v8::FunctionTemplate::New(isolate_, CtxCreateLinearGradient));
+  tpl->PrototypeTemplate()->Set(
+      isolate_, "createRadialGradient",
+      v8::FunctionTemplate::New(isolate_, CtxCreateRadialGradient));
+  tpl->PrototypeTemplate()->Set(
       isolate_, "measureText",
       v8::FunctionTemplate::New(isolate_, CtxMeasureText));
   tpl->PrototypeTemplate()->Set(
@@ -558,6 +647,21 @@ v8::Local<v8::FunctionTemplate> ScriptEngine::GetContext2DTemplate() {
       v8::FunctionTemplate::New(isolate_, CtxStrokeText));
 
   context_2d_template_.Reset(isolate_, tpl);
+  return tpl;
+}
+
+v8::Local<v8::FunctionTemplate> ScriptEngine::GetGradientTemplate() {
+  if (!gradient_template_.IsEmpty()) {
+    return gradient_template_.Get(isolate_);
+  }
+
+  auto tpl = v8::FunctionTemplate::New(isolate_);
+  tpl->SetClassName(v8::String::NewFromUtf8Literal(isolate_, "CanvasGradient"));
+  tpl->InstanceTemplate()->SetInternalFieldCount(1);
+  tpl->PrototypeTemplate()->Set(
+      isolate_, "addColorStop",
+      v8::FunctionTemplate::New(isolate_, GradientAddColorStop));
+  gradient_template_.Reset(isolate_, tpl);
   return tpl;
 }
 
@@ -869,10 +973,24 @@ void ScriptEngine::FillStyleSetter(
   if (!handle) {
     return;
   }
-  if (!value->IsString() ||
-      !handle->context->SetFillStyle(ToStdString(info.GetIsolate(), value))) {
-    ThrowTypeError(info.GetIsolate(), "fillStyle must be a valid CSS color");
+  if (value->IsString()) {
+    if (!handle->context->SetFillStyle(ToStdString(info.GetIsolate(), value))) {
+      ThrowTypeError(info.GetIsolate(), "fillStyle must be a valid CSS color");
+    }
+    return;
   }
+
+  if (value->IsObject()) {
+    auto object = value.As<v8::Object>();
+    if (auto* gradient =
+            Unwrap<GradientHandle>(info.GetIsolate(), object, kGradientHandleTag)) {
+      handle->context->SetFillShader(gradient->BuildShader(), "[object CanvasGradient]");
+      return;
+    }
+  }
+
+  ThrowTypeError(info.GetIsolate(),
+                 "fillStyle must be a CSS color or CanvasGradient");
 }
 
 void ScriptEngine::StrokeStyleGetter(
@@ -895,10 +1013,25 @@ void ScriptEngine::StrokeStyleSetter(
   if (!handle) {
     return;
   }
-  if (!value->IsString() ||
-      !handle->context->SetStrokeStyle(ToStdString(info.GetIsolate(), value))) {
-    ThrowTypeError(info.GetIsolate(), "strokeStyle must be a valid CSS color");
+  if (value->IsString()) {
+    if (!handle->context->SetStrokeStyle(ToStdString(info.GetIsolate(), value))) {
+      ThrowTypeError(info.GetIsolate(), "strokeStyle must be a valid CSS color");
+    }
+    return;
   }
+
+  if (value->IsObject()) {
+    auto object = value.As<v8::Object>();
+    if (auto* gradient =
+            Unwrap<GradientHandle>(info.GetIsolate(), object, kGradientHandleTag)) {
+      handle->context->SetStrokeShader(gradient->BuildShader(),
+                                       "[object CanvasGradient]");
+      return;
+    }
+  }
+
+  ThrowTypeError(info.GetIsolate(),
+                 "strokeStyle must be a CSS color or CanvasGradient");
 }
 
 void ScriptEngine::LineWidthGetter(
@@ -1244,6 +1377,33 @@ void ScriptEngine::ShadowOffsetYSetter(
   handle->context->SetShadowOffsetY(static_cast<float>(shadow_offset_y));
 }
 
+void ScriptEngine::LineDashOffsetGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  info.GetReturnValue().Set(handle->context->line_dash_offset());
+}
+
+void ScriptEngine::LineDashOffsetSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+                                       kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+  double dash_offset = 0.0;
+  if (!ExtractDouble(info.GetIsolate(), value, &dash_offset)) {
+    ThrowTypeError(info.GetIsolate(), "lineDashOffset must be numeric");
+    return;
+  }
+  handle->context->SetLineDashOffset(static_cast<float>(dash_offset));
+}
+
 void ScriptEngine::CtxSave(const v8::FunctionCallbackInfo<v8::Value>& info) {
   if (auto* handle =
           Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag)) {
@@ -1528,6 +1688,158 @@ void ScriptEngine::CtxStroke(const v8::FunctionCallbackInfo<v8::Value>& info) {
           Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag)) {
     handle->context->Stroke();
   }
+}
+
+void ScriptEngine::CtxSetLineDash(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  if (!handle || info.Length() < 1 || !info[0]->IsArray()) {
+    ThrowTypeError(info.GetIsolate(), "setLineDash(segments) requires an array");
+    return;
+  }
+
+  auto context = info.GetIsolate()->GetCurrentContext();
+  auto array = info[0].As<v8::Array>();
+  std::vector<float> segments;
+  segments.reserve(array->Length());
+  for (uint32_t i = 0; i < array->Length(); ++i) {
+    v8::Local<v8::Value> value;
+    if (!array->Get(context, i).ToLocal(&value)) {
+      ThrowTypeError(info.GetIsolate(), "setLineDash segments must be numeric");
+      return;
+    }
+    float segment = 0.0f;
+    if (!ExtractFloat(info.GetIsolate(), value, &segment)) {
+      ThrowTypeError(info.GetIsolate(), "setLineDash segments must be numeric");
+      return;
+    }
+    segments.push_back(segment);
+  }
+
+  handle->context->SetLineDash(segments);
+}
+
+void ScriptEngine::CtxGetLineDash(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  if (!handle) {
+    return;
+  }
+
+  const auto& line_dash = handle->context->line_dash();
+  auto array =
+      v8::Array::New(info.GetIsolate(), static_cast<int>(line_dash.size()));
+  auto context = info.GetIsolate()->GetCurrentContext();
+  for (uint32_t i = 0; i < line_dash.size(); ++i) {
+    array->Set(context, i, v8::Number::New(info.GetIsolate(), line_dash[i]))
+        .Check();
+  }
+  info.GetReturnValue().Set(array);
+}
+
+void ScriptEngine::CtxCreateLinearGradient(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  auto* engine = From(info.GetIsolate());
+  float x0 = 0.0f;
+  float y0 = 0.0f;
+  float x1 = 0.0f;
+  float y1 = 0.0f;
+  if (!handle || !ExtractFloat(info.GetIsolate(), info[0], &x0) ||
+      !ExtractFloat(info.GetIsolate(), info[1], &y0) ||
+      !ExtractFloat(info.GetIsolate(), info[2], &x1) ||
+      !ExtractFloat(info.GetIsolate(), info[3], &y1)) {
+    ThrowTypeError(info.GetIsolate(),
+                   "createLinearGradient(x0, y0, x1, y1) requires four numbers");
+    return;
+  }
+
+  engine->gradients_.push_back(
+      std::make_unique<GradientHandle>(GradientHandle::Kind::kLinear));
+  auto* gradient = engine->gradients_.back().get();
+  gradient->x0 = x0;
+  gradient->y0 = y0;
+  gradient->x1 = x1;
+  gradient->y1 = y1;
+
+  auto context = info.GetIsolate()->GetCurrentContext();
+  auto object = engine->GetGradientTemplate()
+                    ->InstanceTemplate()
+                    ->NewInstance(context)
+                    .ToLocalChecked();
+  object->SetAlignedPointerInInternalField(0, gradient, kGradientHandleTag);
+  info.GetReturnValue().Set(object);
+}
+
+void ScriptEngine::CtxCreateRadialGradient(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  auto* engine = From(info.GetIsolate());
+  float x0 = 0.0f;
+  float y0 = 0.0f;
+  float r0 = 0.0f;
+  float x1 = 0.0f;
+  float y1 = 0.0f;
+  float r1 = 0.0f;
+  if (!handle || !ExtractFloat(info.GetIsolate(), info[0], &x0) ||
+      !ExtractFloat(info.GetIsolate(), info[1], &y0) ||
+      !ExtractFloat(info.GetIsolate(), info[2], &r0) ||
+      !ExtractFloat(info.GetIsolate(), info[3], &x1) ||
+      !ExtractFloat(info.GetIsolate(), info[4], &y1) ||
+      !ExtractFloat(info.GetIsolate(), info[5], &r1)) {
+    ThrowTypeError(
+        info.GetIsolate(),
+        "createRadialGradient(x0, y0, r0, x1, y1, r1) requires six numbers");
+    return;
+  }
+
+  engine->gradients_.push_back(
+      std::make_unique<GradientHandle>(GradientHandle::Kind::kRadial));
+  auto* gradient = engine->gradients_.back().get();
+  gradient->x0 = x0;
+  gradient->y0 = y0;
+  gradient->r0 = r0;
+  gradient->x1 = x1;
+  gradient->y1 = y1;
+  gradient->r1 = r1;
+
+  auto context = info.GetIsolate()->GetCurrentContext();
+  auto object = engine->GetGradientTemplate()
+                    ->InstanceTemplate()
+                    ->NewInstance(context)
+                    .ToLocalChecked();
+  object->SetAlignedPointerInInternalField(0, gradient, kGradientHandleTag);
+  info.GetReturnValue().Set(object);
+}
+
+void ScriptEngine::GradientAddColorStop(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* gradient =
+      Unwrap<GradientHandle>(info.GetIsolate(), info.This(), kGradientHandleTag);
+  if (!gradient || info.Length() < 2) {
+    ThrowTypeError(info.GetIsolate(),
+                   "addColorStop(offset, color) requires offset and color");
+    return;
+  }
+
+  float offset = 0.0f;
+  if (!ExtractFloat(info.GetIsolate(), info[0], &offset) || !info[1]->IsString()) {
+    ThrowTypeError(info.GetIsolate(),
+                   "addColorStop(offset, color) requires numeric offset and CSS color");
+    return;
+  }
+
+  auto parsed = ParseCssColor(ToStdString(info.GetIsolate(), info[1]));
+  if (!parsed.has_value()) {
+    ThrowTypeError(info.GetIsolate(), "addColorStop color must be a valid CSS color");
+    return;
+  }
+
+  gradient->stops.push_back({std::clamp(offset, 0.0f, 1.0f), parsed.value()});
 }
 
 void ScriptEngine::CtxMeasureText(

@@ -21,6 +21,7 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
+#include "include/effects/SkDashPathEffect.h"
 #include "include/effects/SkImageFilters.h"
 
 #include "canvas_engine/canvas/ColorParser.h"
@@ -227,6 +228,7 @@ bool Canvas2DContext::SetFillStyle(std::string_view css_color) {
     return false;
   }
   state_.fill_style = parsed.value();
+  state_.fill_shader.reset();
   state_.fill_style_css = NormalizeCssColor(css_color);
   return true;
 }
@@ -237,6 +239,7 @@ bool Canvas2DContext::SetStrokeStyle(std::string_view css_color) {
     return false;
   }
   state_.stroke_style = parsed.value();
+  state_.stroke_shader.reset();
   state_.stroke_style_css = NormalizeCssColor(css_color);
   return true;
 }
@@ -402,6 +405,33 @@ void Canvas2DContext::SetShadowOffsetX(float value) {
 
 void Canvas2DContext::SetShadowOffsetY(float value) {
   state_.shadow_offset_y = value;
+}
+
+void Canvas2DContext::SetFillShader(sk_sp<SkShader> shader,
+                                    std::string_view description) {
+  state_.fill_shader = std::move(shader);
+  state_.fill_style_css = std::string(description);
+}
+
+void Canvas2DContext::SetStrokeShader(sk_sp<SkShader> shader,
+                                      std::string_view description) {
+  state_.stroke_shader = std::move(shader);
+  state_.stroke_style_css = std::string(description);
+}
+
+void Canvas2DContext::SetLineDash(const std::vector<float>& segments) {
+  state_.line_dash.clear();
+  for (float segment : segments) {
+    if (segment > 0.0f && !std::isnan(segment)) {
+      state_.line_dash.push_back(segment);
+    }
+  }
+}
+
+void Canvas2DContext::SetLineDashOffset(float value) {
+  if (!std::isnan(value)) {
+    state_.line_dash_offset = value;
+  }
 }
 
 void Canvas2DContext::ResetState() {
@@ -570,8 +600,15 @@ SkPaint Canvas2DContext::MakeFillPaint() const {
   SkPaint paint;
   paint.setAntiAlias(true);
   paint.setStyle(SkPaint::kFill_Style);
-  paint.setColor(ApplyGlobalAlpha(state_.fill_style, state_.global_alpha));
-  ConfigurePaint(&paint);
+  if (state_.fill_shader) {
+    paint.setColor(SkColorSetARGB(static_cast<U8CPU>(
+                                      std::lround(state_.global_alpha * 255.0f)),
+                                  255, 255, 255));
+    paint.setShader(state_.fill_shader);
+  } else {
+    paint.setColor(ApplyGlobalAlpha(state_.fill_style, state_.global_alpha));
+  }
+  ConfigurePaint(&paint, false);
   return paint;
 }
 
@@ -579,9 +616,16 @@ SkPaint Canvas2DContext::MakeStrokePaint() const {
   SkPaint paint;
   paint.setAntiAlias(true);
   paint.setStyle(SkPaint::kStroke_Style);
-  paint.setColor(ApplyGlobalAlpha(state_.stroke_style, state_.global_alpha));
+  if (state_.stroke_shader) {
+    paint.setColor(SkColorSetARGB(static_cast<U8CPU>(
+                                      std::lround(state_.global_alpha * 255.0f)),
+                                  255, 255, 255));
+    paint.setShader(state_.stroke_shader);
+  } else {
+    paint.setColor(ApplyGlobalAlpha(state_.stroke_style, state_.global_alpha));
+  }
   paint.setStrokeWidth(state_.line_width);
-  ConfigurePaint(&paint);
+  ConfigurePaint(&paint, true);
   return paint;
 }
 
@@ -592,15 +636,26 @@ SkPaint Canvas2DContext::MakeTextPaint(bool stroke) const {
   paint.setColor(ApplyGlobalAlpha(stroke ? state_.stroke_style : state_.fill_style,
                                   state_.global_alpha));
   paint.setStrokeWidth(state_.line_width);
-  ConfigurePaint(&paint);
+  ConfigurePaint(&paint, stroke);
   return paint;
 }
 
-void Canvas2DContext::ConfigurePaint(SkPaint* paint) const {
+void Canvas2DContext::ConfigurePaint(SkPaint* paint, bool allow_line_dash) const {
   paint->setBlendMode(state_.blend_mode);
   paint->setStrokeCap(state_.stroke_cap);
   paint->setStrokeJoin(state_.stroke_join);
   paint->setStrokeMiter(state_.miter_limit);
+  if (allow_line_dash && !state_.line_dash.empty()) {
+    std::vector<SkScalar> intervals(state_.line_dash.begin(), state_.line_dash.end());
+    if (intervals.size() % 2 == 1) {
+      intervals.insert(intervals.end(), state_.line_dash.begin(),
+                       state_.line_dash.end());
+    }
+    paint->setPathEffect(
+        SkDashPathEffect::Make(intervals, state_.line_dash_offset));
+  } else {
+    paint->setPathEffect(nullptr);
+  }
 
   const bool has_shadow =
       (SkColorGetA(state_.shadow_color) > 0) &&

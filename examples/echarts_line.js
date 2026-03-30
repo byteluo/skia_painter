@@ -53,7 +53,15 @@ chart.setOption({
     data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
     axisLine: {
       lineStyle: {
-        color: "#64748b"
+        color: "#64748b",
+        type: "dashed"
+      }
+    },
+    splitLine: {
+      show: true,
+      lineStyle: {
+        color: "#cbd5e1",
+        type: "dashed"
       }
     },
     axisLabel: {
@@ -70,7 +78,8 @@ chart.setOption({
     },
     splitLine: {
       lineStyle: {
-        color: "#cbd5e1"
+        color: "#cbd5e1",
+        type: [6, 4]
       }
     },
     axisLabel: {
@@ -86,13 +95,17 @@ chart.setOption({
       symbolSize: 10,
       lineStyle: {
         color: "#2563eb",
-        width: 4
+        width: 4,
+        type: "dashed"
       },
       itemStyle: {
         color: "#1d4ed8"
       },
       areaStyle: {
-        color: "rgba(37, 99, 235, 0.18)"
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: "rgba(37, 99, 235, 0.35)" },
+          { offset: 1, color: "rgba(37, 99, 235, 0.04)" }
+        ])
       },
       data: [180, 232, 201, 234, 290, 330, 310]
     }
