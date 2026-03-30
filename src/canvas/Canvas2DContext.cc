@@ -214,7 +214,9 @@ CTLineRef CreateTextLine(std::string_view text, std::string_view family,
 }  // namespace
 
 Canvas2DContext::Canvas2DContext(std::shared_ptr<CanvasSurface> surface)
-    : surface_(std::move(surface)) {}
+    : surface_(std::move(surface)) {
+  ApplyDeviceScale();
+}
 
 Canvas2DContext::State Canvas2DContext::MakeDefaultState() {
   State state;
@@ -438,6 +440,8 @@ void Canvas2DContext::ResetState() {
   state_ = MakeDefaultState();
   state_stack_.clear();
   current_path_.reset();
+  surface_->canvas()->resetMatrix();
+  ApplyDeviceScale();
 }
 
 void Canvas2DContext::Save() {
@@ -475,11 +479,13 @@ void Canvas2DContext::Transform(float a, float b, float c, float d, float e,
 void Canvas2DContext::SetTransform(float a, float b, float c, float d, float e,
                                    float f) {
   surface_->canvas()->resetMatrix();
+  ApplyDeviceScale();
   Transform(a, b, c, d, e, f);
 }
 
 void Canvas2DContext::ResetTransform() {
   surface_->canvas()->resetMatrix();
+  ApplyDeviceScale();
 }
 
 void Canvas2DContext::ClearRect(float x, float y, float width, float height) {
@@ -586,6 +592,17 @@ void Canvas2DContext::FillText(std::string_view text, float x, float y) {
 
 void Canvas2DContext::StrokeText(std::string_view text, float x, float y) {
   DrawText(text, x, y, MakeTextPaint(true));
+}
+
+void Canvas2DContext::ApplyDeviceScale() {
+  if (!surface_) {
+    return;
+  }
+
+  const float pixel_ratio = surface_->pixel_ratio();
+  if (pixel_ratio != 1.0f) {
+    surface_->canvas()->scale(pixel_ratio, pixel_ratio);
+  }
 }
 
 SkFont Canvas2DContext::MakeFont() const {
