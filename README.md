@@ -50,12 +50,15 @@
 - `./build/dev/canvas_engine examples/smoke.js`
 - `./build/dev/canvas_engine examples/demo.js`
 - `./build/dev/canvas_engine examples/echarts_bar.js`
+- `./build/dev/canvas_engine examples/image_demo.js`
 - 成功生成 `output/demo.png`
 - 成功生成 `output/echarts_bar.png`
+- 成功生成 `output/image_demo.png`
 
 ## 已实现能力
 
 - `new Canvas(width, height)`
+- `new Image()`
 - `canvas.getContext("2d")`
 - `canvas.saveToPng(path)`
 - `canvas.setAttribute(name, value)`
@@ -105,6 +108,13 @@
 - `ctx.measureText(text)`
 - `ctx.fillText(text, x, y)`
 - `ctx.strokeText(text, x, y)`
+- `ctx.drawImage(imageOrCanvas, ...)`
+- `image.width`
+- `image.height`
+- `image.src`
+- `image.complete`
+- `image.onload`
+- `image.onerror`
 - `print(...)`
 - `console.log(...)`
 - `console.warn(...)`
@@ -126,20 +136,23 @@
 │   ├── demo.js
 │   ├── echarts_bar.js
 │   ├── echarts_line.js
+│   ├── image_demo.js
 │   └── smoke.js
 ├── include
 │   └── canvas_engine
 │       ├── canvas
 │       │   ├── Canvas2DContext.h
 │       │   ├── CanvasSurface.h
-│       │   └── ColorParser.h
+│       │   ├── ColorParser.h
+│       │   └── ImageAsset.h
 │       └── runtime
 │           └── ScriptEngine.h
 └── src
     ├── canvas
     │   ├── Canvas2DContext.cc
     │   ├── CanvasSurface.cc
-    │   └── ColorParser.cc
+    │   ├── ColorParser.cc
+    │   └── ImageAsset.cc
     ├── main.cc
     └── runtime
         └── ScriptEngine.cc
@@ -181,6 +194,24 @@ cmake -S . -B build \
 ```
 
 不同平台和不同构建产物的库名可能不同。比如一些 V8/Skia 构建方式会要求额外链接 `icu*`、`absl_*`、`harfbuzz`、`png`、`zlib`、`freetype` 等库，这部分需要按你的本地产物补齐。当前仓库内的最小 Bazel 产物已经把这套工程需要的链接项稳定下来。
+
+## 图片能力
+
+当前已经具备最小可用的图片链路，可以满足 `ECharts` 的 `setPlatformAPI({ loadImage })` 这类需求：
+
+- `new Image()`
+- `image.src = "/absolute/or/relative/path.png"` 从本地文件同步解码图片
+- `image.onload` / `image.onerror`
+- `ctx.drawImage(image, dx, dy)`
+- `ctx.drawImage(image, dx, dy, dw, dh)`
+- `ctx.drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh)`
+- `ctx.drawImage(canvas, ...)` 也支持直接把另一个 `Canvas` 作为来源
+
+当前约束：
+
+- `Image.src` 目前只支持本地文件路径，不支持 `http(s)` URL
+- 图片解码当前走 macOS 的 `ImageIO/CoreGraphics`
+- 导出 PNG 会按逻辑尺寸输出，同时保留内部高 DPI 渲染带来的清晰度
 
 ## 构建
 
@@ -239,7 +270,10 @@ cmake --build --preset release
 
 ## 测试
 
-目前提供一个最小冒烟测试，验证 V8 宿主和脚本执行链路。
+目前提供两类测试：
+
+- 最小冒烟测试，验证 V8 宿主和脚本执行链路
+- 渲染回归测试，验证高清 PNG 导出尺寸，以及圆形、`Image`、`drawImage` 链路没有回退
 
 ```bash
 ctest --preset dev
@@ -295,6 +329,19 @@ wrote output/echarts_bar.png
 wrote output/echarts_line.png
 ```
 
+图片加载与 `drawImage` 示例：
+
+```bash
+./build/dev/canvas_engine examples/image_demo.js
+```
+
+脚本会输出：
+
+```text
+wrote output/image_demo_source.png
+wrote output/image_demo.png
+```
+
 ## ECharts 集成方式
 
 当前推荐的接入方式是直接加载 `ECharts` 的 UMD 构建，并通过宿主提供的 `Canvas` 对象作为渲染目标：
@@ -307,6 +354,14 @@ const canvas = new Canvas(960, 540);
 echarts.setPlatformAPI({
   createCanvas() {
     return new Canvas(960, 540);
+  },
+  loadImage(src, onload) {
+    const image = new Image();
+    if (typeof onload === "function") {
+      image.onload = onload;
+    }
+    image.src = src;
+    return image;
   }
 });
 
@@ -321,6 +376,7 @@ const chart = echarts.init(canvas, null, {
 
 - `loadScript(path)` 负责把 UMD 包加载进当前 V8 上下文
 - `Canvas` / `CanvasRenderingContext2D` 提供 zrender 实际调用的 2D 接口
+- `Image` / `drawImage` 提供图片加载与绘制能力
 - `canvas.saveToPng(path)` 把最终结果导出为 PNG
 
 ## 示例脚本
@@ -332,6 +388,8 @@ const chart = echarts.init(canvas, null, {
 `ECharts` 柱状图示例见 [examples/echarts_bar.js](/Users/treecat/Desktop/skia-painter/examples/echarts_bar.js)。
 
 `ECharts` 折线图示例见 [examples/echarts_line.js](/Users/treecat/Desktop/skia-painter/examples/echarts_line.js)。
+
+图片示例见 [examples/image_demo.js](/Users/treecat/Desktop/skia-painter/examples/image_demo.js)。
 
 ## Git 提交建议
 
@@ -350,7 +408,6 @@ git submodule update --init --recursive
 ## 后续扩展建议
 
 - 增加 `Path2D`
-- 增加图片解码、`Image` 与 `drawImage`
 - 增加渐变、pattern 和更多路径语义
 - 增加 `ImageData` 和像素级读写
 - 把定时器从“立即执行宿主 stub”升级为真正事件循环

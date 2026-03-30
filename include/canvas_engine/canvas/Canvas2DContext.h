@@ -96,6 +96,8 @@ class Canvas2DContext {
   void Clip();
   void Fill();
   void Stroke();
+  void DrawImage(const sk_sp<SkImage>& image, float sx, float sy, float sw,
+                 float sh, float dx, float dy, float dw, float dh);
   TextMetrics MeasureText(std::string_view text) const;
   void FillText(std::string_view text, float x, float y);
   void StrokeText(std::string_view text, float x, float y);

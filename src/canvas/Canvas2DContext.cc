@@ -21,6 +21,7 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
+#include "include/core/SkSamplingOptions.h"
 #include "include/effects/SkDashPathEffect.h"
 #include "include/effects/SkImageFilters.h"
 
@@ -31,6 +32,8 @@ namespace canvas_engine {
 namespace {
 
 constexpr float kRadiansToDegrees = 57.29577951308232f;
+constexpr float kFullCircleDegrees = 360.0f;
+constexpr float kFullCircleEpsilon = 0.001f;
 
 std::string ToLower(std::string_view value) {
   std::string lower(value);
@@ -537,7 +540,15 @@ void Canvas2DContext::Arc(float x, float y, float radius, float start_angle,
   }
 
   SkRect oval = SkRect::MakeLTRB(x - radius, y - radius, x + radius, y + radius);
-  current_path_.arcTo(oval, start_angle * kRadiansToDegrees, sweep, false);
+  const float start_degrees = start_angle * kRadiansToDegrees;
+  if (std::fabs(sweep) >= kFullCircleDegrees - kFullCircleEpsilon) {
+    const float half_sweep = counter_clockwise ? -180.0f : 180.0f;
+    current_path_.arcTo(oval, start_degrees, half_sweep, false);
+    current_path_.arcTo(oval, start_degrees + half_sweep, half_sweep, false);
+    return;
+  }
+
+  current_path_.arcTo(oval, start_degrees, sweep, false);
 }
 
 void Canvas2DContext::ClosePath() {
@@ -554,6 +565,20 @@ void Canvas2DContext::Fill() {
 
 void Canvas2DContext::Stroke() {
   surface_->canvas()->drawPath(current_path_.snapshot(), MakeStrokePaint());
+}
+
+void Canvas2DContext::DrawImage(const sk_sp<SkImage>& image, float sx, float sy,
+                                float sw, float sh, float dx, float dy, float dw,
+                                float dh) {
+  if (!image || !(sw > 0.0f) || !(sh > 0.0f) || !(dw > 0.0f) || !(dh > 0.0f)) {
+    return;
+  }
+
+  const SkRect src = SkRect::MakeXYWH(sx, sy, sw, sh);
+  const SkRect dst = SkRect::MakeXYWH(dx, dy, dw, dh);
+  surface_->canvas()->drawImageRect(image, src, dst,
+                                    SkSamplingOptions(SkFilterMode::kLinear),
+                                    nullptr, SkCanvas::kStrict_SrcRectConstraint);
 }
 
 Canvas2DContext::TextMetrics Canvas2DContext::MeasureText(
