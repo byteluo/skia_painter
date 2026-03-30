@@ -217,5 +217,194 @@ timelineChart.dispatchAction({ type: "timelineChange", currentIndex: 2 });
 timelineChart.getZr().refreshImmediately();
 timelineCanvas.saveToPng("@ECHARTS_TIMELINE_REGRESSION_OUTPUT_PNG@");
 
+const customSeriesCanvas = createCanvas(width, height);
+const customSeriesChart = echarts.init(customSeriesCanvas, null, {
+  renderer: "canvas",
+  width,
+  height
+});
+
+const customSeriesData = [
+  ["Alpha", 12, 26, "#2563eb"],
+  ["Beta", 28, 18, "#14b8a6"],
+  ["Gamma", 44, 34, "#f97316"],
+  ["Delta", 60, 22, "#8b5cf6"],
+  ["Epsilon", 76, 30, "#e11d48"]
+];
+
+customSeriesChart.setOption({
+  animation: false,
+  backgroundColor: "#f8fafc",
+  title: {
+    text: "Custom Series Compatibility",
+    subtext: "renderItem group + shapes + text",
+    left: "center",
+    top: 18
+  },
+  grid: {
+    left: 80,
+    right: 56,
+    top: 96,
+    bottom: 60
+  },
+  xAxis: {
+    min: 0,
+    max: 90,
+    axisLabel: {
+      color: "#334155"
+    },
+    splitLine: {
+      lineStyle: {
+        color: "#dbe4f0",
+        type: "dashed"
+      }
+    }
+  },
+  yAxis: {
+    min: 0,
+    max: 40,
+    axisLabel: {
+      color: "#334155"
+    },
+    splitLine: {
+      lineStyle: {
+        color: "#dbe4f0",
+        type: "dashed"
+      }
+    }
+  },
+  series: [
+    {
+      type: "custom",
+      renderItem(params, api) {
+        const category = api.value(0);
+        const x = api.value(1);
+        const y = api.value(2);
+        const color = api.value(3);
+        const point = api.coord([x, y]);
+
+        return {
+          type: "group",
+          children: [
+            {
+              type: "circle",
+              shape: {
+                cx: point[0],
+                cy: point[1],
+                r: 24
+              },
+              style: {
+                fill: color,
+                stroke: "#ffffff",
+                lineWidth: 3,
+                shadowBlur: 16,
+                shadowColor: "rgba(15, 23, 42, 0.14)"
+              }
+            },
+            {
+              type: "text",
+              style: {
+                x: point[0],
+                y: point[1] + 2,
+                text: category,
+                textAlign: "center",
+                textVerticalAlign: "middle",
+                fill: "#ffffff",
+                font: "bold 13px sans-serif"
+              }
+            }
+          ]
+        };
+      },
+      data: customSeriesData
+    }
+  ]
+});
+
+customSeriesChart.getZr().refreshImmediately();
+customSeriesCanvas.saveToPng("@ECHARTS_CUSTOM_SERIES_REGRESSION_OUTPUT_PNG@");
+
+const pictorialBarCanvas = createCanvas(width, height);
+const pictorialBarChart = echarts.init(pictorialBarCanvas, null, {
+  renderer: "canvas",
+  width,
+  height
+});
+
+const pictorialBarValues = [9, 14, 18, 22, 26];
+
+pictorialBarChart.setOption({
+  animation: false,
+  backgroundColor: "#fffaf0",
+  title: {
+    text: "Pictorial Bar Compatibility",
+    subtext: "Repeated symbols + clipping",
+    left: "center",
+    top: 18
+  },
+  grid: {
+    left: 80,
+    right: 60,
+    top: 112,
+    bottom: 56
+  },
+  xAxis: {
+    type: "category",
+    data: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+    axisLabel: {
+      color: "#334155"
+    }
+  },
+  yAxis: {
+    type: "value",
+    min: 0,
+    max: 28,
+    splitLine: {
+      lineStyle: {
+        color: "#e5e7eb",
+        type: "dashed"
+      }
+    },
+    axisLabel: {
+      color: "#334155"
+    }
+  },
+  series: [
+    {
+      type: "pictorialBar",
+      symbol: "roundRect",
+      symbolSize: [28, 12],
+      symbolRepeat: true,
+      symbolMargin: 3,
+      symbolClip: true,
+      itemStyle: {
+        color: "#2563eb",
+        borderRadius: 6
+      },
+      data: pictorialBarValues,
+      z: 10
+    },
+    {
+      type: "pictorialBar",
+      symbol: "roundRect",
+      symbolSize: [28, 12],
+      symbolRepeat: true,
+      symbolMargin: 3,
+      symbolBoundingData: 28,
+      itemStyle: {
+        color: "rgba(37, 99, 235, 0.12)",
+        borderRadius: 6
+      },
+      data: new Array(pictorialBarValues.length).fill(28),
+      z: 1
+    }
+  ]
+});
+
+pictorialBarChart.getZr().refreshImmediately();
+pictorialBarCanvas.saveToPng("@ECHARTS_PICTORIAL_BAR_REGRESSION_OUTPUT_PNG@");
+
 console.log("wrote @ECHARTS_SUNBURST_REGRESSION_OUTPUT_PNG@");
 console.log("wrote @ECHARTS_TIMELINE_REGRESSION_OUTPUT_PNG@");
+console.log("wrote @ECHARTS_CUSTOM_SERIES_REGRESSION_OUTPUT_PNG@");
+console.log("wrote @ECHARTS_PICTORIAL_BAR_REGRESSION_OUTPUT_PNG@");

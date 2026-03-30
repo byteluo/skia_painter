@@ -173,6 +173,10 @@ if(BUILD_TESTING)
         "${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_sunburst_regression.png")
     set(ECHARTS_TIMELINE_REGRESSION_OUTPUT_PNG
         "${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_timeline_regression.png")
+    set(ECHARTS_CUSTOM_SERIES_REGRESSION_OUTPUT_PNG
+        "${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_custom_series_regression.png")
+    set(ECHARTS_PICTORIAL_BAR_REGRESSION_OUTPUT_PNG
+        "${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_pictorial_bar_regression.png")
     configure_file(
       ${CMAKE_CURRENT_SOURCE_DIR}/cmake/echarts_regression.js.in
       ${CMAKE_CURRENT_BINARY_DIR}/echarts_regression.js
@@ -187,7 +191,7 @@ if(BUILD_TESTING)
     set_tests_properties(echarts_regression_render PROPERTIES
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
       PASS_REGULAR_EXPRESSION
-        "wrote ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_timeline_regression\\.png"
+        "wrote ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_pictorial_bar_regression\\.png"
     )
 
     add_test(
@@ -196,6 +200,8 @@ if(BUILD_TESTING)
               ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_echarts_regression.py
               ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_sunburst_regression.png
               ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_timeline_regression.png
+              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_custom_series_regression.png
+              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_pictorial_bar_regression.png
     )
     set_tests_properties(echarts_regression_verify PROPERTIES
       DEPENDS echarts_regression_render
