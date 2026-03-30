@@ -18,6 +18,32 @@ ctx.fillRect(0, 0, canvas.width, canvas.height);
 ctx.drawImage(image, 16, 16);
 ctx.drawImage(image, 96, 16, 96, 96);
 ctx.drawImage(image, 8, 8, 48, 48, 160, 24, 36, 36);
+
+ctx.strokeStyle = "#ef4444";
+ctx.lineWidth = 4;
+ctx.beginPath();
+ctx.moveTo(20, 104);
+ctx.quadraticCurveTo(44, 72, 68, 104);
+ctx.stroke();
+
+ctx.fillStyle = "#14b8a6";
+ctx.beginPath();
+ctx.ellipse(110, 94, 18, 10, Math.PI / 6, 0, Math.PI * 2);
+ctx.fill();
+
+ctx.fillStyle = "#8b5cf6";
+ctx.beginPath();
+ctx.moveTo(176, 84);
+ctx.lineTo(196, 84);
+ctx.arcTo(208, 84, 208, 96, 12);
+ctx.lineTo(208, 108);
+ctx.lineTo(176, 108);
+ctx.closePath();
+ctx.fill();
+
+const patch = ctx.getImageData(44, 44, 8, 8);
+ctx.putImageData(patch, 72, 8);
+
 canvas.saveToPng("@RENDER_REGRESSION_OUTPUT_PNG@");
 
 console.log("wrote @RENDER_REGRESSION_OUTPUT_PNG@");

@@ -2,6 +2,7 @@ loadScript("../node_modules/echarts/dist/echarts.js");
 
 const width = 960;
 const height = 540;
+const patternPath = "../output/echarts_pattern_tile.png";
 
 function createCanvas(targetWidth, targetHeight) {
   const canvas = new Canvas(targetWidth, targetHeight);
@@ -23,6 +24,22 @@ echarts.setPlatformAPI({
   }
 });
 
+const tile = createCanvas(64, 64);
+const tctx = tile.getContext("2d");
+tctx.fillStyle = "#eff6ff";
+tctx.fillRect(0, 0, 64, 64);
+tctx.strokeStyle = "#2563eb";
+tctx.lineWidth = 6;
+tctx.beginPath();
+tctx.moveTo(4, 60);
+tctx.lineTo(60, 4);
+tctx.stroke();
+tctx.fillStyle = "#f97316";
+tctx.beginPath();
+tctx.arc(18, 18, 8, 0, Math.PI * 2);
+tctx.fill();
+tile.saveToPng(patternPath);
+
 const canvas = createCanvas(width, height);
 const chart = echarts.init(canvas, null, {
   renderer: "canvas",
@@ -34,8 +51,9 @@ chart.setOption({
   animation: false,
   backgroundColor: "#f8fafc",
   title: {
-    text: "Weekly Traffic Trend",
+    text: "Pattern Fill Bar",
     left: "center",
+    top: 24,
     textStyle: {
       color: "#0f172a",
       fontSize: 24,
@@ -50,69 +68,46 @@ chart.setOption({
   },
   xAxis: {
     type: "category",
-    boundaryGap: false,
-    data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-    axisLine: {
-      lineStyle: {
-        color: "#64748b",
-        type: "dashed"
-      }
-    },
-    splitLine: {
-      show: true,
-      lineStyle: {
-        color: "#cbd5e1",
-        type: "dashed"
-      }
-    },
+    data: ["Q1", "Q2", "Q3", "Q4"],
     axisLabel: {
       color: "#334155"
     }
   },
   yAxis: {
     type: "value",
-    axisLine: {
-      show: true,
-      lineStyle: {
-        color: "#64748b"
-      }
+    axisLabel: {
+      color: "#334155"
     },
     splitLine: {
       lineStyle: {
-        color: "#cbd5e1",
-        type: [6, 4]
+        color: "#dbe4f0",
+        type: "dashed"
       }
-    },
-    axisLabel: {
-      color: "#334155"
     }
   },
   series: [
     {
-      name: "Visits",
-      type: "line",
-      smooth: true,
-      symbol: "circle",
-      symbolSize: 10,
-      lineStyle: {
-        color: "#2563eb",
-        width: 4,
-        type: "dashed"
-      },
+      type: "bar",
+      barWidth: 72,
+      data: [
+        120,
+        188,
+        156,
+        210
+      ],
       itemStyle: {
-        color: "#1d4ed8"
-      },
-      areaStyle: {
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: "rgba(37, 99, 235, 0.35)" },
-          { offset: 1, color: "rgba(37, 99, 235, 0.04)" }
-        ])
-      },
-      data: [180, 232, 201, 234, 290, 330, 310]
+        color: {
+          image: patternPath,
+          repeat: "repeat"
+        },
+        borderColor: "#1d4ed8",
+        borderWidth: 2
+      }
     }
   ]
 });
 
 chart.getZr().refreshImmediately();
-canvas.saveToPng("../output/echarts_line.png");
-console.log("wrote ../output/echarts_line.png");
+canvas.saveToPng("../output/echarts_pattern_bar.png");
+console.log("wrote ../output/echarts_pattern_tile.png");
+console.log("wrote ../output/echarts_pattern_bar.png");

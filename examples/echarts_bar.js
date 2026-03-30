@@ -92,5 +92,5 @@ chart.setOption({
 });
 
 chart.getZr().refreshImmediately();
-canvas.saveToPng("output/echarts_bar.png");
-console.log("wrote output/echarts_bar.png");
+canvas.saveToPng("../output/echarts_bar.png");
+console.log("wrote ../output/echarts_bar.png");

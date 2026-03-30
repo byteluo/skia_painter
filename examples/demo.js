@@ -33,5 +33,5 @@ ctx.beginPath();
 ctx.arc(720, 360, 92, 0, Math.PI * 2);
 ctx.fill();
 
-canvas.saveToPng("output/demo.png");
-console.log("wrote output/demo.png");
+canvas.saveToPng("../output/demo.png");
+console.log("wrote ../output/demo.png");

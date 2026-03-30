@@ -30,12 +30,18 @@ const chart = echarts.init(canvas, null, {
   height
 });
 
+const points = [
+  [12, 82, 38], [18, 91, 52], [24, 76, 43], [32, 88, 65], [40, 69, 34],
+  [48, 95, 73], [55, 78, 46], [62, 84, 58], [70, 92, 80], [78, 74, 40]
+];
+
 chart.setOption({
   animation: false,
   backgroundColor: "#f8fafc",
   title: {
-    text: "Weekly Traffic Trend",
+    text: "Conversion Scatter",
     left: "center",
+    top: 24,
     textStyle: {
       color: "#0f172a",
       fontSize: 24,
@@ -46,22 +52,23 @@ chart.setOption({
     left: 72,
     right: 48,
     top: 96,
-    bottom: 64
+    bottom: 68
+  },
+  tooltip: {
+    trigger: "item",
+    formatter(params) {
+      return `Spend: ${params.value[0]}k<br/>ROI: ${params.value[1]}<br/>Volume: ${params.value[2]}`;
+    }
   },
   xAxis: {
-    type: "category",
-    boundaryGap: false,
-    data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-    axisLine: {
-      lineStyle: {
-        color: "#64748b",
-        type: "dashed"
-      }
-    },
+    name: "Ad Spend (k)",
+    nameLocation: "middle",
+    nameGap: 36,
+    min: 0,
+    max: 90,
     splitLine: {
-      show: true,
       lineStyle: {
-        color: "#cbd5e1",
+        color: "#dbe4f0",
         type: "dashed"
       }
     },
@@ -70,49 +77,50 @@ chart.setOption({
     }
   },
   yAxis: {
-    type: "value",
-    axisLine: {
-      show: true,
-      lineStyle: {
-        color: "#64748b"
-      }
-    },
+    name: "ROI",
+    nameLocation: "middle",
+    nameGap: 44,
+    min: 60,
+    max: 100,
     splitLine: {
       lineStyle: {
-        color: "#cbd5e1",
-        type: [6, 4]
+        color: "#dbe4f0",
+        type: "dashed"
       }
     },
     axisLabel: {
       color: "#334155"
     }
   },
+  visualMap: {
+    min: 30,
+    max: 80,
+    dimension: 2,
+    orient: "horizontal",
+    left: "center",
+    bottom: 16,
+    textStyle: {
+      color: "#475569"
+    },
+    inRange: {
+      color: ["#93c5fd", "#2563eb", "#0f172a"]
+    }
+  },
   series: [
     {
-      name: "Visits",
-      type: "line",
-      smooth: true,
-      symbol: "circle",
-      symbolSize: 10,
-      lineStyle: {
-        color: "#2563eb",
-        width: 4,
-        type: "dashed"
+      type: "scatter",
+      data: points,
+      symbolSize(value) {
+        return value[2] * 0.72;
       },
       itemStyle: {
-        color: "#1d4ed8"
-      },
-      areaStyle: {
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: "rgba(37, 99, 235, 0.35)" },
-          { offset: 1, color: "rgba(37, 99, 235, 0.04)" }
-        ])
-      },
-      data: [180, 232, 201, 234, 290, 330, 310]
+        shadowBlur: 18,
+        shadowColor: "rgba(37, 99, 235, 0.18)"
+      }
     }
   ]
 });
 
 chart.getZr().refreshImmediately();
-canvas.saveToPng("../output/echarts_line.png");
-console.log("wrote ../output/echarts_line.png");
+canvas.saveToPng("../output/echarts_scatter.png");
+console.log("wrote ../output/echarts_scatter.png");
