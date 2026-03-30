@@ -9,10 +9,10 @@ sctx.fill();
 sctx.strokeStyle = "#f8fafc";
 sctx.lineWidth = 4;
 sctx.stroke();
-stamp.saveToPng("output/image_demo_source.png");
+stamp.saveToPng("../output/image_demo_source.png");
 
 const image = new Image();
-image.src = "output/image_demo_source.png";
+image.src = "../output/image_demo_source.png";
 
 const canvas = new Canvas(420, 180);
 const ctx = canvas.getContext("2d");
@@ -23,6 +23,6 @@ ctx.drawImage(image, 20, 20);
 ctx.drawImage(image, 140, 20, 120, 120);
 ctx.drawImage(image, 12, 12, 72, 72, 300, 34, 88, 88);
 
-canvas.saveToPng("output/image_demo.png");
-console.log("wrote output/image_demo_source.png");
-console.log("wrote output/image_demo.png");
+canvas.saveToPng("../output/image_demo.png");
+console.log("wrote ../output/image_demo_source.png");
+console.log("wrote ../output/image_demo.png");

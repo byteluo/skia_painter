@@ -2,8 +2,10 @@
 
 #include <chrono>
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -34,6 +36,7 @@ constexpr v8::EmbedderDataTypeTag kCanvasHandleTag = 1;
 constexpr v8::EmbedderDataTypeTag kContextHandleTag = 2;
 constexpr v8::EmbedderDataTypeTag kGradientHandleTag = 3;
 constexpr v8::EmbedderDataTypeTag kImageHandleTag = 4;
+constexpr v8::EmbedderDataTypeTag kPatternHandleTag = 5;
 
 using Clock = std::chrono::steady_clock;
 
@@ -190,6 +193,19 @@ float GetExposedDevicePixelRatio() {
   return 1.0f;
 }
 
+SkTileMode RepeatModeToTileMode(const std::string& repeat, bool for_x_axis) {
+  if (repeat == "repeat-x") {
+    return for_x_axis ? SkTileMode::kRepeat : SkTileMode::kClamp;
+  }
+  if (repeat == "repeat-y") {
+    return for_x_axis ? SkTileMode::kClamp : SkTileMode::kRepeat;
+  }
+  if (repeat == "no-repeat") {
+    return SkTileMode::kClamp;
+  }
+  return SkTileMode::kRepeat;
+}
+
 bool ExtractSixNumbers(const v8::FunctionCallbackInfo<v8::Value>& info,
                        float* a, float* b, float* c, float* d, float* e,
                        float* f) {
@@ -235,6 +251,11 @@ struct ScriptEngine::ImageHandle {
   v8::Global<v8::Object> object;
   v8::Global<v8::Function> onload;
   v8::Global<v8::Function> onerror;
+};
+
+struct ScriptEngine::PatternHandle {
+  sk_sp<SkShader> shader;
+  std::string description = "[object CanvasPattern]";
 };
 
 struct ScriptEngine::GradientHandle {
@@ -337,9 +358,11 @@ ScriptEngine::~ScriptEngine() {
     context_2d_template_.Reset();
     gradient_template_.Reset();
     image_template_.Reset();
+    pattern_template_.Reset();
     canvases_.clear();
     gradients_.clear();
     images_.clear();
+    patterns_.clear();
   }
 
   isolate_->Dispose();
@@ -651,12 +674,19 @@ v8::Local<v8::FunctionTemplate> ScriptEngine::GetContext2DTemplate() {
       isolate_, "lineTo",
       v8::FunctionTemplate::New(isolate_, CtxLineTo));
   tpl->PrototypeTemplate()->Set(
+      isolate_, "quadraticCurveTo",
+      v8::FunctionTemplate::New(isolate_, CtxQuadraticCurveTo));
+  tpl->PrototypeTemplate()->Set(
       isolate_, "bezierCurveTo",
       v8::FunctionTemplate::New(isolate_, CtxBezierCurveTo));
   tpl->PrototypeTemplate()->Set(isolate_, "rect",
                                 v8::FunctionTemplate::New(isolate_, CtxRect));
   tpl->PrototypeTemplate()->Set(isolate_, "arc",
                                 v8::FunctionTemplate::New(isolate_, CtxArc));
+  tpl->PrototypeTemplate()->Set(isolate_, "arcTo",
+                                v8::FunctionTemplate::New(isolate_, CtxArcTo));
+  tpl->PrototypeTemplate()->Set(isolate_, "ellipse",
+                                v8::FunctionTemplate::New(isolate_, CtxEllipse));
   tpl->PrototypeTemplate()->Set(
       isolate_, "closePath",
       v8::FunctionTemplate::New(isolate_, CtxClosePath));
@@ -682,6 +712,15 @@ v8::Local<v8::FunctionTemplate> ScriptEngine::GetContext2DTemplate() {
       isolate_, "createRadialGradient",
       v8::FunctionTemplate::New(isolate_, CtxCreateRadialGradient));
   tpl->PrototypeTemplate()->Set(
+      isolate_, "createPattern",
+      v8::FunctionTemplate::New(isolate_, CtxCreatePattern));
+  tpl->PrototypeTemplate()->Set(
+      isolate_, "getImageData",
+      v8::FunctionTemplate::New(isolate_, CtxGetImageData));
+  tpl->PrototypeTemplate()->Set(
+      isolate_, "putImageData",
+      v8::FunctionTemplate::New(isolate_, CtxPutImageData));
+  tpl->PrototypeTemplate()->Set(
       isolate_, "measureText",
       v8::FunctionTemplate::New(isolate_, CtxMeasureText));
   tpl->PrototypeTemplate()->Set(
@@ -692,6 +731,18 @@ v8::Local<v8::FunctionTemplate> ScriptEngine::GetContext2DTemplate() {
       v8::FunctionTemplate::New(isolate_, CtxStrokeText));
 
   context_2d_template_.Reset(isolate_, tpl);
+  return tpl;
+}
+
+v8::Local<v8::FunctionTemplate> ScriptEngine::GetPatternTemplate() {
+  if (!pattern_template_.IsEmpty()) {
+    return pattern_template_.Get(isolate_);
+  }
+
+  auto tpl = v8::FunctionTemplate::New(isolate_);
+  tpl->SetClassName(v8::String::NewFromUtf8Literal(isolate_, "CanvasPattern"));
+  tpl->InstanceTemplate()->SetInternalFieldCount(1);
+  pattern_template_.Reset(isolate_, tpl);
   return tpl;
 }
 
@@ -944,9 +995,11 @@ void ScriptEngine::CanvasSaveToPng(
     return;
   }
 
+  auto* engine = From(isolate);
   const std::string output_path = ToStdString(isolate, info[0]);
-  if (!canvas->surface->SavePng(output_path)) {
-    ThrowError(isolate, "failed to write png: " + output_path);
+  const auto resolved = engine->ResolveScriptPath(output_path);
+  if (!canvas->surface->SavePng(resolved.string())) {
+    ThrowError(isolate, "failed to write png: " + resolved.string());
   }
 }
 
@@ -1253,10 +1306,15 @@ void ScriptEngine::FillStyleSetter(
       handle->context->SetFillShader(gradient->BuildShader(), "[object CanvasGradient]");
       return;
     }
+    if (auto* pattern =
+            Unwrap<PatternHandle>(info.GetIsolate(), object, kPatternHandleTag)) {
+      handle->context->SetFillShader(pattern->shader, pattern->description);
+      return;
+    }
   }
 
   ThrowTypeError(info.GetIsolate(),
-                 "fillStyle must be a CSS color or CanvasGradient");
+                 "fillStyle must be a CSS color, CanvasGradient, or CanvasPattern");
 }
 
 void ScriptEngine::StrokeStyleGetter(
@@ -1294,10 +1352,15 @@ void ScriptEngine::StrokeStyleSetter(
                                        "[object CanvasGradient]");
       return;
     }
+    if (auto* pattern =
+            Unwrap<PatternHandle>(info.GetIsolate(), object, kPatternHandleTag)) {
+      handle->context->SetStrokeShader(pattern->shader, pattern->description);
+      return;
+    }
   }
 
   ThrowTypeError(info.GetIsolate(),
-                 "strokeStyle must be a CSS color or CanvasGradient");
+                 "strokeStyle must be a CSS color, CanvasGradient, or CanvasPattern");
 }
 
 void ScriptEngine::LineWidthGetter(
@@ -1853,6 +1916,27 @@ void ScriptEngine::CtxLineTo(const v8::FunctionCallbackInfo<v8::Value>& info) {
   handle->context->LineTo(static_cast<float>(x), static_cast<float>(y));
 }
 
+void ScriptEngine::CtxQuadraticCurveTo(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  double cpx = 0.0;
+  double cpy = 0.0;
+  double x = 0.0;
+  double y = 0.0;
+  if (!handle || !ExtractDouble(info, 0, &cpx) || !ExtractDouble(info, 1, &cpy) ||
+      !ExtractDouble(info, 2, &x) || !ExtractDouble(info, 3, &y)) {
+    ThrowTypeError(
+        info.GetIsolate(),
+        "quadraticCurveTo(cpx, cpy, x, y) requires four numbers");
+    return;
+  }
+  handle->context->QuadraticCurveTo(static_cast<float>(cpx),
+                                    static_cast<float>(cpy),
+                                    static_cast<float>(x),
+                                    static_cast<float>(y));
+}
+
 void ScriptEngine::CtxBezierCurveTo(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   auto* handle =
@@ -1925,6 +2009,60 @@ void ScriptEngine::CtxArc(const v8::FunctionCallbackInfo<v8::Value>& info) {
                        static_cast<float>(radius),
                        static_cast<float>(start_angle),
                        static_cast<float>(end_angle), counter_clockwise);
+}
+
+void ScriptEngine::CtxArcTo(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  double x1 = 0.0;
+  double y1 = 0.0;
+  double x2 = 0.0;
+  double y2 = 0.0;
+  double radius = 0.0;
+  if (!handle || !ExtractDouble(info, 0, &x1) || !ExtractDouble(info, 1, &y1) ||
+      !ExtractDouble(info, 2, &x2) || !ExtractDouble(info, 3, &y2) ||
+      !ExtractDouble(info, 4, &radius)) {
+    ThrowTypeError(info.GetIsolate(),
+                   "arcTo(x1, y1, x2, y2, radius) requires five numbers");
+    return;
+  }
+  handle->context->ArcTo(static_cast<float>(x1), static_cast<float>(y1),
+                         static_cast<float>(x2), static_cast<float>(y2),
+                         static_cast<float>(radius));
+}
+
+void ScriptEngine::CtxEllipse(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  double x = 0.0;
+  double y = 0.0;
+  double radius_x = 0.0;
+  double radius_y = 0.0;
+  double rotation = 0.0;
+  double start_angle = 0.0;
+  double end_angle = 0.0;
+  bool counter_clockwise = false;
+
+  if (!handle || !ExtractDouble(info, 0, &x) || !ExtractDouble(info, 1, &y) ||
+      !ExtractDouble(info, 2, &radius_x) || !ExtractDouble(info, 3, &radius_y) ||
+      !ExtractDouble(info, 4, &rotation) || !ExtractDouble(info, 5, &start_angle) ||
+      !ExtractDouble(info, 6, &end_angle)) {
+    ThrowTypeError(
+        info.GetIsolate(),
+        "ellipse(x, y, radiusX, radiusY, rotation, startAngle, endAngle, ccw?) requires seven numbers");
+    return;
+  }
+
+  if (info.Length() > 7) {
+    counter_clockwise = info[7]->BooleanValue(info.GetIsolate());
+  }
+
+  handle->context->Ellipse(static_cast<float>(x), static_cast<float>(y),
+                           static_cast<float>(radius_x),
+                           static_cast<float>(radius_y),
+                           static_cast<float>(rotation),
+                           static_cast<float>(start_angle),
+                           static_cast<float>(end_angle), counter_clockwise);
 }
 
 void ScriptEngine::CtxClosePath(
@@ -2165,6 +2303,191 @@ void ScriptEngine::CtxCreateRadialGradient(
                     .ToLocalChecked();
   object->SetAlignedPointerInInternalField(0, gradient, kGradientHandleTag);
   info.GetReturnValue().Set(object);
+}
+
+void ScriptEngine::CtxCreatePattern(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  auto* engine = From(info.GetIsolate());
+  if (!handle || info.Length() < 1 || !info[0]->IsObject()) {
+    ThrowTypeError(info.GetIsolate(),
+                   "createPattern(image, repeat?) requires an Image or Canvas source");
+    return;
+  }
+
+  std::string repeat = "repeat";
+  if (info.Length() > 1 && !info[1]->IsUndefined() && !info[1]->IsNull()) {
+    if (!info[1]->IsString()) {
+      ThrowTypeError(info.GetIsolate(), "createPattern repeat must be a string");
+      return;
+    }
+    repeat = ToStdString(info.GetIsolate(), info[1]);
+    if (repeat != "repeat" && repeat != "repeat-x" && repeat != "repeat-y" &&
+        repeat != "no-repeat") {
+      ThrowTypeError(info.GetIsolate(), "createPattern repeat must be a valid repetition mode");
+      return;
+    }
+  }
+
+  auto source = info[0].As<v8::Object>();
+  sk_sp<SkImage> image;
+  float source_pixel_ratio = 1.0f;
+
+  if (auto* image_handle =
+          Unwrap<ImageHandle>(info.GetIsolate(), source, kImageHandleTag)) {
+    if (image_handle->asset) {
+      image = image_handle->asset->image();
+    }
+  } else if (auto* canvas_handle =
+                 Unwrap<CanvasHandle>(info.GetIsolate(), source, kCanvasHandleTag)) {
+    image = canvas_handle->surface->MakeImageSnapshot();
+    source_pixel_ratio = canvas_handle->surface->pixel_ratio();
+  }
+
+  if (!image) {
+    info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+    return;
+  }
+
+  engine->patterns_.push_back(std::make_unique<PatternHandle>());
+  auto* pattern = engine->patterns_.back().get();
+
+  SkMatrix local_matrix = SkMatrix::I();
+  if (source_pixel_ratio != 1.0f) {
+    local_matrix.setScale(1.0f / source_pixel_ratio, 1.0f / source_pixel_ratio);
+  }
+
+  pattern->shader = image->makeShader(
+      RepeatModeToTileMode(repeat, true), RepeatModeToTileMode(repeat, false),
+      SkSamplingOptions(SkFilterMode::kLinear), &local_matrix);
+  if (!pattern->shader) {
+    info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
+    return;
+  }
+
+  auto context = info.GetIsolate()->GetCurrentContext();
+  auto object = engine->GetPatternTemplate()
+                    ->InstanceTemplate()
+                    ->NewInstance(context)
+                    .ToLocalChecked();
+  object->SetAlignedPointerInInternalField(0, pattern, kPatternHandleTag);
+  info.GetReturnValue().Set(object);
+}
+
+void ScriptEngine::CtxGetImageData(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  double x = 0.0;
+  double y = 0.0;
+  double width = 0.0;
+  double height = 0.0;
+  if (!handle || !ExtractDouble(info, 0, &x) || !ExtractDouble(info, 1, &y) ||
+      !ExtractDouble(info, 2, &width) || !ExtractDouble(info, 3, &height)) {
+    ThrowTypeError(info.GetIsolate(),
+                   "getImageData(x, y, width, height) requires four numbers");
+    return;
+  }
+
+  const auto image_data = handle->context->GetImageData(
+      static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y)),
+      static_cast<int>(std::lround(width)), static_cast<int>(std::lround(height)));
+  if (!image_data.has_value()) {
+    ThrowError(info.GetIsolate(), "failed to read image data");
+    return;
+  }
+
+  auto backing_store =
+      v8::ArrayBuffer::NewBackingStore(info.GetIsolate(),
+                                       image_data->data.size());
+  std::memcpy(backing_store->Data(), image_data->data.data(), image_data->data.size());
+  auto array_buffer = v8::ArrayBuffer::New(info.GetIsolate(), std::move(backing_store));
+  auto data = v8::Uint8ClampedArray::New(array_buffer, 0,
+                                         image_data->data.size());
+
+  auto context = info.GetIsolate()->GetCurrentContext();
+  auto object = v8::Object::New(info.GetIsolate());
+  object
+      ->Set(context, v8::String::NewFromUtf8Literal(info.GetIsolate(), "width"),
+            v8::Integer::New(info.GetIsolate(), image_data->width))
+      .Check();
+  object
+      ->Set(context, v8::String::NewFromUtf8Literal(info.GetIsolate(), "height"),
+            v8::Integer::New(info.GetIsolate(), image_data->height))
+      .Check();
+  object
+      ->Set(context, v8::String::NewFromUtf8Literal(info.GetIsolate(), "data"), data)
+      .Check();
+  info.GetReturnValue().Set(object);
+}
+
+void ScriptEngine::CtxPutImageData(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  if (!handle || info.Length() < 3 || !info[0]->IsObject()) {
+    ThrowTypeError(info.GetIsolate(),
+                   "putImageData(imageData, dx, dy) requires imageData and coordinates");
+    return;
+  }
+
+  auto context = info.GetIsolate()->GetCurrentContext();
+  auto image_data_object = info[0].As<v8::Object>();
+  v8::Local<v8::Value> width_value;
+  v8::Local<v8::Value> height_value;
+  v8::Local<v8::Value> data_value;
+  if (!image_data_object
+           ->Get(context, v8::String::NewFromUtf8Literal(info.GetIsolate(), "width"))
+           .ToLocal(&width_value) ||
+      !image_data_object
+           ->Get(context, v8::String::NewFromUtf8Literal(info.GetIsolate(), "height"))
+           .ToLocal(&height_value) ||
+      !image_data_object
+           ->Get(context, v8::String::NewFromUtf8Literal(info.GetIsolate(), "data"))
+           .ToLocal(&data_value)) {
+    ThrowTypeError(info.GetIsolate(), "putImageData requires a valid imageData object");
+    return;
+  }
+
+  double width = 0.0;
+  double height = 0.0;
+  double dx = 0.0;
+  double dy = 0.0;
+  if (!ExtractDouble(info.GetIsolate(), width_value, &width) ||
+      !ExtractDouble(info.GetIsolate(), height_value, &height) ||
+      !ExtractDouble(info, 1, &dx) || !ExtractDouble(info, 2, &dy) ||
+      !data_value->IsArrayBufferView()) {
+    ThrowTypeError(info.GetIsolate(),
+                   "putImageData requires width, height, data, dx, and dy");
+    return;
+  }
+
+  auto view = data_value.As<v8::ArrayBufferView>();
+  std::shared_ptr<v8::BackingStore> backing_store = view->Buffer()->GetBackingStore();
+  const size_t byte_offset = view->ByteOffset();
+  const size_t byte_length = view->ByteLength();
+  const int image_width = static_cast<int>(std::lround(width));
+  const int image_height = static_cast<int>(std::lround(height));
+  const size_t expected_size =
+      static_cast<size_t>(image_width) * static_cast<size_t>(image_height) * 4u;
+  if (byte_length != expected_size) {
+    ThrowTypeError(info.GetIsolate(), "putImageData data length does not match dimensions");
+    return;
+  }
+
+  canvas_engine::Canvas2DContext::ImageData image_data;
+  image_data.width = image_width;
+  image_data.height = image_height;
+  image_data.data.resize(byte_length);
+  std::memcpy(image_data.data.data(),
+              static_cast<const std::uint8_t*>(backing_store->Data()) + byte_offset,
+              byte_length);
+
+  if (!handle->context->PutImageData(image_data, static_cast<int>(std::lround(dx)),
+                                     static_cast<int>(std::lround(dy)))) {
+    ThrowError(info.GetIsolate(), "failed to write image data");
+  }
 }
 
 void ScriptEngine::GradientAddColorStop(

@@ -114,12 +114,19 @@ def main():
     background = (226, 232, 240, 255)
     dark = (15, 23, 42, 255)
     orange = (249, 115, 22, 255)
+    red = (239, 68, 68, 255)
+    teal = (20, 184, 166, 255)
+    purple = (139, 92, 246, 255)
 
     expect_color_range(pixel(rows, 10, 10), background, 2, "background corner")
     expect_color_range(pixel(rows, 60, 60), dark, 4, "first image dark region")
     expect_color_range(pixel(rows, 240, 240), orange, 8, "first image circle region")
     expect_color_range(pixel(rows, 432, 192), orange, 8, "scaled image center")
     expect_color_range(pixel(rows, 534, 126), dark, 6, "cropped image region")
+    expect_color_range(pixel(rows, 240, 48), dark, 6, "image data blit")
+    expect_color_range(pixel(rows, 132, 264), red, 10, "quadratic curve stroke")
+    expect_color_range(pixel(rows, 330, 282), teal, 8, "ellipse fill")
+    expect_color_range(pixel(rows, 564, 276), purple, 8, "arcTo fill")
 
     print("render_regression ok")
 

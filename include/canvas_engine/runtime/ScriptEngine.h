@@ -25,12 +25,14 @@ class ScriptEngine {
   struct CanvasHandle;
   struct GradientHandle;
   struct ImageHandle;
+  struct PatternHandle;
 
   v8::Local<v8::Context> GetContext();
   v8::Local<v8::FunctionTemplate> GetCanvasTemplate();
   v8::Local<v8::FunctionTemplate> GetContext2DTemplate();
   v8::Local<v8::FunctionTemplate> GetGradientTemplate();
   v8::Local<v8::FunctionTemplate> GetImageTemplate();
+  v8::Local<v8::FunctionTemplate> GetPatternTemplate();
   bool ExecuteScriptFile(const std::filesystem::path& script_path,
                          v8::Local<v8::Value>* out_result);
   std::filesystem::path ResolveScriptPath(const std::string& script_path) const;
@@ -183,9 +185,12 @@ class ScriptEngine {
   static void CtxBeginPath(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxMoveTo(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxLineTo(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void CtxQuadraticCurveTo(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxBezierCurveTo(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxRect(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxArc(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void CtxArcTo(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void CtxEllipse(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxClosePath(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxClip(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxFill(const v8::FunctionCallbackInfo<v8::Value>& info);
@@ -197,6 +202,9 @@ class ScriptEngine {
       const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxCreateRadialGradient(
       const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void CtxCreatePattern(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void CtxGetImageData(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void CtxPutImageData(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxMeasureText(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxFillText(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxStrokeText(const v8::FunctionCallbackInfo<v8::Value>& info);
@@ -211,12 +219,14 @@ class ScriptEngine {
   v8::Global<v8::FunctionTemplate> context_2d_template_;
   v8::Global<v8::FunctionTemplate> gradient_template_;
   v8::Global<v8::FunctionTemplate> image_template_;
+  v8::Global<v8::FunctionTemplate> pattern_template_;
   std::vector<std::filesystem::path> script_stack_;
   std::uint32_t next_timer_id_ = 1;
   std::string last_error_;
   std::vector<std::unique_ptr<CanvasHandle>> canvases_;
   std::vector<std::unique_ptr<GradientHandle>> gradients_;
   std::vector<std::unique_ptr<ImageHandle>> images_;
+  std::vector<std::unique_ptr<PatternHandle>> patterns_;
 };
 
 }  // namespace canvas_engine

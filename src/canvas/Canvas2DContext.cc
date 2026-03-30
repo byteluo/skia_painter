@@ -4,6 +4,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -73,6 +74,10 @@ std::optional<float> ParseFontSize(std::string_view font) {
 
 float ComputeShadowSigma(float blur) {
   return std::max(0.0f, blur * 0.5f);
+}
+
+std::uint8_t ClampByte(int value) {
+  return static_cast<std::uint8_t>(std::clamp(value, 0, 255));
 }
 
 SkColor ApplyGlobalAlpha(SkColor color, float global_alpha) {
@@ -517,6 +522,10 @@ void Canvas2DContext::LineTo(float x, float y) {
   current_path_.lineTo(x, y);
 }
 
+void Canvas2DContext::QuadraticCurveTo(float cpx, float cpy, float x, float y) {
+  current_path_.quadTo(cpx, cpy, x, y);
+}
+
 void Canvas2DContext::BezierCurveTo(float cp1x, float cp1y, float cp2x,
                                     float cp2y, float x, float y) {
   current_path_.cubicTo(cp1x, cp1y, cp2x, cp2y, x, y);
@@ -551,6 +560,46 @@ void Canvas2DContext::Arc(float x, float y, float radius, float start_angle,
   current_path_.arcTo(oval, start_degrees, sweep, false);
 }
 
+void Canvas2DContext::ArcTo(float x1, float y1, float x2, float y2, float radius) {
+  if (radius < 0.0f) {
+    return;
+  }
+  current_path_.arcTo(SkPoint::Make(x1, y1), SkPoint::Make(x2, y2), radius);
+}
+
+void Canvas2DContext::Ellipse(float x, float y, float radius_x, float radius_y,
+                              float rotation, float start_angle, float end_angle,
+                              bool counter_clockwise) {
+  if (!(radius_x > 0.0f) || !(radius_y > 0.0f)) {
+    return;
+  }
+
+  float sweep = (end_angle - start_angle) * kRadiansToDegrees;
+  if (!counter_clockwise && sweep < 0.0f) {
+    sweep += 360.0f;
+  } else if (counter_clockwise && sweep > 0.0f) {
+    sweep -= 360.0f;
+  }
+
+  SkPathBuilder ellipse_path;
+  if (std::fabs(sweep) >= kFullCircleDegrees - kFullCircleEpsilon) {
+    ellipse_path.addOval(SkRect::MakeLTRB(-1.0f, -1.0f, 1.0f, 1.0f),
+                         counter_clockwise ? SkPathDirection::kCCW
+                                           : SkPathDirection::kCW);
+  } else {
+    ellipse_path.arcTo(SkRect::MakeLTRB(-1.0f, -1.0f, 1.0f, 1.0f),
+                       start_angle * kRadiansToDegrees, sweep, false);
+  }
+
+  const float sin_rotation = std::sin(rotation);
+  const float cos_rotation = std::cos(rotation);
+  const SkMatrix transform = SkMatrix::MakeAll(
+      cos_rotation * radius_x, -sin_rotation * radius_y, x,
+      sin_rotation * radius_x, cos_rotation * radius_y, y,
+      0.0f, 0.0f, 1.0f);
+  current_path_.addPath(ellipse_path.snapshot(), transform);
+}
+
 void Canvas2DContext::ClosePath() {
   current_path_.close();
 }
@@ -579,6 +628,166 @@ void Canvas2DContext::DrawImage(const sk_sp<SkImage>& image, float sx, float sy,
   surface_->canvas()->drawImageRect(image, src, dst,
                                     SkSamplingOptions(SkFilterMode::kLinear),
                                     nullptr, SkCanvas::kStrict_SrcRectConstraint);
+}
+
+std::optional<Canvas2DContext::ImageData> Canvas2DContext::GetImageData(
+    int x, int y, int width, int height) const {
+  if (width <= 0 || height <= 0) {
+    return std::nullopt;
+  }
+
+  SkPixmap pixmap;
+  if (!surface_->PeekPixels(&pixmap)) {
+    return std::nullopt;
+  }
+
+  ImageData result;
+  result.width = width;
+  result.height = height;
+  result.data.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * 4u, 0);
+
+  const float pixel_ratio = surface_->pixel_ratio();
+  for (int row = 0; row < height; ++row) {
+    for (int col = 0; col < width; ++col) {
+      const int device_left = static_cast<int>(std::floor((x + col) * pixel_ratio));
+      const int device_top = static_cast<int>(std::floor((y + row) * pixel_ratio));
+      const int device_right = static_cast<int>(std::ceil((x + col + 1) * pixel_ratio));
+      const int device_bottom = static_cast<int>(std::ceil((y + row + 1) * pixel_ratio));
+
+      const int left = std::clamp(device_left, 0, pixmap.width());
+      const int top = std::clamp(device_top, 0, pixmap.height());
+      const int right = std::clamp(device_right, 0, pixmap.width());
+      const int bottom = std::clamp(device_bottom, 0, pixmap.height());
+      if (left >= right || top >= bottom) {
+        continue;
+      }
+
+      std::uint64_t red = 0;
+      std::uint64_t green = 0;
+      std::uint64_t blue = 0;
+      std::uint64_t alpha = 0;
+      int samples = 0;
+
+      for (int yy = top; yy < bottom; ++yy) {
+        for (int xx = left; xx < right; ++xx) {
+          const auto* pixel =
+              static_cast<const std::uint8_t*>(pixmap.addr(xx, yy));
+          if (pixel == nullptr) {
+            continue;
+          }
+
+          if (pixmap.colorType() == kBGRA_8888_SkColorType) {
+            blue += pixel[0];
+            green += pixel[1];
+            red += pixel[2];
+            alpha += pixel[3];
+          } else {
+            red += pixel[0];
+            green += pixel[1];
+            blue += pixel[2];
+            alpha += pixel[3];
+          }
+          ++samples;
+        }
+      }
+
+      if (samples == 0) {
+        continue;
+      }
+
+      const std::uint8_t avg_alpha = static_cast<std::uint8_t>(alpha / samples);
+      std::uint8_t avg_red = static_cast<std::uint8_t>(red / samples);
+      std::uint8_t avg_green = static_cast<std::uint8_t>(green / samples);
+      std::uint8_t avg_blue = static_cast<std::uint8_t>(blue / samples);
+      if (avg_alpha != 0 && avg_alpha != 255) {
+        avg_red = ClampByte((static_cast<int>(avg_red) * 255 + avg_alpha / 2) / avg_alpha);
+        avg_green = ClampByte((static_cast<int>(avg_green) * 255 + avg_alpha / 2) / avg_alpha);
+        avg_blue = ClampByte((static_cast<int>(avg_blue) * 255 + avg_alpha / 2) / avg_alpha);
+      }
+
+      const size_t offset =
+          (static_cast<size_t>(row) * static_cast<size_t>(width) + static_cast<size_t>(col)) * 4u;
+      result.data[offset + 0] = avg_red;
+      result.data[offset + 1] = avg_green;
+      result.data[offset + 2] = avg_blue;
+      result.data[offset + 3] = avg_alpha;
+    }
+  }
+
+  return result;
+}
+
+bool Canvas2DContext::PutImageData(const ImageData& image_data, int dx, int dy) {
+  if (image_data.width <= 0 || image_data.height <= 0) {
+    return false;
+  }
+
+  const size_t expected_size =
+      static_cast<size_t>(image_data.width) * static_cast<size_t>(image_data.height) * 4u;
+  if (image_data.data.size() != expected_size) {
+    return false;
+  }
+
+  SkPixmap pixmap;
+  if (!surface_->PeekPixels(&pixmap)) {
+    return false;
+  }
+
+  const float pixel_ratio = surface_->pixel_ratio();
+  for (int row = 0; row < image_data.height; ++row) {
+    for (int col = 0; col < image_data.width; ++col) {
+      const size_t offset =
+          (static_cast<size_t>(row) * static_cast<size_t>(image_data.width) +
+           static_cast<size_t>(col)) * 4u;
+      const std::uint8_t src_red = image_data.data[offset + 0];
+      const std::uint8_t src_green = image_data.data[offset + 1];
+      const std::uint8_t src_blue = image_data.data[offset + 2];
+      const std::uint8_t src_alpha = image_data.data[offset + 3];
+
+      const std::uint8_t premul_red =
+          static_cast<std::uint8_t>((static_cast<int>(src_red) * src_alpha + 127) / 255);
+      const std::uint8_t premul_green =
+          static_cast<std::uint8_t>((static_cast<int>(src_green) * src_alpha + 127) / 255);
+      const std::uint8_t premul_blue =
+          static_cast<std::uint8_t>((static_cast<int>(src_blue) * src_alpha + 127) / 255);
+
+      const int device_left = static_cast<int>(std::floor((dx + col) * pixel_ratio));
+      const int device_top = static_cast<int>(std::floor((dy + row) * pixel_ratio));
+      const int device_right = static_cast<int>(std::ceil((dx + col + 1) * pixel_ratio));
+      const int device_bottom = static_cast<int>(std::ceil((dy + row + 1) * pixel_ratio));
+
+      const int left = std::clamp(device_left, 0, pixmap.width());
+      const int top = std::clamp(device_top, 0, pixmap.height());
+      const int right = std::clamp(device_right, 0, pixmap.width());
+      const int bottom = std::clamp(device_bottom, 0, pixmap.height());
+      if (left >= right || top >= bottom) {
+        continue;
+      }
+
+      for (int yy = top; yy < bottom; ++yy) {
+        for (int xx = left; xx < right; ++xx) {
+          auto* pixel = static_cast<std::uint8_t*>(pixmap.writable_addr(xx, yy));
+          if (pixel == nullptr) {
+            continue;
+          }
+
+          if (pixmap.colorType() == kBGRA_8888_SkColorType) {
+            pixel[0] = premul_blue;
+            pixel[1] = premul_green;
+            pixel[2] = premul_red;
+            pixel[3] = src_alpha;
+          } else {
+            pixel[0] = premul_red;
+            pixel[1] = premul_green;
+            pixel[2] = premul_blue;
+            pixel[3] = src_alpha;
+          }
+        }
+      }
+    }
+  }
+
+  return true;
 }
 
 Canvas2DContext::TextMetrics Canvas2DContext::MeasureText(

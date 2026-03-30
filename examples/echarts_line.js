@@ -114,5 +114,5 @@ chart.setOption({
 });
 
 chart.getZr().refreshImmediately();
-canvas.saveToPng("output/echarts_line.png");
-console.log("wrote output/echarts_line.png");
+canvas.saveToPng("../output/echarts_line.png");
+console.log("wrote ../output/echarts_line.png");
