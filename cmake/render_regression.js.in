@@ -44,6 +44,20 @@ ctx.fill();
 const patch = ctx.getImageData(44, 44, 8, 8);
 ctx.putImageData(patch, 72, 8);
 
+let rafState = "before";
+requestAnimationFrame(() => {
+  ctx.fillStyle = rafState === "after" ? "#22c55e" : "#dc2626";
+  ctx.fillRect(180, 2, 12, 12);
+});
+rafState = "after";
+
+let timeoutState = "before";
+setTimeout(() => {
+  ctx.fillStyle = timeoutState === "after" ? "#0ea5e9" : "#dc2626";
+  ctx.fillRect(196, 2, 12, 12);
+});
+timeoutState = "after";
+
 canvas.saveToPng("@RENDER_REGRESSION_OUTPUT_PNG@");
 
 console.log("wrote @RENDER_REGRESSION_OUTPUT_PNG@");

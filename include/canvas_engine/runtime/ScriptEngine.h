@@ -26,6 +26,12 @@ class ScriptEngine {
   struct GradientHandle;
   struct ImageHandle;
   struct PatternHandle;
+  struct PendingTask {
+    std::uint32_t id = 0;
+    bool animation_frame = false;
+    bool cancelled = false;
+    v8::Global<v8::Function> callback;
+  };
 
   v8::Local<v8::Context> GetContext();
   v8::Local<v8::FunctionTemplate> GetCanvasTemplate();
@@ -35,6 +41,10 @@ class ScriptEngine {
   v8::Local<v8::FunctionTemplate> GetPatternTemplate();
   bool ExecuteScriptFile(const std::filesystem::path& script_path,
                          v8::Local<v8::Value>* out_result);
+  bool DrainPendingTasks();
+  std::uint32_t EnqueueTask(v8::Local<v8::Function> callback,
+                            bool animation_frame);
+  void CancelTask(std::uint32_t task_id);
   std::filesystem::path ResolveScriptPath(const std::string& script_path) const;
 
   static ScriptEngine* From(v8::Isolate* isolate);
@@ -222,10 +232,12 @@ class ScriptEngine {
   v8::Global<v8::FunctionTemplate> pattern_template_;
   std::vector<std::filesystem::path> script_stack_;
   std::uint32_t next_timer_id_ = 1;
+  bool draining_tasks_ = false;
   std::string last_error_;
   std::vector<std::unique_ptr<CanvasHandle>> canvases_;
   std::vector<std::unique_ptr<GradientHandle>> gradients_;
   std::vector<std::unique_ptr<ImageHandle>> images_;
+  std::vector<PendingTask> pending_tasks_;
   std::vector<std::unique_ptr<PatternHandle>> patterns_;
 };
 
