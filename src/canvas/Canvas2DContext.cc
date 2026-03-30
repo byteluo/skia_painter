@@ -707,6 +707,7 @@ void Canvas2DContext::DrawText(std::string_view text, float x, float y,
         CGContextSetShouldAntialias(cg, true);
         CGContextSetAllowsAntialiasing(cg, true);
         const SkMatrix matrix = surface_->canvas()->getTotalMatrix();
+        const float pixel_ratio = surface_->pixel_ratio();
         CGContextSetTextMatrix(cg, CGAffineTransformIdentity);
 
         const TextMetrics text_metrics = MeasureText(text);
@@ -731,7 +732,7 @@ void Canvas2DContext::DrawText(std::string_view text, float x, float y,
 
         const std::string family = ParseFontFamily(state_.font_css);
         ScopedCFTypeRef line(CreateTextLine(
-            text, family, state_.font_size,
+            text, family, state_.font_size * pixel_ratio,
             paint.getStyle() == SkPaint::kStroke_Style ? state_.stroke_style
                                                        : state_.fill_style,
             state_.global_alpha));
@@ -756,9 +757,12 @@ void Canvas2DContext::DrawText(std::string_view text, float x, float y,
             if (shadow_color != nullptr) {
               CGContextSetShadowWithColor(
                   cg,
-                  CGSizeMake(static_cast<CGFloat>(state_.shadow_offset_x),
-                             static_cast<CGFloat>(-state_.shadow_offset_y)),
-                  static_cast<CGFloat>(state_.shadow_blur), shadow_color);
+                  CGSizeMake(static_cast<CGFloat>(state_.shadow_offset_x *
+                                                 pixel_ratio),
+                             static_cast<CGFloat>(-state_.shadow_offset_y *
+                                                  pixel_ratio)),
+                  static_cast<CGFloat>(state_.shadow_blur * pixel_ratio),
+                  shadow_color);
               CGColorRelease(shadow_color);
             }
           }

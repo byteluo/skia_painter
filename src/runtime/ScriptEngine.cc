@@ -181,7 +181,11 @@ float GetDefaultDevicePixelRatio() {
     } catch (...) {
     }
   }
-  return 2.0f;
+  return 3.0f;
+}
+
+float GetExposedDevicePixelRatio() {
+  return 1.0f;
 }
 
 bool ExtractSixNumbers(const v8::FunctionCallbackInfo<v8::Value>& info,
@@ -485,7 +489,7 @@ v8::Local<v8::Context> ScriptEngine::GetContext() {
       .Check();
   global
       ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "devicePixelRatio"),
-            v8::Number::New(isolate_, GetDefaultDevicePixelRatio()))
+            v8::Number::New(isolate_, GetExposedDevicePixelRatio()))
       .Check();
 
   return context;
@@ -789,6 +793,7 @@ void ScriptEngine::CanvasConstructor(
   }
 
   const float pixel_ratio = GetDefaultDevicePixelRatio();
+  const float exposed_pixel_ratio = GetExposedDevicePixelRatio();
   auto surface = CanvasSurface::CreateRaster(static_cast<int>(width),
                                              static_cast<int>(height),
                                              pixel_ratio);
@@ -813,11 +818,11 @@ void ScriptEngine::CanvasConstructor(
       .Check();
   info.This()
       ->Set(context, v8::String::NewFromUtf8Literal(isolate, "devicePixelRatio"),
-            v8::Number::New(isolate, pixel_ratio))
+            v8::Number::New(isolate, exposed_pixel_ratio))
       .Check();
   info.This()
       ->Set(context, v8::String::NewFromUtf8Literal(isolate, "dpr"),
-            v8::Number::New(isolate, pixel_ratio))
+            v8::Number::New(isolate, exposed_pixel_ratio))
       .Check();
 
   info.GetReturnValue().Set(info.This());
