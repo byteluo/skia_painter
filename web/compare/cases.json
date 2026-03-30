@@ -1,0 +1,44 @@
+[
+  {
+    "id": "sunburst",
+    "title": "Sunburst",
+    "description": "层级扇区布局、径向标签、中心留白",
+    "exampleScript": "examples/echarts_sunburst.js",
+    "outputFile": "output/echarts_sunburst.png"
+  },
+  {
+    "id": "timeline",
+    "title": "Timeline Bar",
+    "description": "timeline 组件切换 + 柱状图布局",
+    "exampleScript": "examples/echarts_timeline_bar.js",
+    "outputFile": "output/echarts_timeline_bar.png"
+  },
+  {
+    "id": "custom_series",
+    "title": "Custom Series",
+    "description": "renderItem group / circle / text 组合绘制",
+    "exampleScript": "examples/echarts_custom_series.js",
+    "outputFile": "output/echarts_custom_series.png"
+  },
+  {
+    "id": "pictorial_bar",
+    "title": "Pictorial Bar",
+    "description": "重复符号、symbolClip、背景符号层",
+    "exampleScript": "examples/echarts_pictorial_bar.js",
+    "outputFile": "output/echarts_pictorial_bar.png"
+  },
+  {
+    "id": "gauge",
+    "title": "Gauge",
+    "description": "仪表盘弧线、进度、指针、文本细节",
+    "exampleScript": "examples/echarts_gauge.js",
+    "outputFile": "output/echarts_gauge.png"
+  },
+  {
+    "id": "image_scatter",
+    "title": "Image Scatter",
+    "description": "image:// 符号、drawImage 路径、图片标记点",
+    "exampleScript": "examples/echarts_image_scatter.js",
+    "outputFile": "output/echarts_image_scatter.png"
+  }
+]

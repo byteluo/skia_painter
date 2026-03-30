@@ -256,6 +256,43 @@
 FORCE_SKIA_BUILD=1 ./scripts/bootstrap.sh
 ```
 
+## 前端对比 Dev 服务
+
+如果你想直接在浏览器里对比“浏览器原生 ECharts canvas 渲染”和“当前后端导出的 PNG”，现在可以启动一个本地 dev 服务：
+
+```bash
+npm run dev:compare
+```
+
+默认地址：
+
+```bash
+http://127.0.0.1:8787
+```
+
+这个页面会：
+
+- 左侧直接用浏览器里的 `ECharts`
+- 右侧调用当前仓库编译出来的 `build/canvas_engine`
+- 运行对应的 `examples/*.js`
+- 重新生成 `output/*.png`
+- 让你并排观察两边的视觉效果
+
+当前页面内置了一组适合人工对比的复杂图表：
+
+- `sunburst`
+- `timeline`
+- `custom series`
+- `pictorial bar`
+- `gauge`
+- `image scatter`
+
+如果你的二进制不在默认位置，可以这样启动：
+
+```bash
+CANVAS_ENGINE_BIN=/absolute/path/to/canvas_engine npm run dev:compare
+```
+
 ### 直接使用 CMake Presets
 
 开发构建：

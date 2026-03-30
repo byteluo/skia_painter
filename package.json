@@ -1,6 +1,7 @@
 {
   "private": true,
   "scripts": {
+    "dev:compare": "node scripts/dev_compare_server.js",
     "inspect:echarts-canvas-api": "node scripts/inspect_echarts_canvas_api.js"
   },
   "dependencies": {

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Skia Painter Compare</title>
+    <link rel="stylesheet" href="/compare/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="sidebar__head">
+          <p class="eyebrow">Skia Painter</p>
+          <h1>Canvas Compare Lab</h1>
+          <p class="sidebar__copy">
+            上面用浏览器里的 ECharts 直接渲染，下面用当前 C++/V8/Skia 引擎导出的 PNG，对比视觉结果。
+          </p>
+        </div>
+        <div id="case-list" class="case-list"></div>
+      </aside>
+
+      <main class="main">
+        <section class="toolbar">
+          <div class="toolbar__info">
+            <p class="eyebrow">Current Case</p>
+            <h2 id="case-title">Loading…</h2>
+            <p id="case-description" class="muted"></p>
+          </div>
+          <div class="toolbar__actions">
+            <button id="render-browser" class="button button--secondary" type="button">
+              重绘浏览器侧
+            </button>
+            <button id="render-engine" class="button" type="button">
+              渲染后端 PNG
+            </button>
+          </div>
+        </section>
+
+        <section class="meta">
+          <div class="meta__item">
+            <span class="meta__label">Example</span>
+            <code id="example-script"></code>
+          </div>
+          <div class="meta__item">
+            <span class="meta__label">PNG</span>
+            <code id="output-file"></code>
+          </div>
+          <div class="meta__item">
+            <span class="meta__label">Status</span>
+            <span id="status-text">Idle</span>
+          </div>
+          <div class="meta__item">
+            <span class="meta__label">Preview Size</span>
+            <span>统一按 16:9 视口缩放展示</span>
+          </div>
+        </section>
+
+        <section class="compare-stack">
+          <article class="panel">
+            <header class="panel__head">
+              <p class="eyebrow">Browser</p>
+              <h3>ECharts Runtime</h3>
+            </header>
+            <div class="viewport">
+              <div class="stage">
+                <div id="browser-chart" class="viewport__surface viewport__surface--chart"></div>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel">
+            <header class="panel__head">
+              <p class="eyebrow">Backend</p>
+              <h3>Skia PNG Export</h3>
+            </header>
+            <div class="viewport">
+              <div class="stage">
+                <div class="viewport__surface viewport__surface--image">
+                  <img id="engine-image" alt="Engine render output" />
+                  <div id="engine-placeholder" class="placeholder">
+                    点击“渲染后端 PNG”生成最新导出图
+                  </div>
+                </div>
+              </div>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="/node_modules/echarts/dist/echarts.js"></script>
+    <script type="module" src="/compare/app.js"></script>
+  </body>
+</html>
