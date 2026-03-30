@@ -90,9 +90,11 @@
 - `ctx.beginPath()`
 - `ctx.moveTo(x, y)`
 - `ctx.lineTo(x, y)`
+- `ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y)`
 - `ctx.rect(x, y, w, h)`
 - `ctx.arc(x, y, radius, startAngle, endAngle, counterClockwise = false)`
 - `ctx.closePath()`
+- `ctx.clip()`
 - `ctx.fill()`
 - `ctx.stroke()`
 - `ctx.measureText(text)`
@@ -118,6 +120,7 @@
 ├── examples
 │   ├── demo.js
 │   ├── echarts_bar.js
+│   ├── echarts_line.js
 │   └── smoke.js
 ├── include
 │   └── canvas_engine
@@ -275,6 +278,18 @@ wrote output/demo.png
 wrote output/echarts_bar.png
 ```
 
+折线图示例：
+
+```bash
+./build/dev/canvas_engine examples/echarts_line.js
+```
+
+脚本会输出：
+
+```text
+wrote output/echarts_line.png
+```
+
 ## ECharts 集成方式
 
 当前推荐的接入方式是直接加载 `ECharts` 的 UMD 构建，并通过宿主提供的 `Canvas` 对象作为渲染目标：
@@ -309,7 +324,9 @@ const chart = echarts.init(canvas, null, {
 
 最小冒烟脚本见 [examples/smoke.js](/Users/treecat/Desktop/skia-painter/examples/smoke.js)。
 
-`ECharts` 集成示例见 [examples/echarts_bar.js](/Users/treecat/Desktop/skia-painter/examples/echarts_bar.js)。
+`ECharts` 柱状图示例见 [examples/echarts_bar.js](/Users/treecat/Desktop/skia-painter/examples/echarts_bar.js)。
+
+`ECharts` 折线图示例见 [examples/echarts_line.js](/Users/treecat/Desktop/skia-painter/examples/echarts_line.js)。
 
 ## Git 提交建议
 

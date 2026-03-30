@@ -478,6 +478,11 @@ void Canvas2DContext::LineTo(float x, float y) {
   current_path_.lineTo(x, y);
 }
 
+void Canvas2DContext::BezierCurveTo(float cp1x, float cp1y, float cp2x,
+                                    float cp2y, float x, float y) {
+  current_path_.cubicTo(cp1x, cp1y, cp2x, cp2y, x, y);
+}
+
 void Canvas2DContext::Rect(float x, float y, float width, float height) {
   current_path_.addRect(SkRect::MakeXYWH(x, y, width, height));
 }
@@ -501,6 +506,10 @@ void Canvas2DContext::Arc(float x, float y, float radius, float start_angle,
 
 void Canvas2DContext::ClosePath() {
   current_path_.close();
+}
+
+void Canvas2DContext::Clip() {
+  surface_->canvas()->clipPath(current_path_.snapshot(), true);
 }
 
 void Canvas2DContext::Fill() {

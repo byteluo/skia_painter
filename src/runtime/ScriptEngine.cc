@@ -531,6 +531,9 @@ v8::Local<v8::FunctionTemplate> ScriptEngine::GetContext2DTemplate() {
   tpl->PrototypeTemplate()->Set(
       isolate_, "lineTo",
       v8::FunctionTemplate::New(isolate_, CtxLineTo));
+  tpl->PrototypeTemplate()->Set(
+      isolate_, "bezierCurveTo",
+      v8::FunctionTemplate::New(isolate_, CtxBezierCurveTo));
   tpl->PrototypeTemplate()->Set(isolate_, "rect",
                                 v8::FunctionTemplate::New(isolate_, CtxRect));
   tpl->PrototypeTemplate()->Set(isolate_, "arc",
@@ -538,6 +541,8 @@ v8::Local<v8::FunctionTemplate> ScriptEngine::GetContext2DTemplate() {
   tpl->PrototypeTemplate()->Set(
       isolate_, "closePath",
       v8::FunctionTemplate::New(isolate_, CtxClosePath));
+  tpl->PrototypeTemplate()->Set(isolate_, "clip",
+                                v8::FunctionTemplate::New(isolate_, CtxClip));
   tpl->PrototypeTemplate()->Set(isolate_, "fill",
                                 v8::FunctionTemplate::New(isolate_, CtxFill));
   tpl->PrototypeTemplate()->Set(isolate_, "stroke",
@@ -1422,6 +1427,33 @@ void ScriptEngine::CtxLineTo(const v8::FunctionCallbackInfo<v8::Value>& info) {
   handle->context->LineTo(static_cast<float>(x), static_cast<float>(y));
 }
 
+void ScriptEngine::CtxBezierCurveTo(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  double cp1x = 0.0;
+  double cp1y = 0.0;
+  double cp2x = 0.0;
+  double cp2y = 0.0;
+  double x = 0.0;
+  double y = 0.0;
+  if (!handle || !ExtractDouble(info, 0, &cp1x) ||
+      !ExtractDouble(info, 1, &cp1y) || !ExtractDouble(info, 2, &cp2x) ||
+      !ExtractDouble(info, 3, &cp2y) || !ExtractDouble(info, 4, &x) ||
+      !ExtractDouble(info, 5, &y)) {
+    ThrowTypeError(
+        info.GetIsolate(),
+        "bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y) requires six numbers");
+    return;
+  }
+  handle->context->BezierCurveTo(static_cast<float>(cp1x),
+                                 static_cast<float>(cp1y),
+                                 static_cast<float>(cp2x),
+                                 static_cast<float>(cp2y),
+                                 static_cast<float>(x),
+                                 static_cast<float>(y));
+}
+
 void ScriptEngine::CtxRect(const v8::FunctionCallbackInfo<v8::Value>& info) {
   auto* handle =
       Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
@@ -1474,6 +1506,13 @@ void ScriptEngine::CtxClosePath(
   if (auto* handle =
           Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag)) {
     handle->context->ClosePath();
+  }
+}
+
+void ScriptEngine::CtxClip(const v8::FunctionCallbackInfo<v8::Value>& info) {
+  if (auto* handle =
+          Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag)) {
+    handle->context->Clip();
   }
 }
 

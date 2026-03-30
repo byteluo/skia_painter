@@ -80,10 +80,13 @@ class Canvas2DContext {
   void BeginPath();
   void MoveTo(float x, float y);
   void LineTo(float x, float y);
+  void BezierCurveTo(float cp1x, float cp1y, float cp2x, float cp2y, float x,
+                     float y);
   void Rect(float x, float y, float width, float height);
   void Arc(float x, float y, float radius, float start_angle, float end_angle,
            bool counter_clockwise);
   void ClosePath();
+  void Clip();
   void Fill();
   void Stroke();
   TextMetrics MeasureText(std::string_view text) const;
