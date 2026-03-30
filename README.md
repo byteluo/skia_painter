@@ -7,7 +7,7 @@
 - 一个可运行 `ECharts` 的 `Canvas` / `CanvasRenderingContext2D` 运行时
 - 将渲染结果导出为 PNG
 
-当前实现的 API 范围依然不是完整 HTML Canvas 规范，但已经覆盖了一批足以驱动 `ECharts` 实际绘图的宿主和 2D 接口。
+当前实现的 API 范围依然不是完整 HTML Canvas 规范，但已经覆盖了一批足以驱动 `ECharts` 实际绘图的宿主和 2D 接口，包括平滑曲线、裁剪、虚线和渐变填充。
 
 ## 仓库约定
 
@@ -76,6 +76,7 @@
 - `ctx.shadowColor`
 - `ctx.shadowOffsetX`
 - `ctx.shadowOffsetY`
+- `ctx.lineDashOffset`
 - `ctx.save()`
 - `ctx.restore()`
 - `ctx.translate(x, y)`
@@ -97,6 +98,10 @@
 - `ctx.clip()`
 - `ctx.fill()`
 - `ctx.stroke()`
+- `ctx.setLineDash(segments)`
+- `ctx.getLineDash()`
+- `ctx.createLinearGradient(x0, y0, x1, y1)`
+- `ctx.createRadialGradient(x0, y0, r0, x1, y1, r1)`
 - `ctx.measureText(text)`
 - `ctx.fillText(text, x, y)`
 - `ctx.strokeText(text, x, y)`

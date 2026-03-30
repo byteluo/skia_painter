@@ -12,6 +12,7 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkPathBuilder.h"
+#include "include/core/SkShader.h"
 
 #include "canvas_engine/canvas/CanvasSurface.h"
 
@@ -42,6 +43,12 @@ class Canvas2DContext {
   bool SetShadowColor(std::string_view css_color);
   void SetShadowOffsetX(float value);
   void SetShadowOffsetY(float value);
+  void SetFillShader(sk_sp<SkShader> shader, std::string_view description);
+  void SetStrokeShader(sk_sp<SkShader> shader, std::string_view description);
+  void SetLineDash(const std::vector<float>& segments);
+  const std::vector<float>& line_dash() const { return state_.line_dash; }
+  void SetLineDashOffset(float value);
+  float line_dash_offset() const { return state_.line_dash_offset; }
 
   const std::string& fill_style() const { return state_.fill_style_css; }
   const std::string& stroke_style() const { return state_.stroke_style_css; }
@@ -117,6 +124,10 @@ class Canvas2DContext {
     std::string shadow_color_css = "rgba(0, 0, 0, 0)";
     float shadow_offset_x = 0.0f;
     float shadow_offset_y = 0.0f;
+    sk_sp<SkShader> fill_shader;
+    sk_sp<SkShader> stroke_shader;
+    std::vector<float> line_dash;
+    float line_dash_offset = 0.0f;
   };
 
   static State MakeDefaultState();
@@ -125,7 +136,7 @@ class Canvas2DContext {
   SkPaint MakeFillPaint() const;
   SkPaint MakeStrokePaint() const;
   SkPaint MakeTextPaint(bool stroke) const;
-  void ConfigurePaint(SkPaint* paint) const;
+  void ConfigurePaint(SkPaint* paint, bool allow_line_dash) const;
   void DrawText(std::string_view text, float x, float y, const SkPaint& paint) const;
 
   std::shared_ptr<CanvasSurface> surface_;
