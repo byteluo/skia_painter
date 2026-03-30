@@ -1,5 +1,138 @@
 [
   {
+    "id": "bar",
+    "title": "Bar",
+    "description": "基础柱状图、类目轴、矩形填充",
+    "exampleScript": "examples/echarts_bar.js",
+    "outputFile": "output/echarts_bar.png"
+  },
+  {
+    "id": "line",
+    "title": "Line",
+    "description": "平滑折线、面积填充、虚线样式",
+    "exampleScript": "examples/echarts_line.js",
+    "outputFile": "output/echarts_line.png"
+  },
+  {
+    "id": "pie",
+    "title": "Pie",
+    "description": "环形饼图、标签引导线、分区边界",
+    "exampleScript": "examples/echarts_pie.js",
+    "outputFile": "output/echarts_pie.png"
+  },
+  {
+    "id": "scatter",
+    "title": "Scatter",
+    "description": "散点尺寸映射、visualMap、笛卡尔坐标",
+    "exampleScript": "examples/echarts_scatter.js",
+    "outputFile": "output/echarts_scatter.png"
+  },
+  {
+    "id": "heatmap",
+    "title": "Heatmap",
+    "description": "二维热力图、格子标签、visualMap 渐变",
+    "exampleScript": "examples/echarts_heatmap.js",
+    "outputFile": "output/echarts_heatmap.png"
+  },
+  {
+    "id": "candlestick",
+    "title": "Candlestick",
+    "description": "K 线实体与影线、上涨下跌样式",
+    "exampleScript": "examples/echarts_candlestick.js",
+    "outputFile": "output/echarts_candlestick.png"
+  },
+  {
+    "id": "funnel",
+    "title": "Funnel",
+    "description": "漏斗多层切片、内置标签、排序布局",
+    "exampleScript": "examples/echarts_funnel.js",
+    "outputFile": "output/echarts_funnel.png"
+  },
+  {
+    "id": "radar",
+    "title": "Radar",
+    "description": "雷达图多维指标、区域填充、多序列叠加",
+    "exampleScript": "examples/echarts_radar.js",
+    "outputFile": "output/echarts_radar.png"
+  },
+  {
+    "id": "sankey",
+    "title": "Sankey",
+    "description": "桑基图节点布局、流向边、邻接高亮",
+    "exampleScript": "examples/echarts_sankey.js",
+    "outputFile": "output/echarts_sankey.png"
+  },
+  {
+    "id": "treemap",
+    "title": "Treemap",
+    "description": "矩形树图、层级标签、面积编码",
+    "exampleScript": "examples/echarts_treemap.js",
+    "outputFile": "output/echarts_treemap.png"
+  },
+  {
+    "id": "parallel",
+    "title": "Parallel",
+    "description": "parallel 坐标系、多轴折线、维度标签",
+    "exampleScript": "examples/echarts_parallel.js",
+    "outputFile": "output/echarts_parallel.png"
+  },
+  {
+    "id": "graph",
+    "title": "Graph",
+    "description": "graph 关系图、节点符号、曲线边与箭头",
+    "exampleScript": "examples/echarts_graph.js",
+    "outputFile": "output/echarts_graph.png"
+  },
+  {
+    "id": "tree",
+    "title": "Tree",
+    "description": "树图层级结构、Bezier 连线、节点标签",
+    "exampleScript": "examples/echarts_tree.js",
+    "outputFile": "output/echarts_tree.png"
+  },
+  {
+    "id": "theme_river",
+    "title": "ThemeRiver",
+    "description": "themeRiver 流图、时间轴、平滑堆叠带",
+    "exampleScript": "examples/echarts_theme_river.js",
+    "outputFile": "output/echarts_theme_river.png"
+  },
+  {
+    "id": "geo_heatmap",
+    "title": "Geo Heatmap",
+    "description": "geo 热力图、地图坐标、模糊热区叠加",
+    "exampleScript": "examples/echarts_geo_heatmap.js",
+    "outputFile": "output/echarts_geo_heatmap.png"
+  },
+  {
+    "id": "rich_graphic",
+    "title": "Rich Graphic",
+    "description": "rich text、graphic image/text、markPoint 组合",
+    "exampleScript": "examples/echarts_rich_graphic.js",
+    "outputFile": "output/echarts_rich_graphic.png"
+  },
+  {
+    "id": "pattern_bar",
+    "title": "Pattern Bar",
+    "description": "图案填充柱状图、image pattern、边框样式",
+    "exampleScript": "examples/echarts_pattern_bar.js",
+    "outputFile": "output/echarts_pattern_bar.png"
+  },
+  {
+    "id": "datazoom_markarea",
+    "title": "DataZoom MarkArea",
+    "description": "slider dataZoom、markArea、markLine 叠加",
+    "exampleScript": "examples/echarts_datazoom_markarea.js",
+    "outputFile": "output/echarts_datazoom_markarea.png"
+  },
+  {
+    "id": "lines",
+    "title": "Lines",
+    "description": "lines 系列、曲线连线、箭头路径",
+    "exampleScript": "examples/echarts_lines.js",
+    "outputFile": "output/echarts_lines.png"
+  },
+  {
     "id": "sunburst",
     "title": "Sunburst",
     "description": "层级扇区布局、径向标签、中心留白",
@@ -28,6 +161,13 @@
     "outputFile": "output/echarts_single_axis_scatter.png"
   },
   {
+    "id": "legend_selected",
+    "title": "Legend Selected",
+    "description": "legend selected 状态、隐藏系列、可见性控制",
+    "exampleScript": "examples/echarts_legend_selected.js",
+    "outputFile": "output/echarts_legend_selected.png"
+  },
+  {
     "id": "timeline",
     "title": "Timeline Bar",
     "description": "timeline 组件切换 + 柱状图布局",
@@ -42,6 +182,69 @@
     "outputFile": "output/echarts_markpoint_markline.png"
   },
   {
+    "id": "legend_scroll",
+    "title": "Legend Scroll",
+    "description": "滚动 legend、多系列折线、分页控件",
+    "exampleScript": "examples/echarts_legend_scroll.js",
+    "outputFile": "output/echarts_legend_scroll.png"
+  },
+  {
+    "id": "axis_pointer",
+    "title": "AxisPointer",
+    "description": "crosshair、tooltip 联动、静态指示态",
+    "exampleScript": "examples/echarts_axis_pointer.js",
+    "outputFile": "output/echarts_axis_pointer.png"
+  },
+  {
+    "id": "visualmap_scatter",
+    "title": "VisualMap Scatter",
+    "description": "continuous visualMap、颜色映射、散点尺寸",
+    "exampleScript": "examples/echarts_visualmap_scatter.js",
+    "outputFile": "output/echarts_visualmap_scatter.png"
+  },
+  {
+    "id": "visualmap_piecewise",
+    "title": "Piecewise VisualMap",
+    "description": "piecewise visualMap、分类着色、离散图例",
+    "exampleScript": "examples/echarts_visualmap_piecewise.js",
+    "outputFile": "output/echarts_visualmap_piecewise.png"
+  },
+  {
+    "id": "map_piecewise",
+    "title": "Map Piecewise",
+    "description": "map + piecewise visualMap、区域分级着色",
+    "exampleScript": "examples/echarts_map_piecewise.js",
+    "outputFile": "output/echarts_map_piecewise.png"
+  },
+  {
+    "id": "axis_pointer_multigrid",
+    "title": "AxisPointer Multi-Grid",
+    "description": "linked axisPointer、双 grid、联动准星",
+    "exampleScript": "examples/echarts_axis_pointer_multigrid.js",
+    "outputFile": "output/echarts_axis_pointer_multigrid.png"
+  },
+  {
+    "id": "calendar_scatter",
+    "title": "Calendar Scatter",
+    "description": "calendar 坐标系、scatter 点大小映射",
+    "exampleScript": "examples/echarts_calendar_scatter.js",
+    "outputFile": "output/echarts_calendar_scatter.png"
+  },
+  {
+    "id": "calendar_effect_scatter",
+    "title": "Calendar Effect Scatter",
+    "description": "calendar + effectScatter 事件点覆盖",
+    "exampleScript": "examples/echarts_calendar_effect_scatter.js",
+    "outputFile": "output/echarts_calendar_effect_scatter.png"
+  },
+  {
+    "id": "calendar_heatmap",
+    "title": "Calendar Heatmap",
+    "description": "calendar 热力图、日期单元格、visualMap 映射",
+    "exampleScript": "examples/echarts_calendar_heatmap.js",
+    "outputFile": "output/echarts_calendar_heatmap.png"
+  },
+  {
     "id": "dataset_transform",
     "title": "Dataset + Transform",
     "description": "dataset、sort transform、encode",
@@ -49,11 +252,32 @@
     "outputFile": "output/echarts_dataset_transform.png"
   },
   {
+    "id": "dataset_multi_series",
+    "title": "Dataset Multi-Series",
+    "description": "共享 dataset、bar/line encode、多系列联动",
+    "exampleScript": "examples/echarts_dataset_multi_series.js",
+    "outputFile": "output/echarts_dataset_multi_series.png"
+  },
+  {
     "id": "toolbox",
     "title": "Toolbox",
     "description": "toolbox 图标、legend、双折线",
     "exampleScript": "examples/echarts_toolbox.js",
     "outputFile": "output/echarts_toolbox.png"
+  },
+  {
+    "id": "toolbox_magic_type",
+    "title": "Toolbox MagicType",
+    "description": "toolbox magicType 图标集与切换能力",
+    "exampleScript": "examples/echarts_toolbox_magic_type.js",
+    "outputFile": "output/echarts_toolbox_magic_type.png"
+  },
+  {
+    "id": "toolbox_datazoom",
+    "title": "Toolbox DataZoom",
+    "description": "toolbox dataZoom + slider 缩放组合",
+    "exampleScript": "examples/echarts_toolbox_datazoom.js",
+    "outputFile": "output/echarts_toolbox_datazoom.png"
   },
   {
     "id": "brush",
@@ -103,5 +327,26 @@
     "description": "registerMap、自定义 GeoJSON、区域标签着色",
     "exampleScript": "examples/echarts_map.js",
     "outputFile": "output/echarts_map.png"
+  },
+  {
+    "id": "visualmap_map_scatter",
+    "title": "VisualMap Map Scatter",
+    "description": "map/geo + scatter overlay + continuous visualMap",
+    "exampleScript": "examples/echarts_visualmap_map_scatter.js",
+    "outputFile": "output/echarts_visualmap_map_scatter.png"
+  },
+  {
+    "id": "geo_effect_scatter",
+    "title": "Geo Effect Scatter",
+    "description": "geo 组件、地图底图、effectScatter 覆盖层",
+    "exampleScript": "examples/echarts_geo_effect_scatter.js",
+    "outputFile": "output/echarts_geo_effect_scatter.png"
+  },
+  {
+    "id": "geo_lines",
+    "title": "Geo Lines",
+    "description": "geo + lines + 城市标记点组合",
+    "exampleScript": "examples/echarts_geo_lines.js",
+    "outputFile": "output/echarts_geo_lines.png"
   }
 ]
