@@ -10,7 +10,10 @@
 #endif
 
 #include "include/core/SkImageInfo.h"
+#include "include/core/SkImage.h"
 #include "include/core/SkPixmap.h"
+#include "include/core/SkSamplingOptions.h"
+#include "include/core/SkCanvas.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkStream.h"
 #if !defined(__APPLE__)
@@ -78,7 +81,27 @@ bool CanvasSurface::Resize(int width, int height) {
 
 bool CanvasSurface::SavePng(const std::string& output_path) const {
   SkPixmap pixmap;
-  if (!surface_ || !surface_->peekPixels(&pixmap)) {
+  sk_sp<SkSurface> export_surface;
+  if (!surface_) {
+    return false;
+  }
+
+  if (pixel_width_ != width_ || pixel_height_ != height_) {
+    export_surface = CreateRasterSurface(width_, height_, 1.0f);
+    auto image = surface_->makeImageSnapshot();
+    if (!export_surface || !image) {
+      return false;
+    }
+
+    export_surface->getCanvas()->clear(SK_ColorTRANSPARENT);
+    export_surface->getCanvas()->drawImageRect(
+        image, SkRect::MakeWH(static_cast<SkScalar>(width_),
+                              static_cast<SkScalar>(height_)),
+        SkSamplingOptions(SkFilterMode::kLinear), nullptr);
+  }
+
+  SkSurface* surface_for_export = export_surface ? export_surface.get() : surface_.get();
+  if (!surface_for_export->peekPixels(&pixmap)) {
     return false;
   }
 
