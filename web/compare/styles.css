@@ -18,6 +18,7 @@
 html,
 body {
   margin: 0;
+  height: 100%;
   min-height: 100%;
   color: var(--ink);
   background:
@@ -29,12 +30,13 @@ body {
 
 body {
   min-height: 100vh;
+  overflow: hidden;
 }
 
 .shell {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
 }
 
 .sidebar {
@@ -42,6 +44,8 @@ body {
   border-right: 1px solid var(--line);
   background: rgba(255, 248, 239, 0.72);
   backdrop-filter: blur(14px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .sidebar__head h1,
@@ -109,6 +113,8 @@ body {
 
 .main {
   padding: 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .toolbar,
@@ -248,13 +254,23 @@ code {
 }
 
 @media (max-width: 1100px) {
+  body {
+    overflow: auto;
+  }
+
   .shell {
     grid-template-columns: 1fr;
+    height: auto;
   }
 
   .sidebar {
     border-right: 0;
     border-bottom: 1px solid var(--line);
+    overflow: visible;
+  }
+
+  .main {
+    overflow: visible;
   }
 
   .meta {
