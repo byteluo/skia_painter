@@ -175,6 +175,15 @@
 - `toolbox`
 - `brush`
 - `dataset + transform`
+- `legend scroll`
+- `axisPointer`
+- `visualMap`
+- `piecewise visualMap`
+- `multi-grid axisPointer`
+- `dataset multi-series`
+- `toolbox magicType`
+- `toolbox dataZoom`
+- `legend selected mode`
 
 ### 坐标系与布局容器
 
@@ -182,6 +191,12 @@
 - `singleAxis`
 - `calendar`
 - `geo`
+- `geo + effectScatter`
+- `calendar + scatter`
+- `calendar + effectScatter`
+- `geo + lines`
+- `map + piecewise visualMap`
+- `map + scatter + visualMap`
 
 ### 图片 / 富文本 / 图形混合
 
@@ -229,6 +244,21 @@
 - [examples/echarts_dataset_transform.js](/Users/treecat/Desktop/skia-painter/examples/echarts_dataset_transform.js)
 - [examples/echarts_toolbox.js](/Users/treecat/Desktop/skia-painter/examples/echarts_toolbox.js)
 - [examples/echarts_brush.js](/Users/treecat/Desktop/skia-painter/examples/echarts_brush.js)
+- [examples/echarts_legend_scroll.js](/Users/treecat/Desktop/skia-painter/examples/echarts_legend_scroll.js)
+- [examples/echarts_axis_pointer.js](/Users/treecat/Desktop/skia-painter/examples/echarts_axis_pointer.js)
+- [examples/echarts_visualmap_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_visualmap_scatter.js)
+- [examples/echarts_visualmap_piecewise.js](/Users/treecat/Desktop/skia-painter/examples/echarts_visualmap_piecewise.js)
+- [examples/echarts_axis_pointer_multigrid.js](/Users/treecat/Desktop/skia-painter/examples/echarts_axis_pointer_multigrid.js)
+- [examples/echarts_dataset_multi_series.js](/Users/treecat/Desktop/skia-painter/examples/echarts_dataset_multi_series.js)
+- [examples/echarts_geo_effect_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_geo_effect_scatter.js)
+- [examples/echarts_calendar_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_calendar_scatter.js)
+- [examples/echarts_calendar_effect_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_calendar_effect_scatter.js)
+- [examples/echarts_geo_lines.js](/Users/treecat/Desktop/skia-painter/examples/echarts_geo_lines.js)
+- [examples/echarts_toolbox_magic_type.js](/Users/treecat/Desktop/skia-painter/examples/echarts_toolbox_magic_type.js)
+- [examples/echarts_toolbox_datazoom.js](/Users/treecat/Desktop/skia-painter/examples/echarts_toolbox_datazoom.js)
+- [examples/echarts_map_piecewise.js](/Users/treecat/Desktop/skia-painter/examples/echarts_map_piecewise.js)
+- [examples/echarts_visualmap_map_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_visualmap_map_scatter.js)
+- [examples/echarts_legend_selected.js](/Users/treecat/Desktop/skia-painter/examples/echarts_legend_selected.js)
 - [examples/echarts_timeline_bar.js](/Users/treecat/Desktop/skia-painter/examples/echarts_timeline_bar.js)
 - [examples/echarts_datazoom_markarea.js](/Users/treecat/Desktop/skia-painter/examples/echarts_datazoom_markarea.js)
 - [examples/echarts_image_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_image_scatter.js)
@@ -297,29 +327,20 @@ http://127.0.0.1:8787
 
 这个页面会：
 
-- 左侧直接用浏览器里的 `ECharts`
-- 右侧调用当前仓库编译出来的 `build/canvas_engine`
+- 上半部分直接用浏览器里的 `ECharts`
+- 下半部分调用当前仓库编译出来的 `build/canvas_engine`
 - 运行对应的 `examples/*.js`
 - 重新生成 `output/*.png`
-- 让你并排观察两边的视觉效果
+- 让你上下对比两边的视觉效果
 
-当前页面内置了一组适合人工对比的复杂图表：
+当前 compare 页面已经覆盖当前仓库里的全部 `examples/echarts_*.js` 示例，包括：
 
-- `boxplot`
-- `polar bar`
-- `single axis scatter`
-- `sunburst`
-- `timeline`
-- `markPoint + markLine`
-- `dataset + transform`
-- `toolbox`
-- `brush`
-- `custom series`
-- `pictorial bar`
-- `gauge`
-- `effect scatter`
-- `image scatter`
-- `map`
+- 基础系列：`bar`、`line`、`pie`、`scatter`、`heatmap`、`candlestick`、`funnel`、`gauge`、`radar`
+- 关系与层级：`graph`、`sankey`、`tree`、`treemap`、`sunburst`
+- 坐标系与组合：`parallel`、`polar bar`、`single axis scatter`、`calendar heatmap/scatter/effectScatter`
+- 组件与数据链路：`timeline`、`dataset`、`legend`、`toolbox`、`brush`、`axisPointer`、`dataZoom`
+- 地图与地理：`map`、`map piecewise`、`geo effect scatter`、`geo lines`、`geo heatmap`
+- 图形能力：`custom series`、`pictorial bar`、`image scatter`、`rich graphic`、`pattern bar`
 
 如果你的二进制不在默认位置，可以这样启动：
 
@@ -383,6 +404,7 @@ ctest --preset release
 
 - 冒烟测试：验证 V8 宿主和脚本执行链路
 - 渲染回归测试：验证高清导出、图片绘制、曲线、椭圆、`arcTo`、`ImageData`、任务队列冲刷语义没有回退
+- compare 覆盖回归：验证每个 `examples/echarts_*.js` 都已接入 `web/compare/cases.json`，并且浏览器侧 `createOption` 已完成 wiring
 
 直接运行：
 
@@ -394,6 +416,13 @@ ctest --test-dir build --output-on-failure
 
 ```bash
 ctest --preset dev
+```
+
+只跑 compare 覆盖校验：
+
+```bash
+python3 scripts/verify_compare_coverage.py
+ctest --preset dev -R compare_coverage_verify
 ```
 
 ## 运行示例

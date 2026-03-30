@@ -166,6 +166,15 @@ if(BUILD_TESTING)
     DEPENDS render_regression_render
   )
 
+  add_test(
+    NAME compare_coverage_verify
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_compare_coverage.py
+  )
+  set_tests_properties(compare_coverage_verify PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  )
+
   set(ECHARTS_DIST_PATH
       "${CMAKE_CURRENT_SOURCE_DIR}/node_modules/echarts/dist/echarts.js")
   if(EXISTS "${ECHARTS_DIST_PATH}")
