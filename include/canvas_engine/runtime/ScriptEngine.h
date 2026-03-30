@@ -151,9 +151,11 @@ class ScriptEngine {
   static void CtxBeginPath(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxMoveTo(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxLineTo(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void CtxBezierCurveTo(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxRect(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxArc(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxClosePath(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void CtxClip(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxFill(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxStroke(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxMeasureText(const v8::FunctionCallbackInfo<v8::Value>& info);
