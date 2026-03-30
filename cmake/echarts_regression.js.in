@@ -404,7 +404,213 @@ pictorialBarChart.setOption({
 pictorialBarChart.getZr().refreshImmediately();
 pictorialBarCanvas.saveToPng("@ECHARTS_PICTORIAL_BAR_REGRESSION_OUTPUT_PNG@");
 
+const gaugeCanvas = createCanvas(width, height);
+const gaugeChart = echarts.init(gaugeCanvas, null, {
+  renderer: "canvas",
+  width,
+  height
+});
+
+gaugeChart.setOption({
+  animation: false,
+  backgroundColor: "#f8fafc",
+  title: {
+    text: "Gauge Compatibility",
+    subtext: "Axis arcs + pointer + detail text",
+    left: "center",
+    top: 18
+  },
+  series: [
+    {
+      type: "gauge",
+      center: ["50%", "58%"],
+      radius: "72%",
+      startAngle: 210,
+      endAngle: -30,
+      min: 0,
+      max: 100,
+      splitNumber: 5,
+      axisLine: {
+        roundCap: true,
+        lineStyle: {
+          width: 24,
+          color: [
+            [0.35, "#38bdf8"],
+            [0.7, "#22c55e"],
+            [1, "#f97316"]
+          ]
+        }
+      },
+      progress: {
+        show: true,
+        roundCap: true,
+        width: 24,
+        itemStyle: {
+          color: "#2563eb"
+        }
+      },
+      pointer: {
+        show: true,
+        length: "62%",
+        width: 8,
+        itemStyle: {
+          color: "#0f172a"
+        }
+      },
+      anchor: {
+        show: true,
+        size: 18,
+        itemStyle: {
+          color: "#0f172a"
+        }
+      },
+      axisTick: {
+        distance: -32,
+        splitNumber: 5,
+        lineStyle: {
+          width: 2,
+          color: "#cbd5e1"
+        }
+      },
+      splitLine: {
+        distance: -34,
+        length: 18,
+        lineStyle: {
+          width: 4,
+          color: "#94a3b8"
+        }
+      },
+      axisLabel: {
+        distance: -54,
+        color: "#334155",
+        fontSize: 14
+      },
+      detail: {
+        valueAnimation: false,
+        offsetCenter: [0, "48%"],
+        formatter(value) {
+          return `{value|${value}}\n{label|Canvas score}`;
+        },
+        rich: {
+          value: {
+            fontSize: 46,
+            fontWeight: "bold",
+            color: "#0f172a",
+            lineHeight: 54
+          },
+          label: {
+            fontSize: 15,
+            color: "#64748b",
+            lineHeight: 20
+          }
+        }
+      },
+      title: {
+        offsetCenter: [0, "22%"],
+        color: "#334155",
+        fontSize: 18
+      },
+      data: [
+        {
+          value: 82,
+          name: "Stability"
+        }
+      ]
+    }
+  ]
+});
+
+gaugeChart.getZr().refreshImmediately();
+gaugeCanvas.saveToPng("@ECHARTS_GAUGE_REGRESSION_OUTPUT_PNG@");
+
+const markerCanvas = createCanvas(96, 96);
+const markerCtx = markerCanvas.getContext("2d");
+markerCtx.fillStyle = "#f8fafc";
+markerCtx.beginPath();
+markerCtx.arc(48, 48, 42, 0, Math.PI * 2);
+markerCtx.fill();
+markerCtx.strokeStyle = "#0f172a";
+markerCtx.lineWidth = 6;
+markerCtx.stroke();
+markerCtx.fillStyle = "#2563eb";
+markerCtx.beginPath();
+markerCtx.arc(48, 40, 16, 0, Math.PI * 2);
+markerCtx.fill();
+markerCtx.fillStyle = "#f97316";
+markerCtx.beginPath();
+markerCtx.arc(48, 72, 18, Math.PI, Math.PI * 2);
+markerCtx.fill();
+markerCanvas.saveToPng("@ECHARTS_IMAGE_SCATTER_MARKER_OUTPUT_PNG@");
+
+const imageScatterCanvas = createCanvas(width, height);
+const imageScatterChart = echarts.init(imageScatterCanvas, null, {
+  renderer: "canvas",
+  width,
+  height
+});
+
+imageScatterChart.setOption({
+  animation: false,
+  backgroundColor: "#f8fafc",
+  title: {
+    text: "Image Marker Scatter",
+    subtext: "drawImage compatibility",
+    left: "center",
+    top: 24
+  },
+  grid: {
+    left: 72,
+    right: 48,
+    top: 96,
+    bottom: 64
+  },
+  tooltip: {
+    trigger: "item"
+  },
+  xAxis: {
+    type: "category",
+    data: ["A", "B", "C", "D", "E"],
+    axisLabel: {
+      color: "#334155"
+    }
+  },
+  yAxis: {
+    type: "value",
+    min: 0,
+    max: 100,
+    axisLabel: {
+      color: "#334155"
+    },
+    splitLine: {
+      lineStyle: {
+        color: "#dbe4f0",
+        type: "dashed"
+      }
+    }
+  },
+  series: [
+    {
+      type: "scatter",
+      symbol: "image://@ECHARTS_IMAGE_SCATTER_MARKER_OUTPUT_PNG@",
+      symbolSize: 44,
+      data: [
+        ["A", 24],
+        ["B", 52],
+        ["C", 38],
+        ["D", 76],
+        ["E", 61]
+      ]
+    }
+  ]
+});
+
+imageScatterChart.getZr().refreshImmediately();
+imageScatterCanvas.saveToPng("@ECHARTS_IMAGE_SCATTER_REGRESSION_OUTPUT_PNG@");
+
 console.log("wrote @ECHARTS_SUNBURST_REGRESSION_OUTPUT_PNG@");
 console.log("wrote @ECHARTS_TIMELINE_REGRESSION_OUTPUT_PNG@");
 console.log("wrote @ECHARTS_CUSTOM_SERIES_REGRESSION_OUTPUT_PNG@");
 console.log("wrote @ECHARTS_PICTORIAL_BAR_REGRESSION_OUTPUT_PNG@");
+console.log("wrote @ECHARTS_GAUGE_REGRESSION_OUTPUT_PNG@");
+console.log("wrote @ECHARTS_IMAGE_SCATTER_MARKER_OUTPUT_PNG@");
+console.log("wrote @ECHARTS_IMAGE_SCATTER_REGRESSION_OUTPUT_PNG@");

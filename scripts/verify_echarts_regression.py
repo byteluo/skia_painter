@@ -189,17 +189,52 @@ def verify_pictorial_bar(path):
     expect_color_range(pixel(rows, 454, 920), background, 3, "pictorial bar inter-symbol gap")
 
 
+def verify_gauge(path):
+    width, height, rows = read_png(path)
+    expect_equal((width, height), (2880, 1620), "gauge size")
+
+    background = (248, 250, 252, 255)
+    blue = (37, 99, 235, 255)
+    orange = (249, 115, 22, 255)
+    dark = (15, 23, 42, 255)
+
+    expect_color_range(pixel(rows, 20, 20), background, 3, "gauge background")
+    expect_color_range(pixel(rows, 1440, 972), background, 3, "gauge center gap")
+    expect_color_range(pixel(rows, 980, 593), blue, 4, "gauge progress arc")
+    expect_color_range(pixel(rows, 1950, 1045), orange, 4, "gauge axis arc")
+    expect_color_range(pixel(rows, 1530, 917), dark, 4, "gauge pointer")
+
+
+def verify_image_scatter(path):
+    width, height, rows = read_png(path)
+    expect_equal((width, height), (2880, 1620), "image scatter size")
+
+    background = (248, 250, 252, 255)
+    blue = (37, 99, 235, 255)
+    orange = (249, 115, 22, 255)
+    dark = (15, 23, 42, 255)
+
+    expect_color_range(pixel(rows, 20, 20), background, 3, "image scatter background")
+    expect_color_range(pixel(rows, 1450, 760), background, 3, "image scatter mid background")
+    expect_color_range(pixel(rows, 1980, 529), blue, 4, "image scatter marker head")
+    expect_color_range(pixel(rows, 1980, 571), orange, 4, "image scatter marker tail")
+    expect_color_range(pixel(rows, 1976, 500), dark, 4, "image scatter marker outline")
+
+
 def main():
-    if len(sys.argv) != 5:
+    if len(sys.argv) != 7:
         raise SystemExit(
             "usage: verify_echarts_regression.py "
-            "<sunburst-png> <timeline-png> <custom-series-png> <pictorial-bar-png>"
+            "<sunburst-png> <timeline-png> <custom-series-png> "
+            "<pictorial-bar-png> <gauge-png> <image-scatter-png>"
         )
 
     verify_sunburst(sys.argv[1])
     verify_timeline(sys.argv[2])
     verify_custom_series(sys.argv[3])
     verify_pictorial_bar(sys.argv[4])
+    verify_gauge(sys.argv[5])
+    verify_image_scatter(sys.argv[6])
     print("echarts_regression ok")
 
 

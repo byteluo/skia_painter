@@ -177,6 +177,12 @@ if(BUILD_TESTING)
         "${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_custom_series_regression.png")
     set(ECHARTS_PICTORIAL_BAR_REGRESSION_OUTPUT_PNG
         "${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_pictorial_bar_regression.png")
+    set(ECHARTS_GAUGE_REGRESSION_OUTPUT_PNG
+        "${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_gauge_regression.png")
+    set(ECHARTS_IMAGE_SCATTER_MARKER_OUTPUT_PNG
+        "${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_image_scatter_marker.png")
+    set(ECHARTS_IMAGE_SCATTER_REGRESSION_OUTPUT_PNG
+        "${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_image_scatter_regression.png")
     configure_file(
       ${CMAKE_CURRENT_SOURCE_DIR}/cmake/echarts_regression.js.in
       ${CMAKE_CURRENT_BINARY_DIR}/echarts_regression.js
@@ -191,7 +197,7 @@ if(BUILD_TESTING)
     set_tests_properties(echarts_regression_render PROPERTIES
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
       PASS_REGULAR_EXPRESSION
-        "wrote ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_pictorial_bar_regression\\.png"
+        "wrote ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_image_scatter_regression\\.png"
     )
 
     add_test(
@@ -202,6 +208,8 @@ if(BUILD_TESTING)
               ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_timeline_regression.png
               ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_custom_series_regression.png
               ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_pictorial_bar_regression.png
+              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_gauge_regression.png
+              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_image_scatter_regression.png
     )
     set_tests_properties(echarts_regression_verify PROPERTIES
       DEPENDS echarts_regression_render
