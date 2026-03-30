@@ -7,11 +7,60 @@
     "outputFile": "output/echarts_sunburst.png"
   },
   {
+    "id": "boxplot",
+    "title": "Boxplot",
+    "description": "分位数盒须图、离群点、类目轴布局",
+    "exampleScript": "examples/echarts_boxplot.js",
+    "outputFile": "output/echarts_boxplot.png"
+  },
+  {
+    "id": "polar_bar",
+    "title": "Polar Bar",
+    "description": "polar 坐标系、径向网格、圆角柱",
+    "exampleScript": "examples/echarts_polar_bar.js",
+    "outputFile": "output/echarts_polar_bar.png"
+  },
+  {
+    "id": "single_axis_scatter",
+    "title": "Single Axis Scatter",
+    "description": "singleAxis 坐标系、条带式 scatter 排布",
+    "exampleScript": "examples/echarts_single_axis_scatter.js",
+    "outputFile": "output/echarts_single_axis_scatter.png"
+  },
+  {
     "id": "timeline",
     "title": "Timeline Bar",
     "description": "timeline 组件切换 + 柱状图布局",
     "exampleScript": "examples/echarts_timeline_bar.js",
     "outputFile": "output/echarts_timeline_bar.png"
+  },
+  {
+    "id": "markpoint_markline",
+    "title": "MarkPoint + MarkLine",
+    "description": "极值点标记、平均线、折线叠加",
+    "exampleScript": "examples/echarts_markpoint_markline.js",
+    "outputFile": "output/echarts_markpoint_markline.png"
+  },
+  {
+    "id": "dataset_transform",
+    "title": "Dataset + Transform",
+    "description": "dataset、sort transform、encode",
+    "exampleScript": "examples/echarts_dataset_transform.js",
+    "outputFile": "output/echarts_dataset_transform.png"
+  },
+  {
+    "id": "toolbox",
+    "title": "Toolbox",
+    "description": "toolbox 图标、legend、双折线",
+    "exampleScript": "examples/echarts_toolbox.js",
+    "outputFile": "output/echarts_toolbox.png"
+  },
+  {
+    "id": "brush",
+    "title": "Brush",
+    "description": "brush 组件、矩形刷选覆盖层",
+    "exampleScript": "examples/echarts_brush.js",
+    "outputFile": "output/echarts_brush.png"
   },
   {
     "id": "custom_series",
@@ -35,10 +84,24 @@
     "outputFile": "output/echarts_gauge.png"
   },
   {
+    "id": "effect_scatter",
+    "title": "Effect Scatter",
+    "description": "effectScatter 系列、ripple 配置、重点标记",
+    "exampleScript": "examples/echarts_effect_scatter.js",
+    "outputFile": "output/echarts_effect_scatter.png"
+  },
+  {
     "id": "image_scatter",
     "title": "Image Scatter",
     "description": "image:// 符号、drawImage 路径、图片标记点",
     "exampleScript": "examples/echarts_image_scatter.js",
     "outputFile": "output/echarts_image_scatter.png"
+  },
+  {
+    "id": "map",
+    "title": "Map",
+    "description": "registerMap、自定义 GeoJSON、区域标签着色",
+    "exampleScript": "examples/echarts_map.js",
+    "outputFile": "output/echarts_map.png"
   }
 ]

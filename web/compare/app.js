@@ -236,6 +236,199 @@ function createTimelineOption() {
   };
 }
 
+function createBoxplotOption() {
+  return {
+    animation: false,
+    backgroundColor: "#f8fafc",
+    title: {
+      text: "Boxplot Compatibility",
+      subtext: "Quartiles + whiskers + outliers",
+      left: "center",
+      top: 18
+    },
+    tooltip: {
+      trigger: "item"
+    },
+    grid: {
+      left: 72,
+      right: 56,
+      top: 108,
+      bottom: 64
+    },
+    xAxis: {
+      type: "category",
+      data: ["North", "South", "West", "Central"],
+      boundaryGap: true,
+      axisLabel: {
+        color: "#334155"
+      }
+    },
+    yAxis: {
+      type: "value",
+      min: 0,
+      max: 70,
+      axisLabel: {
+        color: "#334155"
+      },
+      splitLine: {
+        lineStyle: {
+          color: "#dbe4f0",
+          type: "dashed"
+        }
+      }
+    },
+    series: [
+      {
+        type: "boxplot",
+        itemStyle: {
+          color: "#bfdbfe",
+          borderColor: "#2563eb",
+          borderWidth: 2
+        },
+        emphasis: {
+          itemStyle: {
+            color: "#93c5fd",
+            borderColor: "#1d4ed8"
+          }
+        },
+        data: [
+          [12, 18, 26, 33, 42],
+          [16, 22, 29, 36, 48],
+          [10, 15, 21, 27, 37],
+          [20, 25, 31, 40, 52]
+        ]
+      },
+      {
+        type: "scatter",
+        name: "Outlier",
+        symbolSize: 10,
+        itemStyle: {
+          color: "#f97316"
+        },
+        data: [
+          [0, 46],
+          [1, 54],
+          [2, 41],
+          [3, 59]
+        ]
+      }
+    ]
+  };
+}
+
+function createPolarBarOption() {
+  return {
+    animation: false,
+    backgroundColor: "#fffaf0",
+    title: {
+      text: "Polar Bar Compatibility",
+      subtext: "Polar coordinate + round cap bars",
+      left: "center",
+      top: 18
+    },
+    angleAxis: {
+      type: "category",
+      data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+      axisLabel: {
+        color: "#334155"
+      }
+    },
+    radiusAxis: {
+      min: 0,
+      max: 40,
+      axisLabel: {
+        color: "#334155"
+      },
+      splitLine: {
+        lineStyle: {
+          color: "#e5e7eb",
+          type: "dashed"
+        }
+      }
+    },
+    polar: {
+      center: ["50%", "58%"],
+      radius: "72%"
+    },
+    series: [
+      {
+        type: "bar",
+        coordinateSystem: "polar",
+        roundCap: true,
+        itemStyle: {
+          color: "#2563eb"
+        },
+        data: [18, 26, 22, 34, 28, 31, 24]
+      }
+    ]
+  };
+}
+
+function createSingleAxisScatterOption() {
+  const points = [
+    [0, 12, 24],
+    [0, 28, 36],
+    [0, 46, 30],
+    [0, 64, 42],
+    [0, 82, 34]
+  ];
+
+  return {
+    animation: false,
+    backgroundColor: "#f8fafc",
+    title: {
+      text: "Single Axis Compatibility",
+      subtext: "singleAxis + scatter strip layout",
+      left: "center",
+      top: 18
+    },
+    tooltip: {
+      trigger: "item"
+    },
+    singleAxis: {
+      left: 72,
+      right: 56,
+      top: "58%",
+      height: 44,
+      min: 0,
+      max: 100,
+      axisLabel: {
+        color: "#334155"
+      },
+      splitLine: {
+        lineStyle: {
+          color: "#dbe4f0",
+          type: "dashed"
+        }
+      }
+    },
+    series: [
+      {
+        type: "scatter",
+        coordinateSystem: "singleAxis",
+        data: points,
+        symbolSize(value) {
+          return value[2];
+        },
+        itemStyle: {
+          color: "#14b8a6",
+          shadowBlur: 16,
+          shadowColor: "rgba(20, 184, 166, 0.28)"
+        },
+        label: {
+          show: true,
+          position: "top",
+          formatter(param) {
+            return `P${param.dataIndex + 1}`;
+          },
+          color: "#0f172a",
+          fontWeight: "bold"
+        }
+      }
+    ]
+  };
+}
+
 function createCustomSeriesOption() {
   const data = [
     ["Alpha", 12, 26, "#2563eb"],
@@ -575,20 +768,562 @@ function createImageScatterOption() {
   };
 }
 
+function createMarkpointMarklineOption() {
+  const values = [126, 154, 141, 182, 166, 197, 188];
+
+  return {
+    animation: false,
+    backgroundColor: "#f8fafc",
+    title: {
+      text: "MarkPoint / MarkLine Compatibility",
+      subtext: "Markers + average line overlay",
+      left: "center",
+      top: 18
+    },
+    tooltip: {
+      trigger: "axis"
+    },
+    grid: {
+      left: 72,
+      right: 56,
+      top: 104,
+      bottom: 64
+    },
+    xAxis: {
+      type: "category",
+      data: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+      axisLabel: {
+        color: "#334155"
+      }
+    },
+    yAxis: {
+      type: "value",
+      min: 100,
+      max: 220,
+      axisLabel: {
+        color: "#334155"
+      },
+      splitLine: {
+        lineStyle: {
+          color: "#dbe4f0",
+          type: "dashed"
+        }
+      }
+    },
+    series: [
+      {
+        type: "line",
+        smooth: true,
+        data: values,
+        itemStyle: {
+          color: "#2563eb"
+        },
+        lineStyle: {
+          width: 4
+        },
+        areaStyle: {
+          color: "rgba(37, 99, 235, 0.12)"
+        },
+        markPoint: {
+          symbolSize: 46,
+          itemStyle: {
+            color: "#f97316"
+          },
+          label: {
+            color: "#ffffff",
+            fontWeight: "bold"
+          },
+          data: [
+            { type: "max", name: "Peak" },
+            { type: "min", name: "Low" }
+          ]
+        },
+        markLine: {
+          symbol: ["none", "none"],
+          lineStyle: {
+            color: "#ef4444",
+            width: 2,
+            type: "dashed"
+          },
+          label: {
+            color: "#b91c1c",
+            formatter(param) {
+              return `Avg ${Math.round(param.value)}`;
+            }
+          },
+          data: [{ type: "average", name: "Average" }]
+        }
+      }
+    ]
+  };
+}
+
+function createDatasetTransformOption() {
+  return {
+    animation: false,
+    backgroundColor: "#fffaf0",
+    title: {
+      text: "Dataset / Transform Compatibility",
+      subtext: "dataset + sort transform + encode",
+      left: "center",
+      top: 18
+    },
+    dataset: [
+      {
+        source: [
+          ["name", "score"],
+          ["North", 88],
+          ["South", 72],
+          ["West", 94],
+          ["Central", 81],
+          ["East", 97]
+        ]
+      },
+      {
+        transform: {
+          type: "sort",
+          config: {
+            dimension: "score",
+            order: "desc"
+          }
+        }
+      }
+    ],
+    grid: {
+      left: 72,
+      right: 56,
+      top: 108,
+      bottom: 64
+    },
+    xAxis: {
+      type: "value",
+      min: 0,
+      max: 110,
+      axisLabel: {
+        color: "#334155"
+      },
+      splitLine: {
+        lineStyle: {
+          color: "#e5e7eb",
+          type: "dashed"
+        }
+      }
+    },
+    yAxis: {
+      type: "category",
+      axisLabel: {
+        color: "#334155"
+      }
+    },
+    series: [
+      {
+        type: "bar",
+        datasetIndex: 1,
+        encode: {
+          x: "score",
+          y: "name"
+        },
+        label: {
+          show: true,
+          position: "right",
+          color: "#0f172a"
+        },
+        itemStyle: {
+          color: "#14b8a6",
+          borderRadius: [0, 8, 8, 0]
+        }
+      }
+    ]
+  };
+}
+
+function createToolboxOption() {
+  return {
+    animation: false,
+    backgroundColor: "#f8fafc",
+    title: {
+      text: "Toolbox Compatibility",
+      subtext: "Toolbox icons + legend + smooth lines",
+      left: "center",
+      top: 18
+    },
+    legend: {
+      top: 66,
+      textStyle: {
+        color: "#334155"
+      }
+    },
+    toolbox: {
+      right: 28,
+      top: 18,
+      itemSize: 20,
+      iconStyle: {
+        borderColor: "#475569"
+      },
+      feature: {
+        dataView: { show: true, readOnly: true },
+        restore: { show: true },
+        saveAsImage: { show: true }
+      }
+    },
+    grid: {
+      left: 72,
+      right: 72,
+      top: 116,
+      bottom: 64
+    },
+    xAxis: {
+      type: "category",
+      data: ["Jan", "Feb", "Mar", "Apr", "May", "Jun"],
+      axisLabel: {
+        color: "#334155"
+      }
+    },
+    yAxis: {
+      type: "value",
+      axisLabel: {
+        color: "#334155"
+      },
+      splitLine: {
+        lineStyle: {
+          color: "#dbe4f0",
+          type: "dashed"
+        }
+      }
+    },
+    series: [
+      {
+        name: "Visits",
+        type: "line",
+        smooth: true,
+        data: [82, 96, 90, 110, 124, 136],
+        itemStyle: {
+          color: "#2563eb"
+        }
+      },
+      {
+        name: "Orders",
+        type: "line",
+        smooth: true,
+        data: [56, 62, 74, 79, 88, 101],
+        itemStyle: {
+          color: "#f97316"
+        }
+      }
+    ]
+  };
+}
+
+function createBrushOption() {
+  const points = [
+    [12, 24], [18, 30], [24, 42], [30, 34], [36, 52],
+    [44, 46], [52, 68], [58, 60], [66, 78], [74, 72], [82, 88]
+  ];
+
+  return {
+    animation: false,
+    backgroundColor: "#fffaf0",
+    title: {
+      text: "Brush Compatibility",
+      subtext: "Brush component + scatter selection overlay",
+      left: "center",
+      top: 18
+    },
+    tooltip: {
+      trigger: "item"
+    },
+    brush: {
+      toolbox: ["rect", "polygon", "clear"],
+      xAxisIndex: "all",
+      yAxisIndex: "all",
+      brushStyle: {
+        borderWidth: 2,
+        color: "rgba(37, 99, 235, 0.12)",
+        borderColor: "#2563eb"
+      }
+    },
+    grid: {
+      left: 72,
+      right: 56,
+      top: 108,
+      bottom: 64
+    },
+    xAxis: {
+      type: "value",
+      min: 0,
+      max: 100,
+      axisLabel: {
+        color: "#334155"
+      },
+      splitLine: {
+        lineStyle: {
+          color: "#e5e7eb",
+          type: "dashed"
+        }
+      }
+    },
+    yAxis: {
+      type: "value",
+      min: 0,
+      max: 100,
+      axisLabel: {
+        color: "#334155"
+      },
+      splitLine: {
+        lineStyle: {
+          color: "#e5e7eb",
+          type: "dashed"
+        }
+      }
+    },
+    series: [
+      {
+        type: "scatter",
+        data: points,
+        symbolSize: 14,
+        itemStyle: {
+          color: "#2563eb"
+        }
+      }
+    ]
+  };
+}
+
+function createEffectScatterOption() {
+  const basePoints = [
+    [18, 22],
+    [26, 36],
+    [34, 28],
+    [42, 48],
+    [56, 38],
+    [68, 58],
+    [76, 70],
+    [82, 62]
+  ];
+
+  const focusPoints = [
+    { name: "Alpha", value: [26, 36, 72] },
+    { name: "Beta", value: [56, 38, 88] },
+    { name: "Gamma", value: [76, 70, 96] }
+  ];
+
+  return {
+    animation: false,
+    backgroundColor: "#fffaf0",
+    title: {
+      text: "Effect Scatter Compatibility",
+      subtext: "Ripple scatter + labels",
+      left: "center",
+      top: 18
+    },
+    grid: {
+      left: 72,
+      right: 56,
+      top: 104,
+      bottom: 64
+    },
+    xAxis: {
+      type: "value",
+      min: 0,
+      max: 100,
+      axisLabel: {
+        color: "#334155"
+      },
+      splitLine: {
+        lineStyle: {
+          color: "#e5e7eb",
+          type: "dashed"
+        }
+      }
+    },
+    yAxis: {
+      type: "value",
+      min: 0,
+      max: 100,
+      axisLabel: {
+        color: "#334155"
+      },
+      splitLine: {
+        lineStyle: {
+          color: "#e5e7eb",
+          type: "dashed"
+        }
+      }
+    },
+    series: [
+      {
+        type: "scatter",
+        data: basePoints,
+        symbolSize: 10,
+        itemStyle: {
+          color: "#94a3b8"
+        }
+      },
+      {
+        type: "effectScatter",
+        coordinateSystem: "cartesian2d",
+        data: focusPoints,
+        symbolSize(value) {
+          return value[2] / 6;
+        },
+        showEffectOn: "emphasis",
+        rippleEffect: {
+          scale: 3.6,
+          brushType: "stroke"
+        },
+        itemStyle: {
+          color: "#2563eb",
+          shadowBlur: 20,
+          shadowColor: "rgba(37, 99, 235, 0.35)"
+        },
+        label: {
+          show: true,
+          formatter(param) {
+            return param.data.name;
+          },
+          position: "top",
+          color: "#0f172a",
+          fontWeight: "bold"
+        }
+      }
+    ]
+  };
+}
+
+function createMapOption() {
+  const demoGeoJson = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { name: "North" },
+        geometry: {
+          type: "Polygon",
+          coordinates: [[[0, 6], [4, 6], [4, 10], [0, 10], [0, 6]]]
+        }
+      },
+      {
+        type: "Feature",
+        properties: { name: "West" },
+        geometry: {
+          type: "Polygon",
+          coordinates: [[[0, 1], [4, 1], [4, 6], [0, 6], [0, 1]]]
+        }
+      },
+      {
+        type: "Feature",
+        properties: { name: "Central" },
+        geometry: {
+          type: "Polygon",
+          coordinates: [[[4, 1], [7, 1], [7, 6], [4, 6], [4, 1]]]
+        }
+      },
+      {
+        type: "Feature",
+        properties: { name: "East" },
+        geometry: {
+          type: "Polygon",
+          coordinates: [[[7, 1], [11, 1], [11, 8], [7, 8], [7, 1]]]
+        }
+      }
+    ]
+  };
+
+  echarts.registerMap("compare_demo_regions", demoGeoJson);
+
+  return {
+    animation: false,
+    backgroundColor: "#f8fafc",
+    title: {
+      text: "Map Compatibility",
+      subtext: "registerMap + region labels + visualMap",
+      left: "center",
+      top: 18
+    },
+    tooltip: {
+      trigger: "item"
+    },
+    visualMap: {
+      min: 18,
+      max: 82,
+      left: 52,
+      bottom: 36,
+      text: ["High", "Low"],
+      inRange: {
+        color: ["#bfdbfe", "#60a5fa", "#2563eb"]
+      },
+      textStyle: {
+        color: "#334155"
+      }
+    },
+    series: [
+      {
+        type: "map",
+        map: "compare_demo_regions",
+        left: "center",
+        top: 96,
+        width: "74%",
+        roam: false,
+        label: {
+          show: true,
+          color: "#0f172a",
+          fontWeight: "bold"
+        },
+        itemStyle: {
+          borderColor: "#ffffff",
+          borderWidth: 3
+        },
+        emphasis: {
+          label: {
+            color: "#111827"
+          },
+          itemStyle: {
+            areaColor: "#f97316"
+          }
+        },
+        data: [
+          { name: "North", value: 72 },
+          { name: "West", value: 28 },
+          { name: "Central", value: 46 },
+          { name: "East", value: 82 }
+        ]
+      }
+    ]
+  };
+}
+
 function createOption(caseId) {
   switch (caseId) {
     case "sunburst":
       return createSunburstOption();
+    case "boxplot":
+      return createBoxplotOption();
+    case "polar_bar":
+      return createPolarBarOption();
+    case "single_axis_scatter":
+      return createSingleAxisScatterOption();
     case "timeline":
       return createTimelineOption();
+    case "markpoint_markline":
+      return createMarkpointMarklineOption();
+    case "dataset_transform":
+      return createDatasetTransformOption();
+    case "toolbox":
+      return createToolboxOption();
+    case "brush":
+      return createBrushOption();
     case "custom_series":
       return createCustomSeriesOption();
     case "pictorial_bar":
       return createPictorialBarOption();
     case "gauge":
       return createGaugeOption();
+    case "effect_scatter":
+      return createEffectScatterOption();
     case "image_scatter":
       return createImageScatterOption();
+    case "map":
+      return createMapOption();
     default:
       throw new Error(`unknown case: ${caseId}`);
   }
@@ -639,6 +1374,26 @@ function updateMeta(caseInfo) {
   outputFileElement.textContent = caseInfo.outputFile;
 }
 
+function applyCaseActions(caseId, currentChart) {
+  if (caseId === "timeline") {
+    currentChart.dispatchAction({ type: "timelineChange", currentIndex: 2 });
+  }
+
+  if (caseId === "brush") {
+    currentChart.dispatchAction({
+      type: "brush",
+      areas: [
+        {
+          brushType: "rect",
+          coordRange: [[20, 62], [28, 72]],
+          xAxisIndex: 0,
+          yAxisIndex: 0
+        }
+      ]
+    });
+  }
+}
+
 function renderBrowserCase() {
   const caseInfo = findCase(currentCaseId);
   if (!caseInfo) {
@@ -648,6 +1403,7 @@ function renderBrowserCase() {
   const currentChart = ensureChart();
   currentChart.clear();
   currentChart.setOption(createOption(caseInfo.id), true);
+  applyCaseActions(caseInfo.id, currentChart);
   setStatus(`浏览器侧已重绘: ${caseInfo.title}`);
 }
 

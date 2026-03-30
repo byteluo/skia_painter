@@ -133,12 +133,16 @@
 
 下面这些示例都已经在当前仓库里实际跑通过，并能导出 PNG：
 
+基于当前仓库安装的 `echarts@6.0.0`，内建 core chart series 现在已经全部有对应示例覆盖。
+
 ### 基础图表
 
 - `bar`
+- `boxplot`
 - `line`
 - `pie`
 - `scatter`
+- `effectScatter`
 - `candlestick`
 - `funnel`
 - `gauge`
@@ -149,6 +153,7 @@
 ### 图关系与流向
 
 - `graph`
+- `map`
 - `sankey`
 - `lines`
 - `parallel`
@@ -166,6 +171,17 @@
 - `pictorialBar`
 - `timeline`
 - `dataZoom + markArea`
+- `markPoint + markLine`
+- `toolbox`
+- `brush`
+- `dataset + transform`
+
+### 坐标系与布局容器
+
+- `polar`
+- `singleAxis`
+- `calendar`
+- `geo`
 
 ### 图片 / 富文本 / 图形混合
 
@@ -185,15 +201,18 @@
 ### ECharts 示例
 
 - [examples/echarts_bar.js](/Users/treecat/Desktop/skia-painter/examples/echarts_bar.js)
+- [examples/echarts_boxplot.js](/Users/treecat/Desktop/skia-painter/examples/echarts_boxplot.js)
 - [examples/echarts_line.js](/Users/treecat/Desktop/skia-painter/examples/echarts_line.js)
 - [examples/echarts_pie.js](/Users/treecat/Desktop/skia-painter/examples/echarts_pie.js)
 - [examples/echarts_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_scatter.js)
+- [examples/echarts_effect_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_effect_scatter.js)
 - [examples/echarts_heatmap.js](/Users/treecat/Desktop/skia-painter/examples/echarts_heatmap.js)
 - [examples/echarts_calendar_heatmap.js](/Users/treecat/Desktop/skia-painter/examples/echarts_calendar_heatmap.js)
 - [examples/echarts_candlestick.js](/Users/treecat/Desktop/skia-painter/examples/echarts_candlestick.js)
 - [examples/echarts_funnel.js](/Users/treecat/Desktop/skia-painter/examples/echarts_funnel.js)
 - [examples/echarts_gauge.js](/Users/treecat/Desktop/skia-painter/examples/echarts_gauge.js)
 - [examples/echarts_radar.js](/Users/treecat/Desktop/skia-painter/examples/echarts_radar.js)
+- [examples/echarts_map.js](/Users/treecat/Desktop/skia-painter/examples/echarts_map.js)
 - [examples/echarts_graph.js](/Users/treecat/Desktop/skia-painter/examples/echarts_graph.js)
 - [examples/echarts_sankey.js](/Users/treecat/Desktop/skia-painter/examples/echarts_sankey.js)
 - [examples/echarts_lines.js](/Users/treecat/Desktop/skia-painter/examples/echarts_lines.js)
@@ -202,8 +221,14 @@
 - [examples/echarts_tree.js](/Users/treecat/Desktop/skia-painter/examples/echarts_tree.js)
 - [examples/echarts_treemap.js](/Users/treecat/Desktop/skia-painter/examples/echarts_treemap.js)
 - [examples/echarts_sunburst.js](/Users/treecat/Desktop/skia-painter/examples/echarts_sunburst.js)
+- [examples/echarts_polar_bar.js](/Users/treecat/Desktop/skia-painter/examples/echarts_polar_bar.js)
+- [examples/echarts_single_axis_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_single_axis_scatter.js)
 - [examples/echarts_custom_series.js](/Users/treecat/Desktop/skia-painter/examples/echarts_custom_series.js)
 - [examples/echarts_pictorial_bar.js](/Users/treecat/Desktop/skia-painter/examples/echarts_pictorial_bar.js)
+- [examples/echarts_markpoint_markline.js](/Users/treecat/Desktop/skia-painter/examples/echarts_markpoint_markline.js)
+- [examples/echarts_dataset_transform.js](/Users/treecat/Desktop/skia-painter/examples/echarts_dataset_transform.js)
+- [examples/echarts_toolbox.js](/Users/treecat/Desktop/skia-painter/examples/echarts_toolbox.js)
+- [examples/echarts_brush.js](/Users/treecat/Desktop/skia-painter/examples/echarts_brush.js)
 - [examples/echarts_timeline_bar.js](/Users/treecat/Desktop/skia-painter/examples/echarts_timeline_bar.js)
 - [examples/echarts_datazoom_markarea.js](/Users/treecat/Desktop/skia-painter/examples/echarts_datazoom_markarea.js)
 - [examples/echarts_image_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_image_scatter.js)
@@ -280,12 +305,21 @@ http://127.0.0.1:8787
 
 当前页面内置了一组适合人工对比的复杂图表：
 
+- `boxplot`
+- `polar bar`
+- `single axis scatter`
 - `sunburst`
 - `timeline`
+- `markPoint + markLine`
+- `dataset + transform`
+- `toolbox`
+- `brush`
 - `custom series`
 - `pictorial bar`
 - `gauge`
+- `effect scatter`
 - `image scatter`
+- `map`
 
 如果你的二进制不在默认位置，可以这样启动：
 
