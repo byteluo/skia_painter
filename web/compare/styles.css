@@ -217,6 +217,7 @@ body {
   display: grid;
   place-items: center;
   padding: 14px;
+  isolation: isolate;
   background:
     linear-gradient(45deg, rgba(15, 23, 42, 0.03) 25%, transparent 25%),
     linear-gradient(-45deg, rgba(15, 23, 42, 0.03) 25%, transparent 25%),
@@ -239,12 +240,61 @@ body {
   border-radius: 14px;
   box-shadow: 0 14px 38px rgba(15, 23, 42, 0.16);
   background: white;
+  transition: opacity 160ms ease, filter 160ms ease;
 }
 
 .placeholder {
   text-align: center;
   max-width: 260px;
   line-height: 1.5;
+}
+
+.loading-overlay {
+  position: absolute;
+  inset: 14px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  border-radius: 14px;
+  background: rgba(255, 252, 245, 0.82);
+  backdrop-filter: blur(10px);
+  z-index: 2;
+}
+
+.viewport__surface--image.is-loading #engine-image {
+  opacity: 0.24;
+  filter: blur(1px);
+}
+
+.viewport__surface--image.is-loading .loading-overlay {
+  display: flex;
+}
+
+.loading-spinner {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 3px solid rgba(15, 118, 110, 0.16);
+  border-top-color: var(--accent);
+  animation: compare-spin 0.9s linear infinite;
+}
+
+.loading-text {
+  font-size: 14px;
+  color: var(--accent-strong);
+  letter-spacing: 0.04em;
+}
+
+@keyframes compare-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 code {

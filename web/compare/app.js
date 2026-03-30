@@ -1,6 +1,9 @@
 const browserChartElement = document.getElementById("browser-chart");
+const engineSurfaceElement = document.getElementById("engine-surface");
 const engineImageElement = document.getElementById("engine-image");
 const enginePlaceholderElement = document.getElementById("engine-placeholder");
+const engineLoadingElement = document.getElementById("engine-loading");
+const engineLoadingTextElement = document.getElementById("engine-loading-text");
 const caseListElement = document.getElementById("case-list");
 const caseTitleElement = document.getElementById("case-title");
 const caseDescriptionElement = document.getElementById("case-description");
@@ -13,9 +16,25 @@ const renderEngineButton = document.getElementById("render-engine");
 let compareCases = [];
 let currentCaseId = null;
 let chart = null;
+let engineRenderRequestId = 0;
 
 function setStatus(message) {
   statusTextElement.textContent = message;
+}
+
+function setEngineLoading(isLoading, message = "后端 PNG 渲染中…") {
+  engineSurfaceElement.classList.toggle("is-loading", isLoading);
+  engineLoadingElement.setAttribute("aria-hidden", isLoading ? "false" : "true");
+  engineLoadingTextElement.textContent = message;
+}
+
+function preloadImage(imageUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error(`image load failed: ${imageUrl}`));
+    image.src = imageUrl;
+  });
 }
 
 async function loadCases() {
@@ -4530,7 +4549,13 @@ function renderCaseList() {
       <span class="case-card__title">${item.title}</span>
       <span class="case-card__description">${item.description}</span>
     `;
-    button.addEventListener("click", () => selectCase(item.id));
+    button.addEventListener("click", async () => {
+      try {
+        await selectCase(item.id);
+      } catch (error) {
+        setStatus(`切换案例失败: ${error.message}`);
+      }
+    });
     caseListElement.appendChild(button);
   });
 }
@@ -4628,21 +4653,35 @@ async function renderEngineCase() {
     return;
   }
 
+  const requestId = ++engineRenderRequestId;
+  setEngineLoading(true, `后端 PNG 渲染中: ${caseInfo.title}`);
   setStatus(`后端渲染中: ${caseInfo.title}`);
 
-  const response = await fetch(`/api/render/${caseInfo.id}`, {
-    method: "POST"
-  });
-  const payload = await response.json();
+  try {
+    const response = await fetch(`/api/render/${caseInfo.id}`, {
+      method: "POST"
+    });
+    const payload = await response.json();
 
-  if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || `render failed: ${response.status}`);
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || `render failed: ${response.status}`);
+    }
+
+    await preloadImage(payload.imageUrl);
+
+    if (requestId !== engineRenderRequestId) {
+      return;
+    }
+
+    engineImageElement.src = payload.imageUrl;
+    engineImageElement.style.display = "block";
+    enginePlaceholderElement.style.display = "none";
+    setStatus(`后端 PNG 已更新: ${caseInfo.title}`);
+  } finally {
+    if (requestId === engineRenderRequestId) {
+      setEngineLoading(false);
+    }
   }
-
-  engineImageElement.src = payload.imageUrl;
-  engineImageElement.style.display = "block";
-  enginePlaceholderElement.style.display = "none";
-  setStatus(`后端 PNG 已更新: ${caseInfo.title}`);
 }
 
 async function selectCase(caseId) {
