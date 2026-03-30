@@ -1,0 +1,23 @@
+const stamp = new Canvas(64, 64);
+const sctx = stamp.getContext("2d");
+sctx.fillStyle = "#0f172a";
+sctx.fillRect(0, 0, stamp.width, stamp.height);
+sctx.fillStyle = "#f97316";
+sctx.beginPath();
+sctx.arc(32, 32, 18, 0, Math.PI * 2);
+sctx.fill();
+stamp.saveToPng("@RENDER_REGRESSION_STAMP_PNG@");
+
+const image = new Image();
+image.src = "@RENDER_REGRESSION_STAMP_PNG@";
+
+const canvas = new Canvas(220, 120);
+const ctx = canvas.getContext("2d");
+ctx.fillStyle = "#e2e8f0";
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+ctx.drawImage(image, 16, 16);
+ctx.drawImage(image, 96, 16, 96, 96);
+ctx.drawImage(image, 8, 8, 48, 48, 160, 24, 36, 36);
+canvas.saveToPng("@RENDER_REGRESSION_OUTPUT_PNG@");
+
+console.log("wrote @RENDER_REGRESSION_OUTPUT_PNG@");

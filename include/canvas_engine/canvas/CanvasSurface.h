@@ -20,6 +20,7 @@ class CanvasSurface {
   int pixel_height() const { return pixel_height_; }
   SkCanvas* canvas() const { return surface_->getCanvas(); }
   bool PeekPixels(SkPixmap* pixmap) const { return surface_ && surface_->peekPixels(pixmap); }
+  sk_sp<SkImage> MakeImageSnapshot() const;
 
   bool Resize(int width, int height);
   bool SavePng(const std::string& output_path) const;

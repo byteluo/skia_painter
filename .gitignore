@@ -12,6 +12,7 @@
 .idea/
 .vscode/
 node_modules/
+__pycache__/
 *.swp
 *.swo
 

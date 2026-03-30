@@ -14,10 +14,11 @@ echarts.setPlatformAPI({
     return createCanvas(width, height);
   },
   loadImage(src, onload) {
-    const image = { width: 0, height: 0, src };
+    const image = new Image();
     if (typeof onload === "function") {
-      onload();
+      image.onload = onload;
     }
+    image.src = src;
     return image;
   }
 });

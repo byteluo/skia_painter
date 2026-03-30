@@ -24,11 +24,13 @@ class ScriptEngine {
  private:
   struct CanvasHandle;
   struct GradientHandle;
+  struct ImageHandle;
 
   v8::Local<v8::Context> GetContext();
   v8::Local<v8::FunctionTemplate> GetCanvasTemplate();
   v8::Local<v8::FunctionTemplate> GetContext2DTemplate();
   v8::Local<v8::FunctionTemplate> GetGradientTemplate();
+  v8::Local<v8::FunctionTemplate> GetImageTemplate();
   bool ExecuteScriptFile(const std::filesystem::path& script_path,
                          v8::Local<v8::Value>* out_result);
   std::filesystem::path ResolveScriptPath(const std::string& script_path) const;
@@ -61,6 +63,28 @@ class ScriptEngine {
   static void CanvasSetAttribute(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CanvasAddEventListener(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CanvasRemoveEventListener(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void ImageConstructor(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void ImageWidthGetter(v8::Local<v8::Name> property,
+                               const v8::PropertyCallbackInfo<v8::Value>& info);
+  static void ImageHeightGetter(v8::Local<v8::Name> property,
+                                const v8::PropertyCallbackInfo<v8::Value>& info);
+  static void ImageSrcGetter(v8::Local<v8::Name> property,
+                             const v8::PropertyCallbackInfo<v8::Value>& info);
+  static void ImageSrcSetter(v8::Local<v8::Name> property,
+                             v8::Local<v8::Value> value,
+                             const v8::PropertyCallbackInfo<void>& info);
+  static void ImageCompleteGetter(v8::Local<v8::Name> property,
+                                  const v8::PropertyCallbackInfo<v8::Value>& info);
+  static void ImageOnloadGetter(v8::Local<v8::Name> property,
+                                const v8::PropertyCallbackInfo<v8::Value>& info);
+  static void ImageOnloadSetter(v8::Local<v8::Name> property,
+                                v8::Local<v8::Value> value,
+                                const v8::PropertyCallbackInfo<void>& info);
+  static void ImageOnerrorGetter(v8::Local<v8::Name> property,
+                                 const v8::PropertyCallbackInfo<v8::Value>& info);
+  static void ImageOnerrorSetter(v8::Local<v8::Name> property,
+                                 v8::Local<v8::Value> value,
+                                 const v8::PropertyCallbackInfo<void>& info);
 
   static void FillStyleGetter(v8::Local<v8::Name> property,
                               const v8::PropertyCallbackInfo<v8::Value>& info);
@@ -166,6 +190,7 @@ class ScriptEngine {
   static void CtxClip(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxFill(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxStroke(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void CtxDrawImage(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxSetLineDash(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxGetLineDash(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxCreateLinearGradient(
@@ -185,11 +210,13 @@ class ScriptEngine {
   v8::Global<v8::FunctionTemplate> canvas_template_;
   v8::Global<v8::FunctionTemplate> context_2d_template_;
   v8::Global<v8::FunctionTemplate> gradient_template_;
+  v8::Global<v8::FunctionTemplate> image_template_;
   std::vector<std::filesystem::path> script_stack_;
   std::uint32_t next_timer_id_ = 1;
   std::string last_error_;
   std::vector<std::unique_ptr<CanvasHandle>> canvases_;
   std::vector<std::unique_ptr<GradientHandle>> gradients_;
+  std::vector<std::unique_ptr<ImageHandle>> images_;
 };
 
 }  // namespace canvas_engine

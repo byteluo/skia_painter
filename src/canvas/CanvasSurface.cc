@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #if defined(__APPLE__)
 #include <CoreFoundation/CoreFoundation.h>
@@ -79,38 +80,55 @@ bool CanvasSurface::Resize(int width, int height) {
   return true;
 }
 
+sk_sp<SkImage> CanvasSurface::MakeImageSnapshot() const {
+  return surface_ ? surface_->makeImageSnapshot() : nullptr;
+}
+
 bool CanvasSurface::SavePng(const std::string& output_path) const {
   SkPixmap pixmap;
-  sk_sp<SkSurface> export_surface;
   if (!surface_) {
     return false;
   }
 
-  if (pixel_width_ != width_ || pixel_height_ != height_) {
-    export_surface = CreateRasterSurface(width_, height_, 1.0f);
-    auto image = surface_->makeImageSnapshot();
-    if (!export_surface || !image) {
-      return false;
-    }
-
-    export_surface->getCanvas()->clear(SK_ColorTRANSPARENT);
-    export_surface->getCanvas()->drawImageRect(
-        image, SkRect::MakeWH(static_cast<SkScalar>(width_),
-                              static_cast<SkScalar>(height_)),
-        SkSamplingOptions(SkFilterMode::kLinear), nullptr);
-  }
-
-  SkSurface* surface_for_export = export_surface ? export_surface.get() : surface_.get();
-  if (!surface_for_export->peekPixels(&pixmap)) {
+  if (!surface_->peekPixels(&pixmap)) {
     return false;
   }
 
 #if defined(__APPLE__)
-  const size_t data_size = static_cast<size_t>(pixmap.rowBytes()) * pixmap.height();
+  std::vector<std::uint8_t> rgba_pixels(static_cast<size_t>(pixmap.width()) *
+                                        static_cast<size_t>(pixmap.height()) * 4);
+  const auto* src = static_cast<const std::uint8_t*>(pixmap.addr());
+  if (src == nullptr) {
+    return false;
+  }
+
+  const size_t src_row_bytes = pixmap.rowBytes();
+  const size_t dst_row_bytes = static_cast<size_t>(pixmap.width()) * 4;
+  for (int y = 0; y < pixmap.height(); ++y) {
+    const auto* src_row = src + static_cast<size_t>(y) * src_row_bytes;
+    auto* dst_row = rgba_pixels.data() + static_cast<size_t>(y) * dst_row_bytes;
+    for (int x = 0; x < pixmap.width(); ++x) {
+      const auto* pixel = src_row + static_cast<size_t>(x) * 4;
+      auto* dst_pixel = dst_row + static_cast<size_t>(x) * 4;
+      if (pixmap.colorType() == kBGRA_8888_SkColorType) {
+        dst_pixel[0] = pixel[2];
+        dst_pixel[1] = pixel[1];
+        dst_pixel[2] = pixel[0];
+        dst_pixel[3] = pixel[3];
+      } else {
+        dst_pixel[0] = pixel[0];
+        dst_pixel[1] = pixel[1];
+        dst_pixel[2] = pixel[2];
+        dst_pixel[3] = pixel[3];
+      }
+    }
+  }
+
+  const size_t data_size = rgba_pixels.size();
   auto release_callback = [](void*, const void*, size_t) {};
 
   CGDataProviderRef provider = CGDataProviderCreateWithData(
-      nullptr, pixmap.addr(), data_size, release_callback);
+      nullptr, rgba_pixels.data(), data_size, release_callback);
   if (!provider) {
     return false;
   }
@@ -122,11 +140,11 @@ bool CanvasSurface::SavePng(const std::string& output_path) const {
   }
 
   const CGBitmapInfo bitmap_info =
-      static_cast<CGBitmapInfo>(static_cast<unsigned>(kCGBitmapByteOrder32Little) |
-                                static_cast<unsigned>(kCGImageAlphaPremultipliedFirst));
+      static_cast<CGBitmapInfo>(static_cast<unsigned>(kCGBitmapByteOrder32Big) |
+                                static_cast<unsigned>(kCGImageAlphaPremultipliedLast));
 
   CGImageRef image = CGImageCreate(
-      pixmap.width(), pixmap.height(), 8, 32, pixmap.rowBytes(), color_space,
+      pixmap.width(), pixmap.height(), 8, 32, dst_row_bytes, color_space,
       bitmap_info, provider, nullptr, false, kCGRenderingIntentDefault);
   CGColorSpaceRelease(color_space);
   CGDataProviderRelease(provider);

@@ -63,6 +63,7 @@ foreach(required_var
 endforeach()
 
 find_package(Threads REQUIRED)
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
 include(CTest)
 include(GNUInstallDirs)
 
@@ -71,6 +72,7 @@ add_executable(canvas_engine
   src/canvas/CanvasSurface.cc
   src/canvas/Canvas2DContext.cc
   src/canvas/ColorParser.cc
+  src/canvas/ImageAsset.cc
   src/runtime/ScriptEngine.cc
 )
 
@@ -125,11 +127,42 @@ install(TARGETS canvas_engine
 )
 
 if(BUILD_TESTING)
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test_output")
+  set(RENDER_REGRESSION_STAMP_PNG
+      "${CMAKE_CURRENT_BINARY_DIR}/test_output/regression_stamp.png")
+  set(RENDER_REGRESSION_OUTPUT_PNG
+      "${CMAKE_CURRENT_BINARY_DIR}/test_output/render_regression.png")
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/render_regression.js.in
+    ${CMAKE_CURRENT_BINARY_DIR}/render_regression.js
+    @ONLY
+  )
+
   add_test(
     NAME smoke
     COMMAND canvas_engine ${CMAKE_CURRENT_SOURCE_DIR}/examples/smoke.js
   )
   set_tests_properties(smoke PROPERTIES
     PASS_REGULAR_EXPRESSION "smoke"
+  )
+
+  add_test(
+    NAME render_regression_render
+    COMMAND $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_BINARY_DIR}/render_regression.js
+  )
+  set_tests_properties(render_regression_render PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    PASS_REGULAR_EXPRESSION "wrote ${CMAKE_CURRENT_BINARY_DIR}/test_output/render_regression\\.png"
+  )
+
+  add_test(
+    NAME render_regression_verify
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_render_regression.py
+            ${CMAKE_CURRENT_BINARY_DIR}/test_output/render_regression.png
+  )
+  set_tests_properties(render_regression_verify PROPERTIES
+    DEPENDS render_regression_render
   )
 endif()

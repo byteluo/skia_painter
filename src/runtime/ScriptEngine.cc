@@ -16,6 +16,7 @@
 #include "canvas_engine/canvas/Canvas2DContext.h"
 #include "canvas_engine/canvas/CanvasSurface.h"
 #include "canvas_engine/canvas/ColorParser.h"
+#include "canvas_engine/canvas/ImageAsset.h"
 #include "include/effects/SkGradient.h"
 
 namespace canvas_engine {
@@ -32,6 +33,7 @@ struct ContextHandle {
 constexpr v8::EmbedderDataTypeTag kCanvasHandleTag = 1;
 constexpr v8::EmbedderDataTypeTag kContextHandleTag = 2;
 constexpr v8::EmbedderDataTypeTag kGradientHandleTag = 3;
+constexpr v8::EmbedderDataTypeTag kImageHandleTag = 4;
 
 using Clock = std::chrono::steady_clock;
 
@@ -217,6 +219,24 @@ struct ScriptEngine::CanvasHandle {
   v8::Global<v8::Object> context_object;
 };
 
+struct ScriptEngine::ImageHandle {
+  explicit ImageHandle(v8::Isolate* isolate_value) : isolate(isolate_value) {}
+
+  void ResetCallbacks() {
+    onload.Reset();
+    onerror.Reset();
+  }
+
+  v8::Isolate* isolate = nullptr;
+  std::string src;
+  std::shared_ptr<ImageAsset> asset;
+  bool complete = false;
+  bool failed = false;
+  v8::Global<v8::Object> object;
+  v8::Global<v8::Function> onload;
+  v8::Global<v8::Function> onerror;
+};
+
 struct ScriptEngine::GradientHandle {
   enum class Kind {
     kLinear,
@@ -316,8 +336,10 @@ ScriptEngine::~ScriptEngine() {
     canvas_template_.Reset();
     context_2d_template_.Reset();
     gradient_template_.Reset();
+    image_template_.Reset();
     canvases_.clear();
     gradients_.clear();
+    images_.clear();
   }
 
   isolate_->Dispose();
@@ -405,6 +427,8 @@ v8::Local<v8::Context> ScriptEngine::GetContext() {
   auto global_template = v8::ObjectTemplate::New(isolate_);
   global_template->Set(v8::String::NewFromUtf8Literal(isolate_, "Canvas"),
                        GetCanvasTemplate());
+  global_template->Set(v8::String::NewFromUtf8Literal(isolate_, "Image"),
+                       GetImageTemplate());
 
   auto context = v8::Context::New(isolate_, nullptr, global_template);
   v8::Context::Scope context_scope(context);
@@ -643,6 +667,9 @@ v8::Local<v8::FunctionTemplate> ScriptEngine::GetContext2DTemplate() {
   tpl->PrototypeTemplate()->Set(isolate_, "stroke",
                                 v8::FunctionTemplate::New(isolate_, CtxStroke));
   tpl->PrototypeTemplate()->Set(
+      isolate_, "drawImage",
+      v8::FunctionTemplate::New(isolate_, CtxDrawImage));
+  tpl->PrototypeTemplate()->Set(
       isolate_, "setLineDash",
       v8::FunctionTemplate::New(isolate_, CtxSetLineDash));
   tpl->PrototypeTemplate()->Set(
@@ -680,6 +707,37 @@ v8::Local<v8::FunctionTemplate> ScriptEngine::GetGradientTemplate() {
       isolate_, "addColorStop",
       v8::FunctionTemplate::New(isolate_, GradientAddColorStop));
   gradient_template_.Reset(isolate_, tpl);
+  return tpl;
+}
+
+v8::Local<v8::FunctionTemplate> ScriptEngine::GetImageTemplate() {
+  if (!image_template_.IsEmpty()) {
+    return image_template_.Get(isolate_);
+  }
+
+  auto tpl = v8::FunctionTemplate::New(isolate_, ImageConstructor);
+  tpl->SetClassName(v8::String::NewFromUtf8Literal(isolate_, "Image"));
+  tpl->InstanceTemplate()->SetInternalFieldCount(1);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "width"), ImageWidthGetter,
+      nullptr);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "height"), ImageHeightGetter,
+      nullptr);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "src"), ImageSrcGetter,
+      ImageSrcSetter);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "complete"), ImageCompleteGetter,
+      nullptr);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "onload"), ImageOnloadGetter,
+      ImageOnloadSetter);
+  tpl->InstanceTemplate()->SetNativeDataProperty(
+      v8::String::NewFromUtf8Literal(isolate_, "onerror"), ImageOnerrorGetter,
+      ImageOnerrorSetter);
+
+  image_template_.Reset(isolate_, tpl);
   return tpl;
 }
 
@@ -980,6 +1038,185 @@ void ScriptEngine::CanvasAddEventListener(
 void ScriptEngine::CanvasRemoveEventListener(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   info.GetReturnValue().Set(v8::Undefined(info.GetIsolate()));
+}
+
+void ScriptEngine::ImageConstructor(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  if (!info.IsConstructCall()) {
+    ThrowTypeError(isolate, "Image must be constructed with new");
+    return;
+  }
+
+  auto* engine = From(isolate);
+  engine->images_.push_back(std::make_unique<ImageHandle>(isolate));
+  auto* handle = engine->images_.back().get();
+  handle->object.Reset(isolate, info.This());
+  info.This()->SetAlignedPointerInInternalField(0, handle, kImageHandleTag);
+  info.GetReturnValue().Set(info.This());
+}
+
+void ScriptEngine::ImageWidthGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+  if (!handle || !handle->asset) {
+    info.GetReturnValue().Set(0);
+    return;
+  }
+  info.GetReturnValue().Set(handle->asset->width());
+}
+
+void ScriptEngine::ImageHeightGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+  if (!handle || !handle->asset) {
+    info.GetReturnValue().Set(0);
+    return;
+  }
+  info.GetReturnValue().Set(handle->asset->height());
+}
+
+void ScriptEngine::ImageSrcGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+  if (!handle) {
+    return;
+  }
+  info.GetReturnValue().Set(ToV8String(info.GetIsolate(), handle->src));
+}
+
+void ScriptEngine::ImageSrcSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* handle =
+      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+  if (!handle || !value->IsString()) {
+    ThrowTypeError(info.GetIsolate(), "Image.src must be a string");
+    return;
+  }
+
+  auto* engine = From(info.GetIsolate());
+  handle->src = ToStdString(info.GetIsolate(), value);
+  handle->asset.reset();
+  handle->complete = false;
+  handle->failed = false;
+
+  const auto resolved = engine->ResolveScriptPath(handle->src);
+  handle->asset = ImageAsset::LoadFromFile(resolved.string());
+  handle->complete = true;
+  handle->failed = !handle->asset;
+
+  auto context = info.GetIsolate()->GetCurrentContext();
+  auto self = handle->object.Get(info.GetIsolate());
+  v8::TryCatch try_catch(info.GetIsolate());
+  v8::Local<v8::Value> unused;
+  if (handle->asset && !handle->onload.IsEmpty()) {
+    auto callback = handle->onload.Get(info.GetIsolate());
+    if (!callback->Call(context, self, 0, nullptr).ToLocal(&unused)) {
+      ThrowError(info.GetIsolate(), FormatException(info.GetIsolate(), &try_catch));
+    }
+    return;
+  }
+
+  if (!handle->asset && !handle->onerror.IsEmpty()) {
+    auto callback = handle->onerror.Get(info.GetIsolate());
+    if (!callback->Call(context, self, 0, nullptr).ToLocal(&unused)) {
+      ThrowError(info.GetIsolate(), FormatException(info.GetIsolate(), &try_catch));
+    }
+  }
+}
+
+void ScriptEngine::ImageCompleteGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+  if (!handle) {
+    return;
+  }
+  info.GetReturnValue().Set(handle->complete);
+}
+
+void ScriptEngine::ImageOnloadGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+  if (!handle || handle->onload.IsEmpty()) {
+    return;
+  }
+  info.GetReturnValue().Set(handle->onload.Get(info.GetIsolate()));
+}
+
+void ScriptEngine::ImageOnloadSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* handle =
+      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+  if (!handle) {
+    return;
+  }
+
+  handle->onload.Reset();
+  if (!value->IsFunction()) {
+    return;
+  }
+
+  handle->onload.Reset(info.GetIsolate(), value.As<v8::Function>());
+  if (handle->complete && !handle->failed && handle->asset) {
+    auto context = info.GetIsolate()->GetCurrentContext();
+    auto self = handle->object.Get(info.GetIsolate());
+    auto callback = handle->onload.Get(info.GetIsolate());
+    v8::TryCatch try_catch(info.GetIsolate());
+    v8::Local<v8::Value> unused;
+    if (!callback->Call(context, self, 0, nullptr).ToLocal(&unused)) {
+      ThrowError(info.GetIsolate(), FormatException(info.GetIsolate(), &try_catch));
+    }
+  }
+}
+
+void ScriptEngine::ImageOnerrorGetter(
+    v8::Local<v8::Name> property,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+  if (!handle || handle->onerror.IsEmpty()) {
+    return;
+  }
+  info.GetReturnValue().Set(handle->onerror.Get(info.GetIsolate()));
+}
+
+void ScriptEngine::ImageOnerrorSetter(
+    v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+    const v8::PropertyCallbackInfo<void>& info) {
+  auto* handle =
+      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+  if (!handle) {
+    return;
+  }
+
+  handle->onerror.Reset();
+  if (!value->IsFunction()) {
+    return;
+  }
+
+  handle->onerror.Reset(info.GetIsolate(), value.As<v8::Function>());
+  if (handle->complete && handle->failed) {
+    auto context = info.GetIsolate()->GetCurrentContext();
+    auto self = handle->object.Get(info.GetIsolate());
+    auto callback = handle->onerror.Get(info.GetIsolate());
+    v8::TryCatch try_catch(info.GetIsolate());
+    v8::Local<v8::Value> unused;
+    if (!callback->Call(context, self, 0, nullptr).ToLocal(&unused)) {
+      ThrowError(info.GetIsolate(), FormatException(info.GetIsolate(), &try_catch));
+    }
+  }
 }
 
 void ScriptEngine::FillStyleGetter(
@@ -1717,6 +1954,91 @@ void ScriptEngine::CtxStroke(const v8::FunctionCallbackInfo<v8::Value>& info) {
           Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag)) {
     handle->context->Stroke();
   }
+}
+
+void ScriptEngine::CtxDrawImage(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  if (!handle || info.Length() < 3 || !info[0]->IsObject()) {
+    ThrowTypeError(info.GetIsolate(),
+                   "drawImage(image, ...) requires an Image or Canvas source");
+    return;
+  }
+
+  auto source = info[0].As<v8::Object>();
+  sk_sp<SkImage> image;
+  float source_width = 0.0f;
+  float source_height = 0.0f;
+  float source_pixel_ratio = 1.0f;
+
+  if (auto* image_handle =
+          Unwrap<ImageHandle>(info.GetIsolate(), source, kImageHandleTag)) {
+    if (image_handle->asset) {
+      image = image_handle->asset->image();
+      source_width = static_cast<float>(image_handle->asset->width());
+      source_height = static_cast<float>(image_handle->asset->height());
+    }
+  } else if (auto* canvas_handle =
+                 Unwrap<CanvasHandle>(info.GetIsolate(), source, kCanvasHandleTag)) {
+    image = canvas_handle->surface->MakeImageSnapshot();
+    source_width = static_cast<float>(canvas_handle->surface->width());
+    source_height = static_cast<float>(canvas_handle->surface->height());
+    source_pixel_ratio = canvas_handle->surface->pixel_ratio();
+  }
+
+  if (!image || !(source_width > 0.0f) || !(source_height > 0.0f)) {
+    return;
+  }
+
+  double dx = 0.0;
+  double dy = 0.0;
+  double dw = 0.0;
+  double dh = 0.0;
+  double sx = 0.0;
+  double sy = 0.0;
+  double sw = source_width;
+  double sh = source_height;
+
+  if (info.Length() == 3) {
+    if (!ExtractDouble(info, 1, &dx) || !ExtractDouble(info, 2, &dy)) {
+      ThrowTypeError(info.GetIsolate(),
+                     "drawImage(image, dx, dy) requires numeric coordinates");
+      return;
+    }
+    dw = source_width;
+    dh = source_height;
+  } else if (info.Length() == 5) {
+    if (!ExtractDouble(info, 1, &dx) || !ExtractDouble(info, 2, &dy) ||
+        !ExtractDouble(info, 3, &dw) || !ExtractDouble(info, 4, &dh)) {
+      ThrowTypeError(info.GetIsolate(),
+                     "drawImage(image, dx, dy, dw, dh) requires numbers");
+      return;
+    }
+  } else if (info.Length() >= 9) {
+    if (!ExtractDouble(info, 1, &sx) || !ExtractDouble(info, 2, &sy) ||
+        !ExtractDouble(info, 3, &sw) || !ExtractDouble(info, 4, &sh) ||
+        !ExtractDouble(info, 5, &dx) || !ExtractDouble(info, 6, &dy) ||
+        !ExtractDouble(info, 7, &dw) || !ExtractDouble(info, 8, &dh)) {
+      ThrowTypeError(
+          info.GetIsolate(),
+          "drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh) requires numbers");
+      return;
+    }
+  } else {
+    ThrowTypeError(
+        info.GetIsolate(),
+        "drawImage supports 3, 5, or 9 arguments after the image source");
+    return;
+  }
+
+  handle->context->DrawImage(image,
+                             static_cast<float>(sx * source_pixel_ratio),
+                             static_cast<float>(sy * source_pixel_ratio),
+                             static_cast<float>(sw * source_pixel_ratio),
+                             static_cast<float>(sh * source_pixel_ratio),
+                             static_cast<float>(dx), static_cast<float>(dy),
+                             static_cast<float>(dw), static_cast<float>(dh));
 }
 
 void ScriptEngine::CtxSetLineDash(
