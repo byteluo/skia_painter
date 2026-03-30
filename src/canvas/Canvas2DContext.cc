@@ -71,6 +71,15 @@ float ComputeShadowSigma(float blur) {
   return std::max(0.0f, blur * 0.5f);
 }
 
+SkColor ApplyGlobalAlpha(SkColor color, float global_alpha) {
+  const float alpha =
+      (static_cast<float>(SkColorGetA(color)) / 255.0f) * global_alpha;
+  const auto alpha_byte = static_cast<U8CPU>(
+      std::lround(std::clamp(alpha, 0.0f, 1.0f) * 255.0f));
+  return SkColorSetARGB(alpha_byte, SkColorGetR(color), SkColorGetG(color),
+                        SkColorGetB(color));
+}
+
 std::string Trim(std::string_view value) {
   std::size_t begin = 0;
   while (begin < value.size() &&
@@ -552,7 +561,7 @@ SkPaint Canvas2DContext::MakeFillPaint() const {
   SkPaint paint;
   paint.setAntiAlias(true);
   paint.setStyle(SkPaint::kFill_Style);
-  paint.setColor(state_.fill_style);
+  paint.setColor(ApplyGlobalAlpha(state_.fill_style, state_.global_alpha));
   ConfigurePaint(&paint);
   return paint;
 }
@@ -561,7 +570,7 @@ SkPaint Canvas2DContext::MakeStrokePaint() const {
   SkPaint paint;
   paint.setAntiAlias(true);
   paint.setStyle(SkPaint::kStroke_Style);
-  paint.setColor(state_.stroke_style);
+  paint.setColor(ApplyGlobalAlpha(state_.stroke_style, state_.global_alpha));
   paint.setStrokeWidth(state_.line_width);
   ConfigurePaint(&paint);
   return paint;
@@ -571,14 +580,14 @@ SkPaint Canvas2DContext::MakeTextPaint(bool stroke) const {
   SkPaint paint;
   paint.setAntiAlias(true);
   paint.setStyle(stroke ? SkPaint::kStroke_Style : SkPaint::kFill_Style);
-  paint.setColor(stroke ? state_.stroke_style : state_.fill_style);
+  paint.setColor(ApplyGlobalAlpha(stroke ? state_.stroke_style : state_.fill_style,
+                                  state_.global_alpha));
   paint.setStrokeWidth(state_.line_width);
   ConfigurePaint(&paint);
   return paint;
 }
 
 void Canvas2DContext::ConfigurePaint(SkPaint* paint) const {
-  paint->setAlphaf(state_.global_alpha);
   paint->setBlendMode(state_.blend_mode);
   paint->setStrokeCap(state_.stroke_cap);
   paint->setStrokeJoin(state_.stroke_join);
@@ -592,7 +601,7 @@ void Canvas2DContext::ConfigurePaint(SkPaint* paint) const {
     const float sigma = ComputeShadowSigma(state_.shadow_blur);
     paint->setImageFilter(SkImageFilters::DropShadow(
         state_.shadow_offset_x, state_.shadow_offset_y, sigma, sigma,
-        state_.shadow_color, nullptr));
+        ApplyGlobalAlpha(state_.shadow_color, state_.global_alpha), nullptr));
   } else {
     paint->setImageFilter(nullptr);
   }
