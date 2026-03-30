@@ -117,6 +117,8 @@ def main():
     red = (239, 68, 68, 255)
     teal = (20, 184, 166, 255)
     purple = (139, 92, 246, 255)
+    green = (34, 197, 94, 255)
+    sky = (14, 165, 233, 255)
 
     expect_color_range(pixel(rows, 10, 10), background, 2, "background corner")
     expect_color_range(pixel(rows, 60, 60), dark, 4, "first image dark region")
@@ -127,6 +129,8 @@ def main():
     expect_color_range(pixel(rows, 132, 264), red, 10, "quadratic curve stroke")
     expect_color_range(pixel(rows, 330, 282), teal, 8, "ellipse fill")
     expect_color_range(pixel(rows, 564, 276), purple, 8, "arcTo fill")
+    expect_color_range(pixel(rows, 552, 18), green, 8, "requestAnimationFrame queue")
+    expect_color_range(pixel(rows, 600, 18), sky, 8, "setTimeout queue")
 
     print("render_regression ok")
 

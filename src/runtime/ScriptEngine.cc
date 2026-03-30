@@ -362,6 +362,7 @@ ScriptEngine::~ScriptEngine() {
     canvases_.clear();
     gradients_.clear();
     images_.clear();
+    pending_tasks_.clear();
     patterns_.clear();
   }
 
@@ -424,10 +425,78 @@ bool ScriptEngine::ExecuteScriptFile(const std::filesystem::path& script_path,
   }
 
   pop_path();
+  if (!DrainPendingTasks()) {
+    return false;
+  }
   if (out_result != nullptr) {
     *out_result = result;
   }
   return true;
+}
+
+bool ScriptEngine::DrainPendingTasks() {
+  if (draining_tasks_) {
+    return true;
+  }
+
+  auto context = context_.Get(isolate_);
+  v8::Context::Scope context_scope(context);
+  draining_tasks_ = true;
+
+  constexpr int kMaxDrainRounds = 64;
+  for (int round = 0; round < kMaxDrainRounds; ++round) {
+    if (pending_tasks_.empty()) {
+      draining_tasks_ = false;
+      return true;
+    }
+
+    std::vector<PendingTask> ready_tasks;
+    ready_tasks.swap(pending_tasks_);
+    for (auto& task : ready_tasks) {
+      if (task.cancelled || task.callback.IsEmpty()) {
+        continue;
+      }
+
+      v8::TryCatch try_catch(isolate_);
+      v8::Local<v8::Function> callback = task.callback.Get(isolate_);
+      v8::Local<v8::Value> argv[] = {
+          v8::Number::New(isolate_, NowMilliseconds())};
+      v8::Local<v8::Value> result;
+      const int argc = task.animation_frame ? 1 : 0;
+      if (!callback
+               ->Call(context, context->Global(), argc,
+                      task.animation_frame ? argv : nullptr)
+               .ToLocal(&result)) {
+        last_error_ = FormatException(isolate_, &try_catch);
+        draining_tasks_ = false;
+        pending_tasks_.clear();
+        return false;
+      }
+    }
+  }
+
+  draining_tasks_ = false;
+  return true;
+}
+
+std::uint32_t ScriptEngine::EnqueueTask(v8::Local<v8::Function> callback,
+                                        bool animation_frame) {
+  PendingTask task;
+  task.id = next_timer_id_++;
+  task.animation_frame = animation_frame;
+  task.callback.Reset(isolate_, callback);
+  pending_tasks_.push_back(std::move(task));
+  return pending_tasks_.back().id;
+}
+
+void ScriptEngine::CancelTask(std::uint32_t task_id) {
+  for (auto& task : pending_tasks_) {
+    if (task.id == task_id) {
+      task.cancelled = true;
+      task.callback.Reset();
+      return;
+    }
+  }
 }
 
 std::filesystem::path ScriptEngine::ResolveScriptPath(
@@ -834,21 +903,18 @@ void ScriptEngine::SetTimeoutCallback(
   }
 
   auto* engine = From(isolate);
-  const std::uint32_t timer_id = engine->next_timer_id_++;
-  auto context = isolate->GetCurrentContext();
-  auto callback = info[0].As<v8::Function>();
-  v8::TryCatch try_catch(isolate);
-  v8::Local<v8::Value> result;
-  if (!callback->Call(context, context->Global(), 0, nullptr).ToLocal(&result)) {
-    ThrowError(isolate, FormatException(isolate, &try_catch));
-    return;
-  }
-
+  const std::uint32_t timer_id =
+      engine->EnqueueTask(info[0].As<v8::Function>(), false);
   info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(isolate, timer_id));
 }
 
 void ScriptEngine::ClearTimeoutCallback(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* engine = From(info.GetIsolate());
+  double timer_id = 0.0;
+  if (engine && info.Length() > 0 && ExtractDouble(info, 0, &timer_id)) {
+    engine->CancelTask(static_cast<std::uint32_t>(std::lround(timer_id)));
+  }
   info.GetReturnValue().Set(v8::Undefined(info.GetIsolate()));
 }
 
@@ -862,22 +928,18 @@ void ScriptEngine::RequestAnimationFrameCallback(
   }
 
   auto* engine = From(isolate);
-  const std::uint32_t timer_id = engine->next_timer_id_++;
-  auto context = isolate->GetCurrentContext();
-  auto callback = info[0].As<v8::Function>();
-  v8::Local<v8::Value> argv[] = {v8::Number::New(isolate, NowMilliseconds())};
-  v8::TryCatch try_catch(isolate);
-  v8::Local<v8::Value> result;
-  if (!callback->Call(context, context->Global(), 1, argv).ToLocal(&result)) {
-    ThrowError(isolate, FormatException(isolate, &try_catch));
-    return;
-  }
-
+  const std::uint32_t timer_id =
+      engine->EnqueueTask(info[0].As<v8::Function>(), true);
   info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(isolate, timer_id));
 }
 
 void ScriptEngine::CancelAnimationFrameCallback(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
+  auto* engine = From(info.GetIsolate());
+  double timer_id = 0.0;
+  if (engine && info.Length() > 0 && ExtractDouble(info, 0, &timer_id)) {
+    engine->CancelTask(static_cast<std::uint32_t>(std::lround(timer_id)));
+  }
   info.GetReturnValue().Set(v8::Undefined(info.GetIsolate()));
 }
 
@@ -997,6 +1059,10 @@ void ScriptEngine::CanvasSaveToPng(
 
   auto* engine = From(isolate);
   const std::string output_path = ToStdString(isolate, info[0]);
+  if (engine && !engine->DrainPendingTasks()) {
+    ThrowError(isolate, engine->last_error_);
+    return;
+  }
   const auto resolved = engine->ResolveScriptPath(output_path);
   if (!canvas->surface->SavePng(resolved.string())) {
     ThrowError(isolate, "failed to write png: " + resolved.string());
