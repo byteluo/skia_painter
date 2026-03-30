@@ -155,14 +155,51 @@ def verify_timeline(path):
     expect_color_range(pixel(rows, 2650, 1280), background, 3, "timeline right background")
 
 
+def verify_custom_series(path):
+    width, height, rows = read_png(path)
+    expect_equal((width, height), (2880, 1620), "custom series size")
+
+    background = (248, 250, 252, 255)
+    blue = (37, 99, 235, 255)
+    teal = (20, 184, 166, 255)
+    orange = (249, 115, 22, 255)
+    purple = (139, 92, 246, 255)
+    rose = (225, 29, 72, 255)
+
+    expect_color_range(pixel(rows, 20, 20), background, 3, "custom series background")
+    expect_color_range(pixel(rows, 574, 686), blue, 4, "custom series alpha bubble")
+    expect_color_range(pixel(rows, 1014, 916), teal, 4, "custom series beta bubble")
+    expect_color_range(pixel(rows, 1440, 456), orange, 4, "custom series gamma bubble")
+    expect_color_range(pixel(rows, 1898, 801), purple, 4, "custom series delta bubble")
+    expect_color_range(pixel(rows, 2322, 571), rose, 4, "custom series epsilon bubble")
+
+
+def verify_pictorial_bar(path):
+    width, height, rows = read_png(path)
+    expect_equal((width, height), (2880, 1620), "pictorial bar size")
+
+    background = (255, 250, 240, 255)
+    ghost = (228, 231, 239, 255)
+    blue = (37, 99, 235, 255)
+
+    expect_color_range(pixel(rows, 20, 20), background, 3, "pictorial bar background")
+    expect_color_range(pixel(rows, 454, 300), background, 3, "pictorial bar top background")
+    expect_color_range(pixel(rows, 454, 360), ghost, 6, "pictorial bar ghost symbol")
+    expect_color_range(pixel(rows, 454, 1120), blue, 4, "pictorial bar clipped symbol")
+    expect_color_range(pixel(rows, 454, 920), background, 3, "pictorial bar inter-symbol gap")
+
+
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) != 5:
         raise SystemExit(
-            "usage: verify_echarts_regression.py <sunburst-png> <timeline-png>"
+            "usage: verify_echarts_regression.py "
+            "<sunburst-png> <timeline-png> <custom-series-png> <pictorial-bar-png>"
         )
 
     verify_sunburst(sys.argv[1])
     verify_timeline(sys.argv[2])
+    verify_custom_series(sys.argv[3])
+    verify_pictorial_bar(sys.argv[4])
     print("echarts_regression ok")
 
 
