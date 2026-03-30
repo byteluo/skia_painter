@@ -1,5 +1,8 @@
 #include "canvas_engine/canvas/CanvasSurface.h"
 
+#include <algorithm>
+#include <cmath>
+
 #if defined(__APPLE__)
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreGraphics/CoreGraphics.h>
@@ -18,38 +21,57 @@ namespace canvas_engine {
 
 namespace {
 
-sk_sp<SkSurface> CreateRasterSurface(int width, int height) {
+int ComputePixelSize(int logical_size, float pixel_ratio) {
+  return std::max(1, static_cast<int>(std::lround(logical_size * pixel_ratio)));
+}
+
+sk_sp<SkSurface> CreateRasterSurface(int width, int height, float pixel_ratio) {
   if (width <= 0 || height <= 0) {
     return nullptr;
   }
 
-  SkImageInfo image_info = SkImageInfo::MakeN32Premul(width, height);
+  if (!(pixel_ratio > 0.0f)) {
+    return nullptr;
+  }
+
+  const int pixel_width = ComputePixelSize(width, pixel_ratio);
+  const int pixel_height = ComputePixelSize(height, pixel_ratio);
+  SkImageInfo image_info = SkImageInfo::MakeN32Premul(pixel_width, pixel_height);
   return SkSurfaces::Raster(image_info);
 }
 
 }  // namespace
 
-CanvasSurface::CanvasSurface(int width, int height, sk_sp<SkSurface> surface)
-    : width_(width), height_(height), surface_(std::move(surface)) {}
+CanvasSurface::CanvasSurface(int width, int height, float pixel_ratio,
+                             sk_sp<SkSurface> surface)
+    : width_(width),
+      height_(height),
+      pixel_width_(ComputePixelSize(width, pixel_ratio)),
+      pixel_height_(ComputePixelSize(height, pixel_ratio)),
+      pixel_ratio_(pixel_ratio),
+      surface_(std::move(surface)) {}
 
-std::shared_ptr<CanvasSurface> CanvasSurface::CreateRaster(int width, int height) {
-  auto surface = CreateRasterSurface(width, height);
+std::shared_ptr<CanvasSurface> CanvasSurface::CreateRaster(int width, int height,
+                                                           float pixel_ratio) {
+  auto surface = CreateRasterSurface(width, height, pixel_ratio);
   if (!surface) {
     return nullptr;
   }
 
   return std::shared_ptr<CanvasSurface>(
-      new CanvasSurface(width, height, std::move(surface)));
+      new CanvasSurface(width, height, pixel_ratio, std::move(surface)));
 }
 
 bool CanvasSurface::Resize(int width, int height) {
-  auto surface = CreateRasterSurface(width, height);
+  auto surface = CreateRasterSurface(width, height, pixel_ratio_);
   if (!surface) {
     return false;
   }
 
   width_ = width;
   height_ = height;
+  pixel_width_ = ComputePixelSize(width, pixel_ratio_);
+  pixel_height_ = ComputePixelSize(height, pixel_ratio_);
   surface_ = std::move(surface);
   return true;
 }

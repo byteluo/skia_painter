@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <algorithm>
+#include <cstdlib>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -168,6 +169,19 @@ void PrintArgs(const v8::FunctionCallbackInfo<v8::Value>& info) {
 double NowMilliseconds() {
   const auto now = Clock::now().time_since_epoch();
   return std::chrono::duration<double, std::milli>(now).count();
+}
+
+float GetDefaultDevicePixelRatio() {
+  if (const char* env = std::getenv("CANVAS_ENGINE_DPR")) {
+    try {
+      const float value = std::stof(env);
+      if (value > 0.0f) {
+        return value;
+      }
+    } catch (...) {
+    }
+  }
+  return 2.0f;
 }
 
 bool ExtractSixNumbers(const v8::FunctionCallbackInfo<v8::Value>& info,
@@ -471,7 +485,7 @@ v8::Local<v8::Context> ScriptEngine::GetContext() {
       .Check();
   global
       ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "devicePixelRatio"),
-            v8::Number::New(isolate_, 1.0))
+            v8::Number::New(isolate_, GetDefaultDevicePixelRatio()))
       .Check();
 
   return context;
@@ -774,8 +788,10 @@ void ScriptEngine::CanvasConstructor(
     return;
   }
 
+  const float pixel_ratio = GetDefaultDevicePixelRatio();
   auto surface = CanvasSurface::CreateRaster(static_cast<int>(width),
-                                             static_cast<int>(height));
+                                             static_cast<int>(height),
+                                             pixel_ratio);
   if (!surface) {
     ThrowError(isolate, "failed to create raster canvas surface");
     return;
@@ -794,6 +810,14 @@ void ScriptEngine::CanvasConstructor(
   info.This()
       ->Set(context, v8::String::NewFromUtf8Literal(isolate, "nodeName"),
             v8::String::NewFromUtf8Literal(isolate, "CANVAS"))
+      .Check();
+  info.This()
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate, "devicePixelRatio"),
+            v8::Number::New(isolate, pixel_ratio))
+      .Check();
+  info.This()
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate, "dpr"),
+            v8::Number::New(isolate, pixel_ratio))
       .Check();
 
   info.GetReturnValue().Set(info.This());

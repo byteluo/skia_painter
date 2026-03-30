@@ -132,6 +132,7 @@ class Canvas2DContext {
 
   static State MakeDefaultState();
 
+  void ApplyDeviceScale();
   SkFont MakeFont() const;
   SkPaint MakeFillPaint() const;
   SkPaint MakeStrokePaint() const;
