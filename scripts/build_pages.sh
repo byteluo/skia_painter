@@ -46,8 +46,8 @@ cat > "$DIST_DIR/index.html" << 'HTMLEOF'
             <button id="render-browser" class="button button--secondary" type="button">
               重绘浏览器侧
             </button>
-            <button id="render-engine" class="button" type="button" disabled title="GitHub Pages 静态部署不支持后端渲染">
-              渲染后端 PNG
+            <button id="render-engine" class="button" type="button">
+              查看后端 PNG
             </button>
           </div>
         </section>
@@ -94,7 +94,7 @@ cat > "$DIST_DIR/index.html" << 'HTMLEOF'
                 <div id="engine-surface" class="viewport__surface viewport__surface--image">
                   <img id="engine-image" alt="Engine render output" />
                   <div id="engine-placeholder" class="placeholder">
-                    后端渲染功能仅在本地开发服务器可用
+                    点击"查看后端 PNG"加载预生成的导出图
                   </div>
                   <div id="engine-loading" class="loading-overlay" aria-live="polite">
                     <div class="loading-spinner" aria-hidden="true"></div>
@@ -114,8 +114,63 @@ cat > "$DIST_DIR/index.html" << 'HTMLEOF'
 </html>
 HTMLEOF
 
-# Patch app.js: replace /api/cases fetch with relative cases.json
+# Copy pre-generated PNG outputs if they exist
+if [ -d "$ROOT_DIR/output" ]; then
+  mkdir -p "$DIST_DIR/output"
+  cp "$ROOT_DIR/output/"*.png "$DIST_DIR/output/" 2>/dev/null || true
+  echo "Copied output PNGs"
+else
+  echo "Warning: output/ directory not found, no pre-generated PNGs will be included"
+fi
+
+# Patch app.js for static deployment
+# 1. Replace API cases endpoint with static JSON
 sed -i 's|fetch("/api/cases")|fetch("cases.json")|g' "$DIST_DIR/app.js"
+
+# 2. Replace renderEngineCase to load pre-generated PNGs instead of calling render API
+cat > /tmp/patch_render.py << 'PYEOF'
+import re, sys
+content = open(sys.argv[1]).read()
+
+old_func = re.search(
+    r'async function renderEngineCase\(\) \{.*?\n\}',
+    content, re.DOTALL
+).group(0)
+
+new_func = '''async function renderEngineCase() {
+  const caseInfo = findCase(currentCaseId);
+  if (!caseInfo) {
+    return;
+  }
+
+  const requestId = ++engineRenderRequestId;
+  const imageUrl = caseInfo.outputFile + "?t=" + Date.now();
+
+  try {
+    await preloadImage(imageUrl);
+
+    if (requestId !== engineRenderRequestId) {
+      return;
+    }
+
+    engineImageElement.src = imageUrl;
+    engineImageElement.style.display = "block";
+    enginePlaceholderElement.style.display = "none";
+    setStatus("后端 PNG 已加载: " + caseInfo.title);
+  } catch (e) {
+    if (requestId === engineRenderRequestId) {
+      enginePlaceholderElement.textContent = "预生成 PNG 未找到";
+      enginePlaceholderElement.style.display = "block";
+      engineImageElement.style.display = "none";
+      setStatus("PNG 未找到: " + caseInfo.title);
+    }
+  }
+}'''
+
+content = content.replace(old_func, new_func)
+open(sys.argv[1], 'w').write(content)
+PYEOF
+python3 /tmp/patch_render.py "$DIST_DIR/app.js"
 
 echo "Build complete: $DIST_DIR"
 ls -la "$DIST_DIR"
