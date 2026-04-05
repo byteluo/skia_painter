@@ -32,34 +32,33 @@ jobs:
           key: skia-linux-${{ hashFiles('.gitmodules') }}
           restore-keys: skia-linux-
 
-      - name: Clone Skia submodule
+      - name: Download Skia source
         run: |
           # Skip if cache restored the Skia source
           if [[ -f "third_party/skia/MODULE.bazel" ]]; then
-            echo "Skia already present (from cache), skipping clone"
+            echo "Skia already present (from cache), skipping download"
             exit 0
           fi
 
-          rm -rf third_party/skia
+          # googlesource.com git protocol is unreliable from CI runners.
+          # Download source tarball instead — no git needed.
+          SKIA_REF="refs/heads/main"
+          TARBALL_URL="https://skia.googlesource.com/skia/+archive/${SKIA_REF}.tar.gz"
 
-          # googlesource.com blocks SHA-based fetches and full clones from
-          # CI runners (HTTP 400). Use shallow clone of the default branch
-          # tip instead — we only need the Skia source to build libraries.
+          rm -rf third_party/skia
+          mkdir -p third_party/skia
+
           for attempt in 1 2 3 4; do
-            echo "Attempt $attempt: shallow-cloning Skia (default branch tip)..."
-            if git clone --depth 1 \
-                 -c http.postBuffer=524288000 \
-                 https://skia.googlesource.com/skia.git \
-                 third_party/skia; then
-              echo "Clone succeeded"
-              exit 0
+            echo "Attempt $attempt: downloading Skia tarball..."
+            if curl -fsSL --retry 3 "${TARBALL_URL}" | tar xz -C third_party/skia; then
+              echo "Download succeeded"
+              ls third_party/skia/MODULE.bazel && exit 0
             fi
-            rm -rf third_party/skia
-            echo "Attempt $attempt failed, waiting $((attempt * 15))s..."
-            sleep $((attempt * 15))
+            echo "Attempt $attempt failed, waiting $((attempt * 10))s..."
+            sleep $((attempt * 10))
           done
 
-          echo "All clone attempts failed"
+          echo "All download attempts failed"
           exit 1
 
       - uses: actions/setup-node@v4
