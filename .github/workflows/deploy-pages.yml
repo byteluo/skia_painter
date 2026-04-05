@@ -23,13 +23,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Clone Skia submodule (shallow)
+      - name: Cache Skia
+        uses: actions/cache@v4
+        with:
+          path: |
+            third_party/skia
+            build/bazel-root
+          key: skia-linux-${{ hashFiles('.gitmodules') }}
+          restore-keys: skia-linux-
+
+      - name: Clone Skia submodule
         run: |
-          git submodule init third_party/skia
-          git submodule update --depth 1 third_party/skia
+          # Skip if cache restored the Skia source + build artifacts
+          if [[ -f "third_party/skia/MODULE.bazel" ]]; then
+            echo "Skia already present (from cache), skipping clone"
+            exit 0
+          fi
+
+          # Clone with retry logic (googlesource.com can be flaky)
+          for attempt in 1 2 3 4; do
+            echo "Attempt $attempt: cloning Skia submodule..."
+            if git submodule update --init third_party/skia; then
+              echo "Clone succeeded"
+              exit 0
+            fi
+            # Clean up failed partial clone
+            rm -rf third_party/skia
+            mkdir -p third_party/skia
+            echo "Attempt $attempt failed, waiting $((attempt * 10))s..."
+            sleep $((attempt * 10))
+          done
+
+          echo "All clone attempts failed"
+          exit 1
         env:
-          GIT_HTTP_LOW_SPEED_LIMIT: 1000
-          GIT_HTTP_LOW_SPEED_TIME: 60
+          GIT_HTTP_LOW_SPEED_LIMIT: 500
+          GIT_HTTP_LOW_SPEED_TIME: 120
 
       - uses: actions/setup-node@v4
         with:
@@ -98,17 +127,12 @@ jobs:
           sudo cp ${V8_BUILD}/out.gn/x64.release/icudtl.dat /usr/local/share/v8/
           sudo ldconfig
 
-      - name: Cache Skia build
-        uses: actions/cache@v4
-        with:
-          path: |
-            third_party/skia/bazel-bin
-            build/bazel-root
-          key: skia-linux-${{ hashFiles('.gitmodules') }}
-          restore-keys: skia-linux-
-
       - name: Build Skia
         run: |
+          if [[ -f "third_party/skia/bazel-bin/src/core/libcore.a" ]]; then
+            echo "Skia build artifacts found in cache, skipping build"
+            exit 0
+          fi
           cd third_party/skia
           bazel \
             --batch \
