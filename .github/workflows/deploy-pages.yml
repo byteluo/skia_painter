@@ -16,13 +16,57 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+
+      - name: Cache Homebrew packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            /opt/homebrew/opt/v8
+            /opt/homebrew/opt/bazel@8
+          key: brew-${{ runner.os }}-${{ hashFiles('scripts/bootstrap.sh') }}
+          restore-keys: brew-${{ runner.os }}-
+
+      - name: Cache Skia build
+        uses: actions/cache@v4
+        with:
+          path: |
+            third_party/skia/bazel-bin
+            build/bazel-root
+          key: skia-${{ runner.os }}-${{ hashFiles('third_party/skia/.git') }}
+          restore-keys: skia-${{ runner.os }}-
+
+      - name: Cache CMake build
+        uses: actions/cache@v4
+        with:
+          path: build/release
+          key: cmake-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'src/**') }}
+          restore-keys: cmake-${{ runner.os }}-
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build canvas engine
+        run: ./scripts/bootstrap.sh release
+
+      - name: Generate all PNGs
+        run: |
+          mkdir -p output
+          ENGINE="./build/release/canvas_engine"
+          for script in examples/echarts_*.js; do
+            echo "Rendering: $script"
+            "$ENGINE" "$script" || echo "Warning: $script failed"
+          done
+          ls -la output/
 
       - name: Build static site
         run: bash scripts/build_pages.sh
