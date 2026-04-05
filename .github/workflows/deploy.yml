@@ -22,12 +22,10 @@ jobs:
 
       - name: Checkout Skia submodule
         run: |
-          git submodule init
-          cd third_party/skia
-          git init
-          git remote add origin https://skia.googlesource.com/skia.git
-          git fetch --depth 1 origin 6c7fd08b91efe0fa97a39474d7e4ca90807384ec
-          git checkout FETCH_HEAD
+          rm -rf third_party/skia
+          git clone --filter=blob:none --no-checkout \
+            https://skia.googlesource.com/skia.git third_party/skia
+          git -C third_party/skia checkout 6c7fd08b91efe0fa97a39474d7e4ca90807384ec
 
       - name: Install Homebrew dependencies
         run: |
