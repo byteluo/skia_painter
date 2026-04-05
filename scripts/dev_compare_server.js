@@ -135,7 +135,9 @@ const server = http.createServer(async (request, response) => {
   }
 
   if (request.method === "GET" && url.pathname === "/") {
-    serveFile(response, path.join(rootDir, "web", "compare", "index.html"));
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    const html = fs.readFileSync(path.join(rootDir, "web", "compare", "index.html"), "utf8");
+    response.end(html.replace("</head>", "<script>window.__devServer=true;</script></head>"));
     return;
   }
 
@@ -166,6 +168,22 @@ const server = http.createServer(async (request, response) => {
       return;
     }
     serveFile(response, targetPath);
+    return;
+  }
+
+  // Serve compare files at root level (relative path support)
+  {
+    const compareDir = path.join(rootDir, "web", "compare");
+    const targetPath = safeJoin(compareDir, url.pathname);
+    if (targetPath && fs.existsSync(targetPath) && fs.statSync(targetPath).isFile()) {
+      serveFile(response, targetPath);
+      return;
+    }
+  }
+
+  // Serve echarts.js at root (for relative path in index.html)
+  if (request.method === "GET" && url.pathname === "/echarts.js") {
+    serveFile(response, path.join(rootDir, "node_modules", "echarts", "dist", "echarts.js"));
     return;
   }
 

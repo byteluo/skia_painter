@@ -37,8 +37,11 @@ function preloadImage(imageUrl) {
   });
 }
 
+const isStaticMode = !window.__devServer;
+
 async function loadCases() {
-  const response = await fetch("/api/cases");
+  const url = isStaticMode ? "cases.json" : "/api/cases";
+  const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`failed to load cases: ${response.status}`);
   }
@@ -4654,6 +4657,26 @@ async function renderEngineCase() {
   }
 
   const requestId = ++engineRenderRequestId;
+
+  if (isStaticMode) {
+    const imageUrl = `${caseInfo.outputFile}?t=${Date.now()}`;
+    setEngineLoading(true, `加载 PNG: ${caseInfo.title}`);
+    try {
+      await preloadImage(imageUrl);
+      if (requestId !== engineRenderRequestId) return;
+      engineImageElement.src = imageUrl;
+      engineImageElement.style.display = "block";
+      enginePlaceholderElement.style.display = "none";
+      setStatus(`已加载: ${caseInfo.title}`);
+    } catch {
+      if (requestId !== engineRenderRequestId) return;
+      setStatus(`PNG 加载失败: ${caseInfo.title}`);
+    } finally {
+      if (requestId === engineRenderRequestId) setEngineLoading(false);
+    }
+    return;
+  }
+
   setEngineLoading(true, `后端 PNG 渲染中: ${caseInfo.title}`);
   setStatus(`后端渲染中: ${caseInfo.title}`);
 
