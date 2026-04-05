@@ -86,6 +86,7 @@ jobs:
             --noworkspace_rc \
             --output_user_root="${GITHUB_WORKSPACE}/build/bazel-root" \
             build \
+            --cxxopt=-std=c++20 \
             //:core \
             //src/base:base \
             //modules/skcms:skcms
