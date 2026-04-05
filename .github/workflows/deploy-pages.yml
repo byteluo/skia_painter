@@ -50,7 +50,7 @@ jobs:
 
           for attempt in 1 2 3 4; do
             echo "Attempt $attempt: cloning Skia..."
-            if git clone --single-branch https://skia.googlesource.com/skia.git third_party/skia; then
+            if git clone https://skia.googlesource.com/skia.git third_party/skia; then
               cd third_party/skia
               git checkout "${SKIA_COMMIT}"
               echo "Clone and checkout succeeded"
