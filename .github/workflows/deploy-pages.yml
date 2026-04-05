@@ -34,31 +34,35 @@ jobs:
 
       - name: Clone Skia submodule
         run: |
-          # Skip if cache restored the Skia source + build artifacts
+          # Skip if cache restored the Skia source
           if [[ -f "third_party/skia/MODULE.bazel" ]]; then
             echo "Skia already present (from cache), skipping clone"
             exit 0
           fi
 
-          # Clone with retry logic (googlesource.com can be flaky)
+          # googlesource.com does not support fetching commits by SHA directly,
+          # so we cannot use `git submodule update --init`. Instead, clone the
+          # full repo and checkout the pinned commit.
+          SKIA_COMMIT="$(git ls-tree HEAD third_party/skia | awk '{print $3}')"
+          echo "Pinned Skia commit: ${SKIA_COMMIT}"
+
+          rm -rf third_party/skia
+
           for attempt in 1 2 3 4; do
-            echo "Attempt $attempt: cloning Skia submodule..."
-            if git submodule update --init third_party/skia; then
-              echo "Clone succeeded"
+            echo "Attempt $attempt: cloning Skia..."
+            if git clone --filter=blob:none https://skia.googlesource.com/skia.git third_party/skia; then
+              cd third_party/skia
+              git checkout "${SKIA_COMMIT}"
+              echo "Clone and checkout succeeded"
               exit 0
             fi
-            # Clean up failed partial clone
             rm -rf third_party/skia
-            mkdir -p third_party/skia
             echo "Attempt $attempt failed, waiting $((attempt * 10))s..."
             sleep $((attempt * 10))
           done
 
           echo "All clone attempts failed"
           exit 1
-        env:
-          GIT_HTTP_LOW_SPEED_LIMIT: 500
-          GIT_HTTP_LOW_SPEED_TIME: 120
 
       - uses: actions/setup-node@v4
         with:
