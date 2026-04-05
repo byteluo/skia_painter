@@ -16,7 +16,10 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
+    env:
+      V8_ROOT: /usr/local
+      V8_ICU_DATA_DIR: /usr/local/share/v8
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,15 +29,68 @@ jobs:
         with:
           node-version: 20
 
-      - name: Cache Homebrew packages
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            cmake ninja-build pkg-config g++ \
+            libpng-dev libfreetype-dev zlib1g-dev \
+            python3 default-jdk
+
+      - name: Cache V8 build
+        id: cache-v8
         uses: actions/cache@v4
         with:
-          path: |
-            ~/Library/Caches/Homebrew
-            /opt/homebrew/opt/v8
-            /opt/homebrew/opt/bazel@8
-          key: brew-${{ runner.os }}-${{ hashFiles('scripts/bootstrap.sh') }}
-          restore-keys: brew-${{ runner.os }}-
+          path: build/v8-build
+          key: v8-linux-x64-${{ runner.arch }}
+
+      - name: Install Bazelisk
+        run: |
+          if ! command -v bazel &>/dev/null; then
+            curl -fsSL "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64" \
+              -o /tmp/bazelisk
+            chmod +x /tmp/bazelisk
+            sudo mv /tmp/bazelisk /usr/local/bin/bazel
+          fi
+
+      - name: Build V8 from source
+        if: steps.cache-v8.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p build/v8-build
+          cd build/v8-build
+
+          # Install depot_tools
+          if [ ! -d depot_tools ]; then
+            git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          fi
+          export PATH="$(pwd)/depot_tools:$PATH"
+
+          # Fetch and build V8
+          if [ ! -d v8 ]; then
+            fetch v8
+          fi
+          cd v8
+          gclient sync
+
+          tools/dev/v8gen.py x64.release -- \
+            is_component_build=true \
+            v8_use_external_startup_data=true \
+            v8_enable_i18n_support=true \
+            treat_warnings_as_errors=false
+
+          ninja -C out.gn/x64.release v8 v8_libplatform
+        timeout-minutes: 120
+
+      - name: Install V8
+        run: |
+          V8_BUILD="build/v8-build/v8"
+          sudo mkdir -p /usr/local/include /usr/local/lib /usr/local/share/v8
+
+          sudo cp -r "${V8_BUILD}/include/"* /usr/local/include/
+          sudo cp ${V8_BUILD}/out.gn/x64.release/lib*.so /usr/local/lib/ 2>/dev/null || true
+          sudo cp ${V8_BUILD}/out.gn/x64.release/*.so /usr/local/lib/ 2>/dev/null || true
+          sudo cp ${V8_BUILD}/out.gn/x64.release/icudtl.dat /usr/local/share/v8/
+          sudo ldconfig
 
       - name: Cache Skia build
         uses: actions/cache@v4
@@ -42,26 +98,39 @@ jobs:
           path: |
             third_party/skia/bazel-bin
             build/bazel-root
-          key: skia-${{ runner.os }}-${{ hashFiles('third_party/skia/.git') }}
-          restore-keys: skia-${{ runner.os }}-
+          key: skia-linux-${{ hashFiles('.gitmodules') }}
+          restore-keys: skia-linux-
 
-      - name: Cache CMake build
-        uses: actions/cache@v4
-        with:
-          path: build/release
-          key: cmake-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'src/**') }}
-          restore-keys: cmake-${{ runner.os }}-
+      - name: Build Skia
+        run: |
+          cd third_party/skia
+          bazel \
+            --batch \
+            --noworkspace_rc \
+            --output_user_root="${GITHUB_WORKSPACE}/build/bazel-root" \
+            build \
+            //:core \
+            //src/base:base \
+            //modules/skcms:skcms
 
       - name: Install npm dependencies
         run: npm ci
 
       - name: Build canvas engine
-        run: ./scripts/bootstrap.sh release
+        run: |
+          cmake --preset release \
+            -DV8_INCLUDE_DIRS="/usr/local/include" \
+            -DV8_LINK_DIRECTORIES="/usr/local/lib" \
+            -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase" \
+            -DV8_COMPILE_DEFINITIONS="V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH;V8_ENABLE_SANDBOX"
+          cmake --build --preset release
 
       - name: Generate all PNGs
         run: |
           mkdir -p output
           ENGINE="./build/release/canvas_engine"
+          export LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH:-}"
+          export V8_ICU_DATA_DIR="/usr/local/share/v8"
           for script in examples/echarts_*.js; do
             echo "Rendering: $script"
             "$ENGINE" "$script" || echo "Warning: $script failed"
