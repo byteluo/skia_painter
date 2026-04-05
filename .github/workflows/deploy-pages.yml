@@ -23,6 +23,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            cmake ninja-build pkg-config g++ clang \
+            libpng-dev libfreetype-dev zlib1g-dev \
+            python3 default-jdk
+
+      - name: Install Bazelisk
+        run: |
+          if ! command -v bazel &>/dev/null; then
+            curl -fsSL "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64" \
+              -o /tmp/bazelisk
+            chmod +x /tmp/bazelisk
+            sudo mv /tmp/bazelisk /usr/local/bin/bazel
+          fi
+
+      # ── Skia (build first for fast feedback) ──
+
       - name: Cache Skia
         uses: actions/cache@v4
         with:
@@ -34,17 +53,12 @@ jobs:
 
       - name: Download Skia source
         run: |
-          # Skip if cache restored the Skia source
           if [[ -f "third_party/skia/MODULE.bazel" ]]; then
             echo "Skia already present (from cache), skipping download"
             exit 0
           fi
 
-          # googlesource.com git protocol is unreliable from CI runners.
-          # Download source tarball instead — no git needed.
-          SKIA_REF="refs/heads/main"
-          TARBALL_URL="https://skia.googlesource.com/skia/+archive/${SKIA_REF}.tar.gz"
-
+          TARBALL_URL="https://skia.googlesource.com/skia/+archive/refs/heads/main.tar.gz"
           rm -rf third_party/skia
           mkdir -p third_party/skia
 
@@ -57,21 +71,26 @@ jobs:
             echo "Attempt $attempt failed, waiting $((attempt * 10))s..."
             sleep $((attempt * 10))
           done
-
           echo "All download attempts failed"
           exit 1
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install system dependencies
+      - name: Build Skia
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq \
-            cmake ninja-build pkg-config g++ clang \
-            libpng-dev libfreetype-dev zlib1g-dev \
-            python3 default-jdk
+          if [[ -f "third_party/skia/bazel-bin/src/core/libcore.a" ]]; then
+            echo "Skia build artifacts found in cache, skipping build"
+            exit 0
+          fi
+          cd third_party/skia
+          CC=clang CXX=clang++ bazel \
+            --batch \
+            --noworkspace_rc \
+            --output_user_root="${GITHUB_WORKSPACE}/build/bazel-root" \
+            build \
+            //:core \
+            //src/base:base \
+            //modules/skcms:skcms
+
+      # ── V8 (slow, cached after first build) ──
 
       - name: Cache V8 build
         id: cache-v8
@@ -80,28 +99,17 @@ jobs:
           path: build/v8-build
           key: v8-linux-x64-${{ runner.arch }}
 
-      - name: Install Bazelisk
-        run: |
-          if ! command -v bazel &>/dev/null; then
-            curl -fsSL "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64" \
-              -o /tmp/bazelisk
-            chmod +x /tmp/bazelisk
-            sudo mv /tmp/bazelisk /usr/local/bin/bazel
-          fi
-
       - name: Build V8 from source
         if: steps.cache-v8.outputs.cache-hit != 'true'
         run: |
           mkdir -p build/v8-build
           cd build/v8-build
 
-          # Install depot_tools
           if [ ! -d depot_tools ]; then
             git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
           fi
           export PATH="$(pwd)/depot_tools:$PATH"
 
-          # Fetch and build V8
           if [ ! -d v8 ]; then
             fetch v8
           fi
@@ -128,21 +136,11 @@ jobs:
           sudo cp ${V8_BUILD}/out.gn/x64.release/icudtl.dat /usr/local/share/v8/
           sudo ldconfig
 
-      - name: Build Skia
-        run: |
-          if [[ -f "third_party/skia/bazel-bin/src/core/libcore.a" ]]; then
-            echo "Skia build artifacts found in cache, skipping build"
-            exit 0
-          fi
-          cd third_party/skia
-          CC=clang CXX=clang++ bazel \
-            --batch \
-            --noworkspace_rc \
-            --output_user_root="${GITHUB_WORKSPACE}/build/bazel-root" \
-            build \
-            //:core \
-            //src/base:base \
-            //modules/skcms:skcms
+      # ── Build engine & generate PNGs ──
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
       - name: Install npm dependencies
         run: npm ci
