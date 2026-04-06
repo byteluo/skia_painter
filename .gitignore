@@ -5,8 +5,9 @@
 /build-*/
 /cmake-build-*/
 
-# Generated output
-/output/
+# Generated output (PNGs are committed for GitHub Pages)
+# /output/
+/output/.DS_Store
 
 # Local editor and cache files
 .idea/

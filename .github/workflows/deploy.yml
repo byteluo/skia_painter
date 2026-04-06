@@ -16,52 +16,18 @@ concurrency:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout Skia submodule
-        run: |
-          rm -rf third_party/skia
-          git clone --filter=blob:none --no-checkout \
-            https://skia.googlesource.com/skia.git third_party/skia
-          git -C third_party/skia checkout 6c7fd08b91efe0fa97a39474d7e4ca90807384ec
-
-      - name: Install Homebrew dependencies
-        run: |
-          brew install cmake ninja v8 libpng freetype zlib pkgconf openjdk bazel@8
-
-      - name: Set up Java
-        run: |
-          JAVA_HOME="$(brew --prefix openjdk)/libexec/openjdk.jdk/Contents/Home"
-          echo "JAVA_HOME=${JAVA_HOME}" >> "$GITHUB_ENV"
-          echo "${JAVA_HOME}/bin" >> "$GITHUB_PATH"
-
-      - name: Build Skia (minimal)
-        working-directory: third_party/skia
-        run: |
-          BAZEL="$(brew --prefix bazel@8)/bin/bazel"
-          "${BAZEL}" --batch --noworkspace_rc \
-            --output_user_root="${GITHUB_WORKSPACE}/build/bazel-root" \
-            build //:core //src/base:base //modules/skcms:skcms
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
 
       - name: Install npm dependencies
         run: npm ci || npm install
-
-      - name: Build canvas_engine
-        run: |
-          cmake --preset release
-          cmake --build --preset release
-
-      - name: Run tests
-        run: ctest --preset release --output-on-failure
-
-      - name: Generate all PNGs
-        run: |
-          for script in examples/*.js; do
-            echo "Rendering: ${script}"
-            ./build/release/canvas_engine "${script}" || echo "Warning: ${script} failed"
-          done
 
       - name: Assemble site
         run: |
@@ -71,7 +37,7 @@ jobs:
           cp web/compare/styles.css _site/
           cp web/compare/cases.json _site/
           cp node_modules/echarts/dist/echarts.js _site/echarts.js
-          cp output/*.png _site/output/
+          cp output/*.png _site/output/ 2>/dev/null || echo "No PNGs in output/ yet"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

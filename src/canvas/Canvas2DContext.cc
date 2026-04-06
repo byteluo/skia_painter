@@ -130,6 +130,7 @@ std::string ParseFontFamily(std::string_view font) {
   }
   families = StripQuotes(Trim(families));
   const std::string lower = ToLower(families);
+#if defined(__APPLE__)
   if (lower == "sans-serif" || lower == "system-ui" || lower == "-apple-system") {
     return "Helvetica";
   }
@@ -140,6 +141,18 @@ std::string ParseFontFamily(std::string_view font) {
     return "Menlo";
   }
   return families.empty() ? "Helvetica" : families;
+#else
+  if (lower == "sans-serif" || lower == "system-ui" || lower == "-apple-system") {
+    return "DejaVu Sans";
+  }
+  if (lower == "serif") {
+    return "DejaVu Serif";
+  }
+  if (lower == "monospace") {
+    return "DejaVu Sans Mono";
+  }
+  return families.empty() ? "DejaVu Sans" : families;
+#endif
 }
 
 #if defined(__APPLE__)
