@@ -58,17 +58,29 @@ std::string ToStdString(v8::Isolate* isolate, v8::Local<v8::Value> value) {
 }
 
 std::string DetectV8DataDir() {
-#if defined(__APPLE__)
   constexpr const char* kCandidateDirs[] = {
+#if defined(__APPLE__)
       "/opt/homebrew/opt/v8/libexec",
       "/usr/local/opt/v8/libexec",
+#else
+      "/usr/local/lib",
+      "/usr/lib/v8",
+      "/usr/share/v8",
+      "/opt/v8/lib",
+#endif
   };
   for (const char* dir : kCandidateDirs) {
     if (std::filesystem::exists(std::filesystem::path(dir) / "icudtl.dat")) {
       return dir;
     }
   }
-#endif
+
+  // Check V8_DATA_DIR environment variable as last resort.
+  if (const char* env = std::getenv("V8_DATA_DIR")) {
+    if (std::filesystem::exists(std::filesystem::path(env) / "icudtl.dat")) {
+      return env;
+    }
+  }
   return {};
 }
 
