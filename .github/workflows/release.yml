@@ -42,6 +42,12 @@ jobs:
           echo "JAVA_HOME=${JAVA_HOME}" >> "$GITHUB_ENV"
           echo "${JAVA_HOME}/bin" >> "$GITHUB_PATH"
 
+      - name: Cache Bazel output root
+        uses: actions/cache@v4
+        with:
+          path: build/bazel-root
+          key: bazel-${{ runner.os }}-${{ runner.arch }}-${{ env.SKIA_COMMIT }}-v1
+
       - name: Build Skia (minimal)
         working-directory: third_party/skia
         run: |
@@ -106,7 +112,32 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Linux binary via Docker
+      # Build the v8-builder stage first with its own cache scope so the
+      # ~60 min V8 compile is preserved even if project code changes invalidate
+      # later stages.
+      - name: Build v8-builder stage (cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          target: v8-builder
+          load: false
+          cache-from: type=gha,scope=v8
+          cache-to: type=gha,mode=max,scope=v8
+
+      - name: Build skia-builder stage (cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          target: skia-builder
+          load: false
+          cache-from: |
+            type=gha,scope=v8
+            type=gha,scope=skia
+          cache-to: type=gha,mode=max,scope=skia
+
+      - name: Build canvas_engine (project-builder)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -114,8 +145,11 @@ jobs:
           target: project-builder
           load: true
           tags: skia-painter-build:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: |
+            type=gha,scope=v8
+            type=gha,scope=skia
+            type=gha,scope=project
+          cache-to: type=gha,mode=max,scope=project
 
       - name: Extract Linux binary
         run: |

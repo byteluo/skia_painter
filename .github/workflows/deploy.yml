@@ -14,8 +14,98 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+env:
+  SKIA_COMMIT: 6c7fd08b91efe0fa97a39474d7e4ca90807384ec
+
 jobs:
+  # ---------------------------------------------------------------------------
+  # Render all ECharts examples on a macOS runner (Homebrew V8 + cached Skia).
+  # ~3–10 min with warm caches. Produces an artifact consumed by `build`.
+  # ---------------------------------------------------------------------------
+  render:
+    runs-on: macos-15
+    outputs:
+      rendered: ${{ steps.flag.outputs.ok }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout Skia source at pinned commit
+        run: |
+          rm -rf third_party/skia
+          git clone --filter=blob:none --no-checkout \
+            https://skia.googlesource.com/skia.git third_party/skia
+          git -C third_party/skia checkout ${{ env.SKIA_COMMIT }}
+
+      - name: Install Homebrew dependencies
+        run: |
+          brew install cmake ninja v8 libpng freetype zlib pkgconf openjdk bazel@8
+
+      - name: Set up Java
+        run: |
+          JAVA_HOME="$(brew --prefix openjdk)/libexec/openjdk.jdk/Contents/Home"
+          echo "JAVA_HOME=${JAVA_HOME}" >> "$GITHUB_ENV"
+          echo "${JAVA_HOME}/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Bazel output root
+        uses: actions/cache@v4
+        with:
+          path: build/bazel-root
+          key: bazel-${{ runner.os }}-${{ runner.arch }}-${{ env.SKIA_COMMIT }}-v1
+
+      - name: Build Skia (minimal)
+        working-directory: third_party/skia
+        run: |
+          BAZEL="$(brew --prefix bazel@8)/libexec/bin/bazel-real"
+          "${BAZEL}" --batch --noworkspace_rc \
+            --output_user_root="${GITHUB_WORKSPACE}/build/bazel-root" \
+            build //:core //src/base:base //modules/skcms:skcms
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci || npm install
+
+      - name: Build canvas_engine
+        run: |
+          cmake --preset release
+          cmake --build --preset release
+
+      - name: Render all examples
+        run: |
+          mkdir -p output
+          failures=0
+          for script in examples/*.js; do
+            echo "::group::Render ${script}"
+            if ! ./build/release/canvas_engine "${script}"; then
+              echo "::warning::Render failed for ${script}"
+              failures=$((failures + 1))
+            fi
+            echo "::endgroup::"
+          done
+          echo "Rendered $(ls output/*.png 2>/dev/null | wc -l) PNGs (${failures} failures)"
+
+      - id: flag
+        run: echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload rendered PNGs
+        uses: actions/upload-artifact@v4
+        with:
+          name: fresh-pngs
+          path: output/*.png
+          if-no-files-found: error
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Assemble the static site. Uses freshly-rendered PNGs when render succeeded,
+  # otherwise falls back to the PNGs committed under output/.
+  # ---------------------------------------------------------------------------
   build:
+    needs: render
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +119,13 @@ jobs:
       - name: Install npm dependencies
         run: npm ci || npm install
 
+      - name: Download freshly-rendered PNGs
+        if: needs.render.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: fresh-pngs
+          path: _fresh_pngs
+
       - name: Assemble site
         run: |
           mkdir -p _site/output
@@ -37,7 +134,18 @@ jobs:
           cp web/compare/styles.css _site/
           cp web/compare/cases.json _site/
           cp node_modules/echarts/dist/echarts.js _site/echarts.js
-          cp output/*.png _site/output/ 2>/dev/null || echo "No PNGs in output/ yet"
+
+          if compgen -G "_fresh_pngs/*.png" > /dev/null; then
+            echo "Using freshly-rendered PNGs from the render job."
+            cp _fresh_pngs/*.png _site/output/
+          elif compgen -G "output/*.png" > /dev/null; then
+            echo "::warning::Render job did not produce PNGs; falling back to committed output/*.png"
+            cp output/*.png _site/output/
+          else
+            echo "::error::No PNGs available — site will render without backend images."
+          fi
+
+          echo "Site contains $(ls _site/output/*.png 2>/dev/null | wc -l) PNGs."
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
