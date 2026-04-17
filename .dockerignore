@@ -1,0 +1,12 @@
+# Exclude heavy directories from Docker build context
+third_party/
+build/
+build-*/
+node_modules/
+output/
+.git/
+
+# macOS artifacts
+.DS_Store
+*.swp
+*.swo
