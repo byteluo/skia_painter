@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 
@@ -12,10 +13,14 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreGraphics/CoreGraphics.h>
 #include <CoreText/CoreText.h>
+#elif defined(__linux__)
+#include "include/ports/SkFontMgr_fontconfig.h"
+#include "include/ports/SkFontScanner_FreeType.h"
 #endif
 
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
+#include "include/core/SkFontMgr.h"
 #include "include/core/SkFontMetrics.h"
 #include "include/core/SkFontTypes.h"
 #include "include/core/SkMatrix.h"
@@ -23,6 +28,7 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkSamplingOptions.h"
+#include "include/core/SkTypeface.h"
 #include "include/effects/SkDashPathEffect.h"
 #include "include/effects/SkImageFilters.h"
 
@@ -844,6 +850,21 @@ SkFont Canvas2DContext::MakeFont() const {
   font.setSize(state_.font_size);
   font.setSubpixel(true);
   font.setEdging(SkFont::Edging::kAntiAlias);
+#if defined(__linux__)
+  static sk_sp<SkFontMgr> font_mgr =
+      SkFontMgr_New_FontConfig(nullptr, SkFontScanner_Make_FreeType());
+  if (font_mgr) {
+    const std::string family = ParseFontFamily(state_.font_css);
+    sk_sp<SkTypeface> typeface =
+        font_mgr->matchFamilyStyle(family.c_str(), SkFontStyle());
+    if (!typeface) {
+      typeface = font_mgr->legacyMakeTypeface(nullptr, SkFontStyle());
+    }
+    if (typeface) {
+      font.setTypeface(std::move(typeface));
+    }
+  }
+#endif
   return font;
 }
 
@@ -941,8 +962,18 @@ void Canvas2DContext::DrawText(std::string_view text, float x, float y,
         CGContextSetShouldAntialias(cg, true);
         CGContextSetAllowsAntialiasing(cg, true);
         const SkMatrix matrix = surface_->canvas()->getTotalMatrix();
-        const float pixel_ratio = surface_->pixel_ratio();
         CGContextSetTextMatrix(cg, CGAffineTransformIdentity);
+        CGContextSaveGState(cg);
+        CGContextTranslateCTM(cg, 0.0, static_cast<CGFloat>(pixmap.height()));
+        CGContextScaleCTM(cg, 1.0, -1.0);
+        CGContextConcatCTM(
+            cg, CGAffineTransformMake(
+                    static_cast<CGFloat>(matrix.getScaleX()),
+                    static_cast<CGFloat>(matrix.getSkewY()),
+                    static_cast<CGFloat>(matrix.getSkewX()),
+                    static_cast<CGFloat>(matrix.getScaleY()),
+                    static_cast<CGFloat>(matrix.getTranslateX()),
+                    static_cast<CGFloat>(matrix.getTranslateY())));
 
         const TextMetrics text_metrics = MeasureText(text);
         float draw_x = x;
@@ -966,19 +997,11 @@ void Canvas2DContext::DrawText(std::string_view text, float x, float y,
 
         const std::string family = ParseFontFamily(state_.font_css);
         ScopedCFTypeRef line(CreateTextLine(
-            text, family, state_.font_size * pixel_ratio,
+            text, family, state_.font_size,
             paint.getStyle() == SkPaint::kStroke_Style ? state_.stroke_style
                                                        : state_.fill_style,
             state_.global_alpha));
         if (line.value != nullptr) {
-          std::array<SkPoint, 1> source_points = {SkPoint::Make(draw_x, baseline_y)};
-          std::array<SkPoint, 1> device_points;
-          matrix.mapPoints(device_points, source_points);
-          const SkPoint device_point = device_points[0];
-          const CGFloat cg_x = static_cast<CGFloat>(device_point.x());
-          const CGFloat cg_y =
-              static_cast<CGFloat>(pixmap.height() - device_point.y());
-
           if ((SkColorGetA(state_.shadow_color) > 0) &&
               (state_.shadow_blur > 0.0f || state_.shadow_offset_x != 0.0f ||
                state_.shadow_offset_y != 0.0f)) {
@@ -991,22 +1014,23 @@ void Canvas2DContext::DrawText(std::string_view text, float x, float y,
             if (shadow_color != nullptr) {
               CGContextSetShadowWithColor(
                   cg,
-                  CGSizeMake(static_cast<CGFloat>(state_.shadow_offset_x *
-                                                 pixel_ratio),
-                             static_cast<CGFloat>(-state_.shadow_offset_y *
-                                                  pixel_ratio)),
-                  static_cast<CGFloat>(state_.shadow_blur * pixel_ratio),
+                  CGSizeMake(static_cast<CGFloat>(state_.shadow_offset_x),
+                             static_cast<CGFloat>(-state_.shadow_offset_y)),
+                  static_cast<CGFloat>(state_.shadow_blur),
                   shadow_color);
               CGColorRelease(shadow_color);
             }
           }
 
-          CGContextSetTextPosition(cg, cg_x, cg_y);
+          CGContextSetTextPosition(cg, static_cast<CGFloat>(draw_x),
+                                   static_cast<CGFloat>(baseline_y));
           CTLineDraw(static_cast<CTLineRef>(line.value), cg);
+          CGContextRestoreGState(cg);
           CGContextRelease(cg);
           return;
         }
 
+        CGContextRestoreGState(cg);
         CGContextRelease(cg);
       }
     }

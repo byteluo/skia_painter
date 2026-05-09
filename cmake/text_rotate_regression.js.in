@@ -1,0 +1,14 @@
+const canvas = new Canvas(220, 160);
+const ctx = canvas.getContext("2d");
+
+ctx.fillStyle = "#ffffff";
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+ctx.fillStyle = "#000000";
+ctx.font = "40px sans-serif";
+ctx.translate(44, 96);
+ctx.rotate(Math.PI / 6);
+ctx.fillText("HELLO", 0, 0);
+
+canvas.saveToPng("@TEXT_ROTATE_REGRESSION_OUTPUT_PNG@");
+print("wrote @TEXT_ROTATE_REGRESSION_OUTPUT_PNG@");

@@ -54,16 +54,31 @@ elseif(UNIX)
   endif()
   if("${V8_COMPILE_DEFINITIONS}" STREQUAL "" AND NOT "${V8_INCLUDE_DIRS}" STREQUAL "")
     set(V8_COMPILE_DEFINITIONS
-      "V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH;V8_ENABLE_SANDBOX")
+      "V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH")
   endif()
 endif()
 
 set(SKIA_LOCAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/skia")
 set(SKIA_LOCAL_CORE "${SKIA_LOCAL_ROOT}/bazel-bin/src/core/libcore.a")
 set(SKIA_LOCAL_BASE "${SKIA_LOCAL_ROOT}/bazel-bin/src/base/libbase.a")
-set(SKIA_LOCAL_SKCMS "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.o")
+set(SKIA_LOCAL_PNG_ENCODE "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libpng_encode.a")
+set(SKIA_LOCAL_PNG_ENCODE_BASE "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libpng_encode_base.a")
+set(SKIA_LOCAL_ENCODER_COMMON "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libencoder_common.a")
+set(SKIA_LOCAL_ICC_SUPPORT "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libicc_support.a")
+set(SKIA_LOCAL_ANY_DECODER "${SKIA_LOCAL_ROOT}/bazel-bin/src/codec/libany_decoder.a")
+set(SKIA_LOCAL_FONTMGR_FONTCONFIG "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_fontconfig.a")
+set(SKIA_LOCAL_FREETYPE_SUPPORT "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfreetype_support.a")
+set(SKIA_LOCAL_TYPEFACE_PROXY "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libtypeface_proxy.a")
+set(SKIA_LOCAL_CHAR_TO_GLYPHCACHE "${SKIA_LOCAL_ROOT}/bazel-bin/src/utils/libchar_to_glyphcache.a")
+set(SKIA_LOCAL_FREETYPE "${SKIA_LOCAL_ROOT}/bazel-bin/external/+cpp_modules+freetype/libfreetype.a")
+set(SKIA_LOCAL_OPTS_ML3 "${SKIA_LOCAL_ROOT}/bazel-bin/src/opts/libml3.a")
+set(SKIA_LOCAL_SKCMS "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.pic.o")
 set(SKIA_LOCAL_SKCMS_BASELINE
-    "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.o")
+    "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o")
+set(SKIA_LOCAL_SKCMS_HSW
+    "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o")
+set(SKIA_LOCAL_SKCMS_SKX
+    "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o")
 
 if("${SKIA_INCLUDE_DIRS}" STREQUAL "" AND EXISTS "${SKIA_LOCAL_ROOT}/include/core/SkCanvas.h")
   set(SKIA_INCLUDE_DIRS "${SKIA_LOCAL_ROOT}")
@@ -72,10 +87,23 @@ endif()
 if("${SKIA_LIBRARIES}" STREQUAL "" AND
    EXISTS "${SKIA_LOCAL_CORE}" AND
    EXISTS "${SKIA_LOCAL_BASE}" AND
+   EXISTS "${SKIA_LOCAL_PNG_ENCODE}" AND
+   EXISTS "${SKIA_LOCAL_PNG_ENCODE_BASE}" AND
+   EXISTS "${SKIA_LOCAL_ENCODER_COMMON}" AND
+   EXISTS "${SKIA_LOCAL_ICC_SUPPORT}" AND
+   EXISTS "${SKIA_LOCAL_ANY_DECODER}" AND
+   EXISTS "${SKIA_LOCAL_FONTMGR_FONTCONFIG}" AND
+   EXISTS "${SKIA_LOCAL_FREETYPE_SUPPORT}" AND
+   EXISTS "${SKIA_LOCAL_TYPEFACE_PROXY}" AND
+   EXISTS "${SKIA_LOCAL_CHAR_TO_GLYPHCACHE}" AND
+   EXISTS "${SKIA_LOCAL_FREETYPE}" AND
+   EXISTS "${SKIA_LOCAL_OPTS_ML3}" AND
    EXISTS "${SKIA_LOCAL_SKCMS}" AND
-   EXISTS "${SKIA_LOCAL_SKCMS_BASELINE}")
+   EXISTS "${SKIA_LOCAL_SKCMS_BASELINE}" AND
+   EXISTS "${SKIA_LOCAL_SKCMS_HSW}" AND
+   EXISTS "${SKIA_LOCAL_SKCMS_SKX}")
   set(SKIA_LIBRARIES
-    "${SKIA_LOCAL_CORE};${SKIA_LOCAL_BASE};${SKIA_LOCAL_SKCMS};${SKIA_LOCAL_SKCMS_BASELINE}")
+    "${SKIA_LOCAL_PNG_ENCODE};${SKIA_LOCAL_PNG_ENCODE_BASE};${SKIA_LOCAL_ENCODER_COMMON};${SKIA_LOCAL_ANY_DECODER};${SKIA_LOCAL_ICC_SUPPORT};${SKIA_LOCAL_FONTMGR_FONTCONFIG};${SKIA_LOCAL_TYPEFACE_PROXY};${SKIA_LOCAL_FREETYPE_SUPPORT};${SKIA_LOCAL_CHAR_TO_GLYPHCACHE};${SKIA_LOCAL_FREETYPE};${SKIA_LOCAL_CORE};${SKIA_LOCAL_BASE};${SKIA_LOCAL_OPTS_ML3};${SKIA_LOCAL_SKCMS};${SKIA_LOCAL_SKCMS_BASELINE};${SKIA_LOCAL_SKCMS_HSW};${SKIA_LOCAL_SKCMS_SKX}")
 endif()
 
 foreach(required_var
@@ -91,6 +119,8 @@ endforeach()
 
 find_package(Threads REQUIRED)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
+find_package(PNG REQUIRED)
+find_package(ZLIB REQUIRED)
 include(CTest)
 include(GNUInstallDirs)
 
@@ -102,6 +132,26 @@ add_executable(canvas_engine
   src/canvas/ImageAsset.cc
   src/runtime/ScriptEngine.cc
 )
+
+add_executable(color_parser_test
+  tests/color_parser_test.cc
+  src/canvas/ColorParser.cc
+)
+
+target_include_directories(color_parser_test
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${SKIA_INCLUDE_DIRS}
+)
+
+target_link_libraries(color_parser_test
+  PRIVATE
+    ${SKIA_LIBRARIES}
+    Threads::Threads
+    PNG::PNG
+    ZLIB::ZLIB
+)
+target_link_libraries(color_parser_test PRIVATE fontconfig)
 
 target_include_directories(canvas_engine
   PRIVATE
@@ -127,7 +177,9 @@ target_link_libraries(canvas_engine
     ${V8_LIBRARIES}
     ${SKIA_LIBRARIES}
     Threads::Threads
+    ZLIB::ZLIB
 )
+target_link_libraries(canvas_engine PRIVATE fontconfig)
 
 if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
   set_target_properties(canvas_engine PROPERTIES
@@ -146,7 +198,6 @@ if(APPLE)
       "-framework CoreServices"
   )
 elseif(UNIX)
-  find_package(PNG REQUIRED)
   target_include_directories(canvas_engine PRIVATE ${PNG_INCLUDE_DIRS})
   target_link_libraries(canvas_engine PRIVATE dl m PNG::PNG)
 endif()
@@ -161,9 +212,16 @@ if(BUILD_TESTING)
       "${CMAKE_CURRENT_BINARY_DIR}/test_output/regression_stamp.png")
   set(RENDER_REGRESSION_OUTPUT_PNG
       "${CMAKE_CURRENT_BINARY_DIR}/test_output/render_regression.png")
+  set(TEXT_ROTATE_REGRESSION_OUTPUT_PNG
+      "${CMAKE_CURRENT_BINARY_DIR}/test_output/text_rotate_regression.png")
   configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/render_regression.js.in
     ${CMAKE_CURRENT_BINARY_DIR}/render_regression.js
+    @ONLY
+  )
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/text_rotate_regression.js.in
+    ${CMAKE_CURRENT_BINARY_DIR}/text_rotate_regression.js
     @ONLY
   )
 
@@ -173,6 +231,30 @@ if(BUILD_TESTING)
   )
   set_tests_properties(smoke PROPERTIES
     PASS_REGULAR_EXPRESSION "smoke"
+  )
+
+  add_test(
+    NAME handle_gc
+    COMMAND $<TARGET_FILE:canvas_engine>
+            --expose-gc
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/handle_gc.js
+  )
+  set_tests_properties(handle_gc PROPERTIES
+    PASS_REGULAR_EXPRESSION "true\ncanvases=[0-9]+"
+  )
+
+  add_test(
+    NAME color_parser
+    COMMAND color_parser_test
+  )
+
+  add_test(
+    NAME task_queue
+    COMMAND $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/task_queue.js
+  )
+  set_tests_properties(task_queue PROPERTIES
+    PASS_REGULAR_EXPRESSION "deferred"
   )
 
   add_test(
@@ -193,6 +275,27 @@ if(BUILD_TESTING)
   )
   set_tests_properties(render_regression_verify PROPERTIES
     DEPENDS render_regression_render
+  )
+
+  add_test(
+    NAME text_rotate_regression_render
+    COMMAND $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_BINARY_DIR}/text_rotate_regression.js
+  )
+  set_tests_properties(text_rotate_regression_render PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    PASS_REGULAR_EXPRESSION
+      "wrote ${CMAKE_CURRENT_BINARY_DIR}/test_output/text_rotate_regression\\.png"
+  )
+
+  add_test(
+    NAME text_rotate_regression_verify
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_text_rotate_regression.py
+            ${CMAKE_CURRENT_BINARY_DIR}/test_output/text_rotate_regression.png
+  )
+  set_tests_properties(text_rotate_regression_verify PROPERTIES
+    DEPENDS text_rotate_regression_render
   )
 
   add_test(

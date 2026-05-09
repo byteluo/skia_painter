@@ -12,6 +12,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -238,23 +239,48 @@ bool ExtractSixNumbers(const v8::FunctionCallbackInfo<v8::Value>& info,
 
 }  // namespace
 
-struct ScriptEngine::CanvasHandle {
-  explicit CanvasHandle(std::shared_ptr<CanvasSurface> surface_value)
-      : surface(std::move(surface_value)) {}
+struct ScriptEngine::HandleFinalizerData {
+  enum class Kind {
+    kCanvas,
+    kGradient,
+    kImage,
+    kPattern,
+  };
 
+  ScriptEngine* engine = nullptr;
+  Kind kind = Kind::kCanvas;
+  std::uint64_t id = 0;
+};
+
+struct ScriptEngine::ContextObjectFinalizerData {
+  ScriptEngine* engine = nullptr;
+  std::uint64_t canvas_id = 0;
+};
+
+struct ScriptEngine::CanvasHandle {
+  CanvasHandle(std::uint64_t handle_id,
+               std::shared_ptr<CanvasSurface> surface_value)
+      : id(handle_id), surface(std::move(surface_value)) {}
+
+  std::uint64_t id = 0;
   std::shared_ptr<CanvasSurface> surface;
   std::unique_ptr<ContextHandle> context_handle;
+  v8::Global<v8::Object> object;
   v8::Global<v8::Object> context_object;
+  std::unique_ptr<HandleFinalizerData> finalizer_data;
+  std::unique_ptr<ContextObjectFinalizerData> context_finalizer_data;
 };
 
 struct ScriptEngine::ImageHandle {
-  explicit ImageHandle(v8::Isolate* isolate_value) : isolate(isolate_value) {}
+  ImageHandle(std::uint64_t handle_id, v8::Isolate* isolate_value)
+      : id(handle_id), isolate(isolate_value) {}
 
   void ResetCallbacks() {
     onload.Reset();
     onerror.Reset();
   }
 
+  std::uint64_t id = 0;
   v8::Isolate* isolate = nullptr;
   std::string src;
   std::shared_ptr<ImageAsset> asset;
@@ -263,9 +289,15 @@ struct ScriptEngine::ImageHandle {
   v8::Global<v8::Object> object;
   v8::Global<v8::Function> onload;
   v8::Global<v8::Function> onerror;
+  std::unique_ptr<HandleFinalizerData> finalizer_data;
 };
 
 struct ScriptEngine::PatternHandle {
+  explicit PatternHandle(std::uint64_t handle_id) : id(handle_id) {}
+
+  std::uint64_t id = 0;
+  v8::Global<v8::Object> object;
+  std::unique_ptr<HandleFinalizerData> finalizer_data;
   sk_sp<SkShader> shader;
   std::string description = "[object CanvasPattern]";
 };
@@ -281,7 +313,8 @@ struct ScriptEngine::GradientHandle {
     SkColor color = SK_ColorBLACK;
   };
 
-  explicit GradientHandle(Kind gradient_kind) : kind(gradient_kind) {}
+  GradientHandle(std::uint64_t handle_id, Kind gradient_kind)
+      : id(handle_id), kind(gradient_kind) {}
 
   sk_sp<SkShader> BuildShader() const {
     if (stops.empty()) {
@@ -317,6 +350,9 @@ struct ScriptEngine::GradientHandle {
                                               gradient);
   }
 
+  std::uint64_t id = 0;
+  v8::Global<v8::Object> object;
+  std::unique_ptr<HandleFinalizerData> finalizer_data;
   Kind kind;
   float x0 = 0.0f;
   float y0 = 0.0f;
@@ -335,9 +371,10 @@ ScriptEngine::ScriptEngine() {
     const auto icu_data_path =
         (std::filesystem::path(v8_data_dir) / "icudtl.dat").string();
     v8::V8::InitializeICU(icu_data_path.c_str());
-    if (std::filesystem::exists(std::filesystem::path(v8_data_dir) /
-                                "snapshot_blob.bin")) {
-      v8::V8::InitializeExternalStartupData(v8_data_dir.c_str());
+    const auto snapshot_path =
+        (std::filesystem::path(v8_data_dir) / "snapshot_blob.bin").string();
+    if (std::filesystem::exists(snapshot_path)) {
+      v8::V8::InitializeExternalStartupDataFromFile(snapshot_path.c_str());
     }
   } else {
     v8::V8::InitializeICUDefaultLocation(nullptr);
@@ -463,7 +500,21 @@ bool ScriptEngine::DrainPendingTasks() {
     }
 
     std::vector<PendingTask> ready_tasks;
-    ready_tasks.swap(pending_tasks_);
+    std::vector<PendingTask> deferred_tasks;
+    const auto now = Clock::now();
+    for (auto& task : pending_tasks_) {
+      if (task.ready_at <= now) {
+        ready_tasks.push_back(std::move(task));
+      } else {
+        deferred_tasks.push_back(std::move(task));
+      }
+    }
+    pending_tasks_ = std::move(deferred_tasks);
+    if (ready_tasks.empty()) {
+      draining_tasks_ = false;
+      return true;
+    }
+
     for (auto& task : ready_tasks) {
       if (task.cancelled || task.callback.IsEmpty()) {
         continue;
@@ -487,15 +538,20 @@ bool ScriptEngine::DrainPendingTasks() {
     }
   }
 
+  std::cerr << "[canvas_engine] DrainPendingTasks reached " << kMaxDrainRounds
+            << " rounds, " << pending_tasks_.size()
+            << " task(s) deferred" << std::endl;
   draining_tasks_ = false;
   return true;
 }
 
 std::uint32_t ScriptEngine::EnqueueTask(v8::Local<v8::Function> callback,
-                                        bool animation_frame) {
+                                        bool animation_frame,
+                                        Clock::time_point ready_at) {
   PendingTask task;
   task.id = next_timer_id_++;
   task.animation_frame = animation_frame;
+  task.ready_at = ready_at;
   task.callback.Reset(isolate_, callback);
   pending_tasks_.push_back(std::move(task));
   return pending_tasks_.back().id;
@@ -509,6 +565,10 @@ void ScriptEngine::CancelTask(std::uint32_t task_id) {
       return;
     }
   }
+}
+
+std::uint64_t ScriptEngine::NextHandleId() {
+  return next_handle_id_++;
 }
 
 std::filesystem::path ScriptEngine::ResolveScriptPath(
@@ -589,6 +649,12 @@ v8::Local<v8::Context> ScriptEngine::GetContext() {
       ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "performance"),
             performance)
       .Check();
+  global
+      ->Set(context,
+            v8::String::NewFromUtf8Literal(isolate_,
+                                           "__canvasEngineHandleCounts"),
+            v8::Function::New(context, HandleCountsCallback).ToLocalChecked())
+      .Check();
 
   auto navigator = v8::Object::New(isolate_);
   navigator
@@ -597,7 +663,13 @@ v8::Local<v8::Context> ScriptEngine::GetContext() {
       .Check();
   navigator
       ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "platform"),
+#if defined(__APPLE__)
             v8::String::NewFromUtf8Literal(isolate_, "darwin"))
+#elif defined(__linux__)
+            v8::String::NewFromUtf8Literal(isolate_, "linux"))
+#else
+            v8::String::NewFromUtf8Literal(isolate_, "unknown"))
+#endif
       .Check();
   navigator
       ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "language"),
@@ -877,6 +949,123 @@ ScriptEngine* ScriptEngine::From(v8::Isolate* isolate) {
   return static_cast<ScriptEngine*>(isolate->GetData(0));
 }
 
+ScriptEngine::CanvasHandle* ScriptEngine::LiveCanvasHandle(
+    CanvasHandle* handle) const {
+  if (handle == nullptr) {
+    return nullptr;
+  }
+  for (const auto& [id, candidate] : canvases_) {
+    (void)id;
+    if (candidate.get() == handle) {
+      return candidate.get();
+    }
+  }
+  return nullptr;
+}
+
+ScriptEngine::GradientHandle* ScriptEngine::LiveGradientHandle(
+    GradientHandle* handle) const {
+  if (handle == nullptr) {
+    return nullptr;
+  }
+  for (const auto& [id, candidate] : gradients_) {
+    (void)id;
+    if (candidate.get() == handle) {
+      return candidate.get();
+    }
+  }
+  return nullptr;
+}
+
+ScriptEngine::ImageHandle* ScriptEngine::LiveImageHandle(
+    ImageHandle* handle) const {
+  if (handle == nullptr) {
+    return nullptr;
+  }
+  for (const auto& [id, candidate] : images_) {
+    (void)id;
+    if (candidate.get() == handle) {
+      return candidate.get();
+    }
+  }
+  return nullptr;
+}
+
+ScriptEngine::PatternHandle* ScriptEngine::LivePatternHandle(
+    PatternHandle* handle) const {
+  if (handle == nullptr) {
+    return nullptr;
+  }
+  for (const auto& [id, candidate] : patterns_) {
+    (void)id;
+    if (candidate.get() == handle) {
+      return candidate.get();
+    }
+  }
+  return nullptr;
+}
+
+void ScriptEngine::HandleWeakFinalizer(
+    const v8::WeakCallbackInfo<HandleFinalizerData>& data) {
+  auto* finalizer_data = data.GetParameter();
+  if (finalizer_data == nullptr || finalizer_data->engine == nullptr) {
+    return;
+  }
+
+  auto* engine = finalizer_data->engine;
+  switch (finalizer_data->kind) {
+    case HandleFinalizerData::Kind::kCanvas:
+      if (auto it = engine->canvases_.find(finalizer_data->id);
+          it != engine->canvases_.end()) {
+        it->second->object.ClearWeak();
+        it->second->object.Reset();
+        it->second->context_object.Reset();
+        engine->canvases_.erase(it);
+      }
+      break;
+    case HandleFinalizerData::Kind::kGradient:
+      if (auto it = engine->gradients_.find(finalizer_data->id);
+          it != engine->gradients_.end()) {
+        it->second->object.ClearWeak();
+        it->second->object.Reset();
+        engine->gradients_.erase(it);
+      }
+      break;
+    case HandleFinalizerData::Kind::kImage:
+      if (auto it = engine->images_.find(finalizer_data->id);
+          it != engine->images_.end()) {
+        it->second->object.ClearWeak();
+        it->second->object.Reset();
+        engine->images_.erase(it);
+      }
+      break;
+    case HandleFinalizerData::Kind::kPattern:
+      if (auto it = engine->patterns_.find(finalizer_data->id);
+          it != engine->patterns_.end()) {
+        it->second->object.ClearWeak();
+        it->second->object.Reset();
+        engine->patterns_.erase(it);
+      }
+      break;
+  }
+}
+
+void ScriptEngine::ContextObjectWeakFinalizer(
+    const v8::WeakCallbackInfo<ContextObjectFinalizerData>& data) {
+  auto* finalizer_data = data.GetParameter();
+  if (finalizer_data == nullptr || finalizer_data->engine == nullptr) {
+    return;
+  }
+
+  auto canvas = finalizer_data->engine->canvases_.find(finalizer_data->canvas_id);
+  if (canvas == finalizer_data->engine->canvases_.end()) {
+    return;
+  }
+  canvas->second->context_object.ClearWeak();
+  canvas->second->context_object.Reset();
+  canvas->second->context_finalizer_data.reset();
+}
+
 void ScriptEngine::PrintCallback(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   PrintArgs(info);
@@ -915,8 +1104,17 @@ void ScriptEngine::SetTimeoutCallback(
   }
 
   auto* engine = From(isolate);
+  double delay_ms = 0.0;
+  if (info.Length() > 1 && !info[1]->IsUndefined() && !info[1]->IsNull()) {
+    ExtractDouble(info, 1, &delay_ms);
+  }
+  delay_ms = std::max(0.0, delay_ms);
+  const auto ready_at =
+      Clock::now() +
+      std::chrono::duration_cast<Clock::duration>(
+          std::chrono::duration<double, std::milli>(delay_ms));
   const std::uint32_t timer_id =
-      engine->EnqueueTask(info[0].As<v8::Function>(), false);
+      engine->EnqueueTask(info[0].As<v8::Function>(), false, ready_at);
   info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(isolate, timer_id));
 }
 
@@ -941,7 +1139,7 @@ void ScriptEngine::RequestAnimationFrameCallback(
 
   auto* engine = From(isolate);
   const std::uint32_t timer_id =
-      engine->EnqueueTask(info[0].As<v8::Function>(), true);
+      engine->EnqueueTask(info[0].As<v8::Function>(), true, Clock::now());
   info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(isolate, timer_id));
 }
 
@@ -958,6 +1156,35 @@ void ScriptEngine::CancelAnimationFrameCallback(
 void ScriptEngine::PerformanceNowCallback(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), NowMilliseconds()));
+}
+
+void ScriptEngine::HandleCountsCallback(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  v8::Isolate* isolate = info.GetIsolate();
+  auto* engine = From(isolate);
+  auto context = isolate->GetCurrentContext();
+  auto counts = v8::Object::New(isolate);
+  counts
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate, "canvases"),
+            v8::Integer::NewFromUnsigned(
+                isolate, static_cast<std::uint32_t>(engine->canvases_.size())))
+      .Check();
+  counts
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate, "gradients"),
+            v8::Integer::NewFromUnsigned(
+                isolate, static_cast<std::uint32_t>(engine->gradients_.size())))
+      .Check();
+  counts
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate, "images"),
+            v8::Integer::NewFromUnsigned(
+                isolate, static_cast<std::uint32_t>(engine->images_.size())))
+      .Check();
+  counts
+      ->Set(context, v8::String::NewFromUtf8Literal(isolate, "patterns"),
+            v8::Integer::NewFromUnsigned(
+                isolate, static_cast<std::uint32_t>(engine->patterns_.size())))
+      .Check();
+  info.GetReturnValue().Set(counts);
 }
 
 void ScriptEngine::CanvasConstructor(
@@ -986,8 +1213,18 @@ void ScriptEngine::CanvasConstructor(
   }
 
   auto* engine = From(isolate);
-  engine->canvases_.push_back(std::make_unique<CanvasHandle>(surface));
-  auto* handle = engine->canvases_.back().get();
+  const std::uint64_t handle_id = engine->NextHandleId();
+  auto it = engine->canvases_
+                .emplace(handle_id,
+                         std::make_unique<CanvasHandle>(handle_id, surface))
+                .first;
+  auto* handle = it->second.get();
+  handle->object.Reset(isolate, info.This());
+  handle->finalizer_data = std::make_unique<HandleFinalizerData>(
+      HandleFinalizerData{engine, HandleFinalizerData::Kind::kCanvas,
+                          handle_id});
+  handle->object.SetWeak(handle->finalizer_data.get(), HandleWeakFinalizer,
+                         v8::WeakCallbackType::kParameter);
   info.This()->SetAlignedPointerInInternalField(0, handle, kCanvasHandleTag);
 
   auto context = isolate->GetCurrentContext();
@@ -1044,7 +1281,13 @@ void ScriptEngine::CanvasGetContext(
                       .ToLocalChecked();
     object->SetAlignedPointerInInternalField(0, canvas->context_handle.get(),
                                              kContextHandleTag);
+    object
+        ->Set(context,
+              v8::String::NewFromUtf8Literal(isolate, "__canvasEngineCanvas"),
+              info.This())
+        .Check();
     canvas->context_object.Reset(isolate, object);
+    canvas->context_object.SetWeak();
   }
 
   auto context_object = canvas->context_object.Get(isolate);
@@ -1180,9 +1423,18 @@ void ScriptEngine::ImageConstructor(
   }
 
   auto* engine = From(isolate);
-  engine->images_.push_back(std::make_unique<ImageHandle>(isolate));
-  auto* handle = engine->images_.back().get();
+  const std::uint64_t handle_id = engine->NextHandleId();
+  auto it = engine->images_
+                .emplace(handle_id,
+                         std::make_unique<ImageHandle>(handle_id, isolate))
+                .first;
+  auto* handle = it->second.get();
   handle->object.Reset(isolate, info.This());
+  handle->finalizer_data = std::make_unique<HandleFinalizerData>(
+      HandleFinalizerData{engine, HandleFinalizerData::Kind::kImage,
+                          handle_id});
+  handle->object.SetWeak(handle->finalizer_data.get(), HandleWeakFinalizer,
+                         v8::WeakCallbackType::kParameter);
   info.This()->SetAlignedPointerInInternalField(0, handle, kImageHandleTag);
   info.GetReturnValue().Set(info.This());
 }
@@ -1378,14 +1630,15 @@ void ScriptEngine::FillStyleSetter(
   }
 
   if (value->IsObject()) {
+    auto* engine = From(info.GetIsolate());
     auto object = value.As<v8::Object>();
-    if (auto* gradient =
-            Unwrap<GradientHandle>(info.GetIsolate(), object, kGradientHandleTag)) {
+    if (auto* gradient = engine->LiveGradientHandle(Unwrap<GradientHandle>(
+            info.GetIsolate(), object, kGradientHandleTag))) {
       handle->context->SetFillShader(gradient->BuildShader(), "[object CanvasGradient]");
       return;
     }
-    if (auto* pattern =
-            Unwrap<PatternHandle>(info.GetIsolate(), object, kPatternHandleTag)) {
+    if (auto* pattern = engine->LivePatternHandle(Unwrap<PatternHandle>(
+            info.GetIsolate(), object, kPatternHandleTag))) {
       handle->context->SetFillShader(pattern->shader, pattern->description);
       return;
     }
@@ -1423,15 +1676,16 @@ void ScriptEngine::StrokeStyleSetter(
   }
 
   if (value->IsObject()) {
+    auto* engine = From(info.GetIsolate());
     auto object = value.As<v8::Object>();
-    if (auto* gradient =
-            Unwrap<GradientHandle>(info.GetIsolate(), object, kGradientHandleTag)) {
+    if (auto* gradient = engine->LiveGradientHandle(Unwrap<GradientHandle>(
+            info.GetIsolate(), object, kGradientHandleTag))) {
       handle->context->SetStrokeShader(gradient->BuildShader(),
                                        "[object CanvasGradient]");
       return;
     }
-    if (auto* pattern =
-            Unwrap<PatternHandle>(info.GetIsolate(), object, kPatternHandleTag)) {
+    if (auto* pattern = engine->LivePatternHandle(Unwrap<PatternHandle>(
+            info.GetIsolate(), object, kPatternHandleTag))) {
       handle->context->SetStrokeShader(pattern->shader, pattern->description);
       return;
     }
@@ -2187,16 +2441,17 @@ void ScriptEngine::CtxDrawImage(
   float source_width = 0.0f;
   float source_height = 0.0f;
   float source_pixel_ratio = 1.0f;
+  auto* engine = From(info.GetIsolate());
 
-  if (auto* image_handle =
-          Unwrap<ImageHandle>(info.GetIsolate(), source, kImageHandleTag)) {
+  if (auto* image_handle = engine->LiveImageHandle(Unwrap<ImageHandle>(
+          info.GetIsolate(), source, kImageHandleTag))) {
     if (image_handle->asset) {
       image = image_handle->asset->image();
       source_width = static_cast<float>(image_handle->asset->width());
       source_height = static_cast<float>(image_handle->asset->height());
     }
-  } else if (auto* canvas_handle =
-                 Unwrap<CanvasHandle>(info.GetIsolate(), source, kCanvasHandleTag)) {
+  } else if (auto* canvas_handle = engine->LiveCanvasHandle(Unwrap<CanvasHandle>(
+                 info.GetIsolate(), source, kCanvasHandleTag))) {
     image = canvas_handle->surface->MakeImageSnapshot();
     source_width = static_cast<float>(canvas_handle->surface->width());
     source_height = static_cast<float>(canvas_handle->surface->height());
@@ -2324,9 +2579,13 @@ void ScriptEngine::CtxCreateLinearGradient(
     return;
   }
 
-  engine->gradients_.push_back(
-      std::make_unique<GradientHandle>(GradientHandle::Kind::kLinear));
-  auto* gradient = engine->gradients_.back().get();
+  const std::uint64_t handle_id = engine->NextHandleId();
+  auto it = engine->gradients_
+                .emplace(handle_id,
+                         std::make_unique<GradientHandle>(
+                             handle_id, GradientHandle::Kind::kLinear))
+                .first;
+  auto* gradient = it->second.get();
   gradient->x0 = x0;
   gradient->y0 = y0;
   gradient->x1 = x1;
@@ -2338,6 +2597,12 @@ void ScriptEngine::CtxCreateLinearGradient(
                     ->NewInstance(context)
                     .ToLocalChecked();
   object->SetAlignedPointerInInternalField(0, gradient, kGradientHandleTag);
+  gradient->object.Reset(info.GetIsolate(), object);
+  gradient->finalizer_data = std::make_unique<HandleFinalizerData>(
+      HandleFinalizerData{engine, HandleFinalizerData::Kind::kGradient,
+                          handle_id});
+  gradient->object.SetWeak(gradient->finalizer_data.get(), HandleWeakFinalizer,
+                           v8::WeakCallbackType::kParameter);
   info.GetReturnValue().Set(object);
 }
 
@@ -2364,9 +2629,13 @@ void ScriptEngine::CtxCreateRadialGradient(
     return;
   }
 
-  engine->gradients_.push_back(
-      std::make_unique<GradientHandle>(GradientHandle::Kind::kRadial));
-  auto* gradient = engine->gradients_.back().get();
+  const std::uint64_t handle_id = engine->NextHandleId();
+  auto it = engine->gradients_
+                .emplace(handle_id,
+                         std::make_unique<GradientHandle>(
+                             handle_id, GradientHandle::Kind::kRadial))
+                .first;
+  auto* gradient = it->second.get();
   gradient->x0 = x0;
   gradient->y0 = y0;
   gradient->r0 = r0;
@@ -2380,6 +2649,12 @@ void ScriptEngine::CtxCreateRadialGradient(
                     ->NewInstance(context)
                     .ToLocalChecked();
   object->SetAlignedPointerInInternalField(0, gradient, kGradientHandleTag);
+  gradient->object.Reset(info.GetIsolate(), object);
+  gradient->finalizer_data = std::make_unique<HandleFinalizerData>(
+      HandleFinalizerData{engine, HandleFinalizerData::Kind::kGradient,
+                          handle_id});
+  gradient->object.SetWeak(gradient->finalizer_data.get(), HandleWeakFinalizer,
+                           v8::WeakCallbackType::kParameter);
   info.GetReturnValue().Set(object);
 }
 
@@ -2412,13 +2687,13 @@ void ScriptEngine::CtxCreatePattern(
   sk_sp<SkImage> image;
   float source_pixel_ratio = 1.0f;
 
-  if (auto* image_handle =
-          Unwrap<ImageHandle>(info.GetIsolate(), source, kImageHandleTag)) {
+  if (auto* image_handle = engine->LiveImageHandle(Unwrap<ImageHandle>(
+          info.GetIsolate(), source, kImageHandleTag))) {
     if (image_handle->asset) {
       image = image_handle->asset->image();
     }
-  } else if (auto* canvas_handle =
-                 Unwrap<CanvasHandle>(info.GetIsolate(), source, kCanvasHandleTag)) {
+  } else if (auto* canvas_handle = engine->LiveCanvasHandle(Unwrap<CanvasHandle>(
+                 info.GetIsolate(), source, kCanvasHandleTag))) {
     image = canvas_handle->surface->MakeImageSnapshot();
     source_pixel_ratio = canvas_handle->surface->pixel_ratio();
   }
@@ -2428,8 +2703,11 @@ void ScriptEngine::CtxCreatePattern(
     return;
   }
 
-  engine->patterns_.push_back(std::make_unique<PatternHandle>());
-  auto* pattern = engine->patterns_.back().get();
+  const std::uint64_t handle_id = engine->NextHandleId();
+  auto it = engine->patterns_
+                .emplace(handle_id, std::make_unique<PatternHandle>(handle_id))
+                .first;
+  auto* pattern = it->second.get();
 
   SkMatrix local_matrix = SkMatrix::I();
   if (source_pixel_ratio != 1.0f) {
@@ -2440,6 +2718,7 @@ void ScriptEngine::CtxCreatePattern(
       RepeatModeToTileMode(repeat, true), RepeatModeToTileMode(repeat, false),
       SkSamplingOptions(SkFilterMode::kLinear), &local_matrix);
   if (!pattern->shader) {
+    engine->patterns_.erase(handle_id);
     info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
     return;
   }
@@ -2450,6 +2729,12 @@ void ScriptEngine::CtxCreatePattern(
                     ->NewInstance(context)
                     .ToLocalChecked();
   object->SetAlignedPointerInInternalField(0, pattern, kPatternHandleTag);
+  pattern->object.Reset(info.GetIsolate(), object);
+  pattern->finalizer_data = std::make_unique<HandleFinalizerData>(
+      HandleFinalizerData{engine, HandleFinalizerData::Kind::kPattern,
+                          handle_id});
+  pattern->object.SetWeak(pattern->finalizer_data.get(), HandleWeakFinalizer,
+                          v8::WeakCallbackType::kParameter);
   info.GetReturnValue().Set(object);
 }
 
@@ -2570,8 +2855,9 @@ void ScriptEngine::CtxPutImageData(
 
 void ScriptEngine::GradientAddColorStop(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  auto* gradient =
-      Unwrap<GradientHandle>(info.GetIsolate(), info.This(), kGradientHandleTag);
+  auto* engine = From(info.GetIsolate());
+  auto* gradient = engine->LiveGradientHandle(Unwrap<GradientHandle>(
+      info.GetIsolate(), info.This(), kGradientHandleTag));
   if (!gradient || info.Length() < 2) {
     ThrowTypeError(info.GetIsolate(),
                    "addColorStop(offset, color) requires offset and color");

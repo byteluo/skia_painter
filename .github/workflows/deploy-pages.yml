@@ -20,6 +20,8 @@ jobs:
     env:
       V8_ROOT: /usr/local
       V8_ICU_DATA_DIR: /usr/local/share/v8
+      SKIA_COMMIT: 31521f8508c712615b3d35e8e4554ccb5bf568e1
+      V8_TAG: 15.0.39
     steps:
       - uses: actions/checkout@v4
 
@@ -28,7 +30,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
             cmake ninja-build pkg-config g++ clang \
-            libpng-dev libfreetype-dev zlib1g-dev \
+            libpng-dev libfreetype-dev libfontconfig1-dev zlib1g-dev \
             python3 default-jdk
 
       - name: Install Bazelisk
@@ -58,7 +60,7 @@ jobs:
             exit 0
           fi
 
-          TARBALL_URL="https://skia.googlesource.com/skia/+archive/refs/heads/main.tar.gz"
+          TARBALL_URL="https://skia.googlesource.com/skia/+archive/${SKIA_COMMIT}.tar.gz"
           rm -rf third_party/skia
           mkdir -p third_party/skia
 
@@ -87,9 +89,21 @@ jobs:
             --output_user_root="${GITHUB_WORKSPACE}/build/bazel-root" \
             build \
             --cxxopt=-std=c++20 \
+            --cxxopt=-Wno-error=ignored-attributes \
             //:core \
             //src/base:base \
-            //modules/skcms:skcms
+            //src/codec:any_decoder \
+            //src/encode:encoder_common \
+            //src/encode:icc_support \
+            //src/encode:png_encode \
+            //src/encode:png_encode_base \
+            //src/ports:fontmgr_fontconfig \
+            //src/ports:freetype_support \
+            //src/ports:typeface_proxy \
+            //src/utils:char_to_glyphcache \
+            //src/opts:ml3 \
+            //modules/skcms:skcms \
+            @freetype//:freetype
 
       # ── V8 (slow, cached after first build) ──
 
@@ -98,7 +112,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/v8-build
-          key: v8-linux-x64-${{ runner.arch }}
+          key: v8-linux-x64-${{ runner.arch }}-${{ env.V8_TAG }}
 
       - name: Build V8 from source
         if: steps.cache-v8.outputs.cache-hit != 'true'
@@ -115,10 +129,14 @@ jobs:
             fetch v8
           fi
           cd v8
+          git checkout "${V8_TAG}"
           gclient sync
 
           tools/dev/v8gen.py x64.release -- \
             is_component_build=true \
+            use_custom_libcxx=false \
+            use_sysroot=false \
+            v8_enable_sandbox=false \
             v8_use_external_startup_data=true \
             v8_enable_i18n_support=true \
             treat_warnings_as_errors=false
@@ -135,6 +153,7 @@ jobs:
           sudo cp ${V8_BUILD}/out.gn/x64.release/lib*.so /usr/local/lib/ 2>/dev/null || true
           sudo cp ${V8_BUILD}/out.gn/x64.release/*.so /usr/local/lib/ 2>/dev/null || true
           sudo cp ${V8_BUILD}/out.gn/x64.release/icudtl.dat /usr/local/share/v8/
+          sudo cp ${V8_BUILD}/out.gn/x64.release/snapshot_blob.bin /usr/local/share/v8/
           sudo ldconfig
 
       # ── Build engine & generate PNGs ──
@@ -152,7 +171,7 @@ jobs:
             -DV8_INCLUDE_DIRS="/usr/local/include" \
             -DV8_LINK_DIRECTORIES="/usr/local/lib" \
             -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase" \
-            -DV8_COMPILE_DEFINITIONS="V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH;V8_ENABLE_SANDBOX"
+            -DV8_COMPILE_DEFINITIONS="V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH"
           cmake --build --preset release
 
       - name: Generate all PNGs
@@ -161,10 +180,17 @@ jobs:
           ENGINE="./build/release/canvas_engine"
           export LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH:-}"
           export V8_ICU_DATA_DIR="/usr/local/share/v8"
+          failed=()
           for script in examples/echarts_*.js; do
             echo "Rendering: $script"
-            "$ENGINE" "$script" || echo "Warning: $script failed"
+            if ! "$ENGINE" "$script"; then
+              failed+=("$script")
+            fi
           done
+          if ((${#failed[@]} > 0)); then
+            printf 'Failed: %s\n' "${failed[@]}"
+            exit 1
+          fi
           ls -la output/
 
       - name: Build static site
