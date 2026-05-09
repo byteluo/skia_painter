@@ -17,181 +17,28 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      V8_ROOT: /usr/local
-      V8_ICU_DATA_DIR: /usr/local/share/v8
-      SKIA_COMMIT: 31521f8508c712615b3d35e8e4554ccb5bf568e1
-      V8_TAG: 15.0.39
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Validate pre-generated PNGs
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq \
-            cmake ninja-build pkg-config g++ clang \
-            libpng-dev libfreetype-dev libfontconfig1-dev zlib1g-dev \
-            python3 default-jdk
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
 
-      - name: Install Bazelisk
-        run: |
-          if ! command -v bazel &>/dev/null; then
-            curl -fsSL "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64" \
-              -o /tmp/bazelisk
-            chmod +x /tmp/bazelisk
-            sudo mv /tmp/bazelisk /usr/local/bin/bazel
-          fi
-
-      # ── Skia (build first for fast feedback) ──
-
-      - name: Cache Skia
-        uses: actions/cache@v4
-        with:
-          path: |
-            third_party/skia
-            build/bazel-root
-          key: skia-linux-${{ hashFiles('.gitmodules') }}
-          restore-keys: skia-linux-
-
-      - name: Download Skia source
-        run: |
-          if [[ -f "third_party/skia/MODULE.bazel" ]]; then
-            echo "Skia already present (from cache), skipping download"
-            exit 0
-          fi
-
-          TARBALL_URL="https://skia.googlesource.com/skia/+archive/${SKIA_COMMIT}.tar.gz"
-          rm -rf third_party/skia
-          mkdir -p third_party/skia
-
-          for attempt in 1 2 3 4; do
-            echo "Attempt $attempt: downloading Skia tarball..."
-            if curl -fsSL --retry 3 "${TARBALL_URL}" | tar xz -C third_party/skia; then
-              echo "Download succeeded"
-              ls third_party/skia/MODULE.bazel && exit 0
-            fi
-            echo "Attempt $attempt failed, waiting $((attempt * 10))s..."
-            sleep $((attempt * 10))
-          done
-          echo "All download attempts failed"
-          exit 1
-
-      - name: Build Skia
-        run: |
-          if [[ -f "third_party/skia/bazel-bin/src/core/libcore.a" ]]; then
-            echo "Skia build artifacts found in cache, skipping build"
-            exit 0
-          fi
-          cd third_party/skia
-          CC=clang CXX=clang++ bazel \
-            --batch \
-            --noworkspace_rc \
-            --output_user_root="${GITHUB_WORKSPACE}/build/bazel-root" \
-            build \
-            --cxxopt=-std=c++20 \
-            --cxxopt=-Wno-error=ignored-attributes \
-            //:core \
-            //src/base:base \
-            //src/codec:any_decoder \
-            //src/encode:encoder_common \
-            //src/encode:icc_support \
-            //src/encode:png_encode \
-            //src/encode:png_encode_base \
-            //src/ports:fontmgr_fontconfig \
-            //src/ports:freetype_support \
-            //src/ports:typeface_proxy \
-            //src/utils:char_to_glyphcache \
-            //src/opts:ml3 \
-            //modules/skcms:skcms \
-            @freetype//:freetype
-
-      # ── V8 (slow, cached after first build) ──
-
-      - name: Cache V8 build
-        id: cache-v8
-        uses: actions/cache@v4
-        with:
-          path: build/v8-build
-          key: v8-linux-x64-${{ runner.arch }}-${{ env.V8_TAG }}
-
-      - name: Build V8 from source
-        if: steps.cache-v8.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p build/v8-build
-          cd build/v8-build
-
-          if [ ! -d depot_tools ]; then
-            git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-          fi
-          export PATH="$(pwd)/depot_tools:$PATH"
-
-          if [ ! -d v8 ]; then
-            fetch v8
-          fi
-          cd v8
-          git checkout "${V8_TAG}"
-          gclient sync
-
-          tools/dev/v8gen.py x64.release -- \
-            is_component_build=true \
-            use_custom_libcxx=false \
-            use_sysroot=false \
-            v8_enable_sandbox=false \
-            v8_use_external_startup_data=true \
-            v8_enable_i18n_support=true \
-            treat_warnings_as_errors=false
-
-          ninja -C out.gn/x64.release v8 v8_libplatform
-        timeout-minutes: 120
-
-      - name: Install V8
-        run: |
-          V8_BUILD="build/v8-build/v8"
-          sudo mkdir -p /usr/local/include /usr/local/lib /usr/local/share/v8
-
-          sudo cp -r "${V8_BUILD}/include/"* /usr/local/include/
-          sudo cp ${V8_BUILD}/out.gn/x64.release/lib*.so /usr/local/lib/ 2>/dev/null || true
-          sudo cp ${V8_BUILD}/out.gn/x64.release/*.so /usr/local/lib/ 2>/dev/null || true
-          sudo cp ${V8_BUILD}/out.gn/x64.release/icudtl.dat /usr/local/share/v8/
-          sudo cp ${V8_BUILD}/out.gn/x64.release/snapshot_blob.bin /usr/local/share/v8/
-          sudo ldconfig
-
-      # ── Build engine & generate PNGs ──
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install npm dependencies
-        run: npm ci
-
-      - name: Build canvas engine
-        run: |
-          cmake --preset release \
-            -DV8_INCLUDE_DIRS="/usr/local/include" \
-            -DV8_LINK_DIRECTORIES="/usr/local/lib" \
-            -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase" \
-            -DV8_COMPILE_DEFINITIONS="V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH"
-          cmake --build --preset release
-
-      - name: Generate all PNGs
-        run: |
-          mkdir -p output
-          ENGINE="./build/release/canvas_engine"
-          export LD_LIBRARY_PATH="/usr/local/lib:${LD_LIBRARY_PATH:-}"
-          export V8_ICU_DATA_DIR="/usr/local/share/v8"
-          failed=()
-          for script in examples/echarts_*.js; do
-            echo "Rendering: $script"
-            if ! "$ENGINE" "$script"; then
-              failed+=("$script")
-            fi
-          done
-          if ((${#failed[@]} > 0)); then
-            printf 'Failed: %s\n' "${failed[@]}"
-            exit 1
-          fi
-          ls -la output/
+          cases = json.load(open("web/compare/cases.json"))
+          missing = [
+              case["outputFile"]
+              for case in cases
+              if not Path(case["outputFile"]).is_file()
+          ]
+          if missing:
+              print("Missing pre-generated PNGs:")
+              for path in missing:
+                  print(f"  {path}")
+              raise SystemExit(1)
+          print(f"Validated {len(cases)} pre-generated PNGs")
+          PY
 
       - name: Build static site
         run: bash scripts/build_pages.sh
