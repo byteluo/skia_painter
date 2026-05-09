@@ -209,62 +209,62 @@
 
 ### 冒烟与基础
 
-- [examples/smoke.js](/Users/treecat/Desktop/skia-painter/examples/smoke.js)
-- [examples/demo.js](/Users/treecat/Desktop/skia-painter/examples/demo.js)
-- [examples/image_demo.js](/Users/treecat/Desktop/skia-painter/examples/image_demo.js)
+- [examples/smoke.js](examples/smoke.js)
+- [examples/demo.js](examples/demo.js)
+- [examples/image_demo.js](examples/image_demo.js)
 
 ### ECharts 示例
 
-- [examples/echarts_bar.js](/Users/treecat/Desktop/skia-painter/examples/echarts_bar.js)
-- [examples/echarts_boxplot.js](/Users/treecat/Desktop/skia-painter/examples/echarts_boxplot.js)
-- [examples/echarts_line.js](/Users/treecat/Desktop/skia-painter/examples/echarts_line.js)
-- [examples/echarts_pie.js](/Users/treecat/Desktop/skia-painter/examples/echarts_pie.js)
-- [examples/echarts_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_scatter.js)
-- [examples/echarts_effect_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_effect_scatter.js)
-- [examples/echarts_heatmap.js](/Users/treecat/Desktop/skia-painter/examples/echarts_heatmap.js)
-- [examples/echarts_calendar_heatmap.js](/Users/treecat/Desktop/skia-painter/examples/echarts_calendar_heatmap.js)
-- [examples/echarts_candlestick.js](/Users/treecat/Desktop/skia-painter/examples/echarts_candlestick.js)
-- [examples/echarts_funnel.js](/Users/treecat/Desktop/skia-painter/examples/echarts_funnel.js)
-- [examples/echarts_gauge.js](/Users/treecat/Desktop/skia-painter/examples/echarts_gauge.js)
-- [examples/echarts_radar.js](/Users/treecat/Desktop/skia-painter/examples/echarts_radar.js)
-- [examples/echarts_map.js](/Users/treecat/Desktop/skia-painter/examples/echarts_map.js)
-- [examples/echarts_graph.js](/Users/treecat/Desktop/skia-painter/examples/echarts_graph.js)
-- [examples/echarts_sankey.js](/Users/treecat/Desktop/skia-painter/examples/echarts_sankey.js)
-- [examples/echarts_lines.js](/Users/treecat/Desktop/skia-painter/examples/echarts_lines.js)
-- [examples/echarts_parallel.js](/Users/treecat/Desktop/skia-painter/examples/echarts_parallel.js)
-- [examples/echarts_theme_river.js](/Users/treecat/Desktop/skia-painter/examples/echarts_theme_river.js)
-- [examples/echarts_tree.js](/Users/treecat/Desktop/skia-painter/examples/echarts_tree.js)
-- [examples/echarts_treemap.js](/Users/treecat/Desktop/skia-painter/examples/echarts_treemap.js)
-- [examples/echarts_sunburst.js](/Users/treecat/Desktop/skia-painter/examples/echarts_sunburst.js)
-- [examples/echarts_polar_bar.js](/Users/treecat/Desktop/skia-painter/examples/echarts_polar_bar.js)
-- [examples/echarts_single_axis_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_single_axis_scatter.js)
-- [examples/echarts_custom_series.js](/Users/treecat/Desktop/skia-painter/examples/echarts_custom_series.js)
-- [examples/echarts_pictorial_bar.js](/Users/treecat/Desktop/skia-painter/examples/echarts_pictorial_bar.js)
-- [examples/echarts_markpoint_markline.js](/Users/treecat/Desktop/skia-painter/examples/echarts_markpoint_markline.js)
-- [examples/echarts_dataset_transform.js](/Users/treecat/Desktop/skia-painter/examples/echarts_dataset_transform.js)
-- [examples/echarts_toolbox.js](/Users/treecat/Desktop/skia-painter/examples/echarts_toolbox.js)
-- [examples/echarts_brush.js](/Users/treecat/Desktop/skia-painter/examples/echarts_brush.js)
-- [examples/echarts_legend_scroll.js](/Users/treecat/Desktop/skia-painter/examples/echarts_legend_scroll.js)
-- [examples/echarts_axis_pointer.js](/Users/treecat/Desktop/skia-painter/examples/echarts_axis_pointer.js)
-- [examples/echarts_visualmap_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_visualmap_scatter.js)
-- [examples/echarts_visualmap_piecewise.js](/Users/treecat/Desktop/skia-painter/examples/echarts_visualmap_piecewise.js)
-- [examples/echarts_axis_pointer_multigrid.js](/Users/treecat/Desktop/skia-painter/examples/echarts_axis_pointer_multigrid.js)
-- [examples/echarts_dataset_multi_series.js](/Users/treecat/Desktop/skia-painter/examples/echarts_dataset_multi_series.js)
-- [examples/echarts_geo_effect_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_geo_effect_scatter.js)
-- [examples/echarts_calendar_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_calendar_scatter.js)
-- [examples/echarts_calendar_effect_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_calendar_effect_scatter.js)
-- [examples/echarts_geo_lines.js](/Users/treecat/Desktop/skia-painter/examples/echarts_geo_lines.js)
-- [examples/echarts_toolbox_magic_type.js](/Users/treecat/Desktop/skia-painter/examples/echarts_toolbox_magic_type.js)
-- [examples/echarts_toolbox_datazoom.js](/Users/treecat/Desktop/skia-painter/examples/echarts_toolbox_datazoom.js)
-- [examples/echarts_map_piecewise.js](/Users/treecat/Desktop/skia-painter/examples/echarts_map_piecewise.js)
-- [examples/echarts_visualmap_map_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_visualmap_map_scatter.js)
-- [examples/echarts_legend_selected.js](/Users/treecat/Desktop/skia-painter/examples/echarts_legend_selected.js)
-- [examples/echarts_timeline_bar.js](/Users/treecat/Desktop/skia-painter/examples/echarts_timeline_bar.js)
-- [examples/echarts_datazoom_markarea.js](/Users/treecat/Desktop/skia-painter/examples/echarts_datazoom_markarea.js)
-- [examples/echarts_image_scatter.js](/Users/treecat/Desktop/skia-painter/examples/echarts_image_scatter.js)
-- [examples/echarts_rich_graphic.js](/Users/treecat/Desktop/skia-painter/examples/echarts_rich_graphic.js)
-- [examples/echarts_pattern_bar.js](/Users/treecat/Desktop/skia-painter/examples/echarts_pattern_bar.js)
-- [examples/echarts_geo_heatmap.js](/Users/treecat/Desktop/skia-painter/examples/echarts_geo_heatmap.js)
+- [examples/echarts_bar.js](examples/echarts_bar.js)
+- [examples/echarts_boxplot.js](examples/echarts_boxplot.js)
+- [examples/echarts_line.js](examples/echarts_line.js)
+- [examples/echarts_pie.js](examples/echarts_pie.js)
+- [examples/echarts_scatter.js](examples/echarts_scatter.js)
+- [examples/echarts_effect_scatter.js](examples/echarts_effect_scatter.js)
+- [examples/echarts_heatmap.js](examples/echarts_heatmap.js)
+- [examples/echarts_calendar_heatmap.js](examples/echarts_calendar_heatmap.js)
+- [examples/echarts_candlestick.js](examples/echarts_candlestick.js)
+- [examples/echarts_funnel.js](examples/echarts_funnel.js)
+- [examples/echarts_gauge.js](examples/echarts_gauge.js)
+- [examples/echarts_radar.js](examples/echarts_radar.js)
+- [examples/echarts_map.js](examples/echarts_map.js)
+- [examples/echarts_graph.js](examples/echarts_graph.js)
+- [examples/echarts_sankey.js](examples/echarts_sankey.js)
+- [examples/echarts_lines.js](examples/echarts_lines.js)
+- [examples/echarts_parallel.js](examples/echarts_parallel.js)
+- [examples/echarts_theme_river.js](examples/echarts_theme_river.js)
+- [examples/echarts_tree.js](examples/echarts_tree.js)
+- [examples/echarts_treemap.js](examples/echarts_treemap.js)
+- [examples/echarts_sunburst.js](examples/echarts_sunburst.js)
+- [examples/echarts_polar_bar.js](examples/echarts_polar_bar.js)
+- [examples/echarts_single_axis_scatter.js](examples/echarts_single_axis_scatter.js)
+- [examples/echarts_custom_series.js](examples/echarts_custom_series.js)
+- [examples/echarts_pictorial_bar.js](examples/echarts_pictorial_bar.js)
+- [examples/echarts_markpoint_markline.js](examples/echarts_markpoint_markline.js)
+- [examples/echarts_dataset_transform.js](examples/echarts_dataset_transform.js)
+- [examples/echarts_toolbox.js](examples/echarts_toolbox.js)
+- [examples/echarts_brush.js](examples/echarts_brush.js)
+- [examples/echarts_legend_scroll.js](examples/echarts_legend_scroll.js)
+- [examples/echarts_axis_pointer.js](examples/echarts_axis_pointer.js)
+- [examples/echarts_visualmap_scatter.js](examples/echarts_visualmap_scatter.js)
+- [examples/echarts_visualmap_piecewise.js](examples/echarts_visualmap_piecewise.js)
+- [examples/echarts_axis_pointer_multigrid.js](examples/echarts_axis_pointer_multigrid.js)
+- [examples/echarts_dataset_multi_series.js](examples/echarts_dataset_multi_series.js)
+- [examples/echarts_geo_effect_scatter.js](examples/echarts_geo_effect_scatter.js)
+- [examples/echarts_calendar_scatter.js](examples/echarts_calendar_scatter.js)
+- [examples/echarts_calendar_effect_scatter.js](examples/echarts_calendar_effect_scatter.js)
+- [examples/echarts_geo_lines.js](examples/echarts_geo_lines.js)
+- [examples/echarts_toolbox_magic_type.js](examples/echarts_toolbox_magic_type.js)
+- [examples/echarts_toolbox_datazoom.js](examples/echarts_toolbox_datazoom.js)
+- [examples/echarts_map_piecewise.js](examples/echarts_map_piecewise.js)
+- [examples/echarts_visualmap_map_scatter.js](examples/echarts_visualmap_map_scatter.js)
+- [examples/echarts_legend_selected.js](examples/echarts_legend_selected.js)
+- [examples/echarts_timeline_bar.js](examples/echarts_timeline_bar.js)
+- [examples/echarts_datazoom_markarea.js](examples/echarts_datazoom_markarea.js)
+- [examples/echarts_image_scatter.js](examples/echarts_image_scatter.js)
+- [examples/echarts_rich_graphic.js](examples/echarts_rich_graphic.js)
+- [examples/echarts_pattern_bar.js](examples/echarts_pattern_bar.js)
+- [examples/echarts_geo_heatmap.js](examples/echarts_geo_heatmap.js)
 
 ## 构建与依赖
 
@@ -373,6 +373,11 @@ ctest --preset release
 
 ### V8 / Skia 自动探测
 
+当前 pin 的第三方源码版本：
+
+- Skia: `31521f8508c712615b3d35e8e4554ccb5bf568e1`
+- V8: `15.0.39`
+
 在 macOS + Homebrew `v8` 场景下，`CMakeLists.txt` 会自动探测：
 
 - `/opt/homebrew/opt/v8/include`
@@ -385,8 +390,21 @@ ctest --preset release
 - `third_party/skia`
 - `third_party/skia/bazel-bin/src/core/libcore.a`
 - `third_party/skia/bazel-bin/src/base/libbase.a`
-- `third_party/skia/bazel-bin/modules/skcms/_objs/skcms_public/skcms.o`
-- `third_party/skia/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.o`
+- `third_party/skia/bazel-bin/src/codec/libany_decoder.a`
+- `third_party/skia/bazel-bin/src/encode/libencoder_common.a`
+- `third_party/skia/bazel-bin/src/encode/libicc_support.a`
+- `third_party/skia/bazel-bin/src/encode/libpng_encode.a`
+- `third_party/skia/bazel-bin/src/encode/libpng_encode_base.a`
+- `third_party/skia/bazel-bin/src/ports/libfontmgr_fontconfig.a`
+- `third_party/skia/bazel-bin/src/ports/libfreetype_support.a`
+- `third_party/skia/bazel-bin/src/ports/libtypeface_proxy.a`
+- `third_party/skia/bazel-bin/src/utils/libchar_to_glyphcache.a`
+- `third_party/skia/bazel-bin/external/+cpp_modules+freetype/libfreetype.a`
+- `third_party/skia/bazel-bin/src/opts/libml3.a`
+- `third_party/skia/bazel-bin/modules/skcms/_objs/skcms_public/skcms.pic.o`
+- `third_party/skia/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o`
+- `third_party/skia/bazel-bin/modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o`
+- `third_party/skia/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o`
 
 如果你换成了自己的 V8 / Skia 构建产物，再手动覆盖这些变量：
 
@@ -515,10 +533,10 @@ canvas.saveToPng("../output/chart.png");
 
 核心实现位置：
 
-- 2D 绘制实现: [src/canvas/Canvas2DContext.cc](/Users/treecat/Desktop/skia-painter/src/canvas/Canvas2DContext.cc)
-- Canvas surface / PNG 导出: [src/canvas/CanvasSurface.cc](/Users/treecat/Desktop/skia-painter/src/canvas/CanvasSurface.cc)
-- 图片解码: [src/canvas/ImageAsset.cc](/Users/treecat/Desktop/skia-painter/src/canvas/ImageAsset.cc)
-- V8 绑定与宿主运行时: [src/runtime/ScriptEngine.cc](/Users/treecat/Desktop/skia-painter/src/runtime/ScriptEngine.cc)
+- 2D 绘制实现: [src/canvas/Canvas2DContext.cc](src/canvas/Canvas2DContext.cc)
+- Canvas surface / PNG 导出: [src/canvas/CanvasSurface.cc](src/canvas/CanvasSurface.cc)
+- 图片解码: [src/canvas/ImageAsset.cc](src/canvas/ImageAsset.cc)
+- V8 绑定与宿主运行时: [src/runtime/ScriptEngine.cc](src/runtime/ScriptEngine.cc)
 
 ## 已知限制
 

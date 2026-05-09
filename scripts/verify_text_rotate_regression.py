@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import struct
+import math
 import sys
 import zlib
 
@@ -37,8 +37,8 @@ def read_png(path):
 
     if bit_depth != 8 or color_type != 6:
         raise ValueError(
-            f"{path}: unsupported PNG format bit_depth={bit_depth}, "
-            f"color_type={color_type}"
+            f"{path}: unsupported PNG format "
+            f"bit_depth={bit_depth}, color_type={color_type}"
         )
 
     raw = zlib.decompress(b"".join(idat_chunks))
@@ -89,53 +89,54 @@ def read_png(path):
     return width, height, rows
 
 
-def pixel(rows, x, y):
-    offset = x * 4
-    return tuple(rows[y][offset : offset + 4])
+def dark_pixels(rows, width, height):
+    pixels = []
+    for y in range(height):
+        row = rows[y]
+        for x in range(width):
+            offset = x * 4
+            r, g, b, a = row[offset : offset + 4]
+            if a > 200 and r < 80 and g < 80 and b < 80:
+                pixels.append((x, y))
+    return pixels
 
 
-def expect_equal(actual, expected, label):
-    if actual != expected:
-        raise AssertionError(f"{label}: expected {expected}, got {actual}")
-
-
-def expect_color_range(color, expected, tolerance, label):
-    for index, component in enumerate(("r", "g", "b", "a")):
-        if abs(color[index] - expected[index]) > tolerance:
-            raise AssertionError(
-                f"{label}: expected approx {expected}, got {color}"
-            )
+def principal_angle_degrees(points):
+    mean_x = sum(x for x, _ in points) / len(points)
+    mean_y = sum(y for _, y in points) / len(points)
+    cov_xx = sum((x - mean_x) ** 2 for x, _ in points) / len(points)
+    cov_yy = sum((y - mean_y) ** 2 for _, y in points) / len(points)
+    cov_xy = sum((x - mean_x) * (y - mean_y) for x, y in points) / len(points)
+    angle = 0.5 * math.atan2(2.0 * cov_xy, cov_xx - cov_yy)
+    return abs(math.degrees(angle))
 
 
 def main():
     if len(sys.argv) != 2:
-        raise SystemExit("usage: verify_render_regression.py <png-path>")
+        raise SystemExit("usage: verify_text_rotate_regression.py <png-path>")
 
     width, height, rows = read_png(sys.argv[1])
-    expect_equal((width, height), (660, 360), "output size")
+    points = dark_pixels(rows, width, height)
+    if len(points) < 200:
+        raise AssertionError(f"not enough dark text pixels: {len(points)}")
 
-    background = (226, 232, 240, 255)
-    dark = (15, 23, 42, 255)
-    orange = (249, 115, 22, 255)
-    red = (239, 68, 68, 255)
-    teal = (20, 184, 166, 255)
-    purple = (139, 92, 246, 255)
-    green = (34, 197, 94, 255)
-    sky = (14, 165, 233, 255)
+    xs = [x for x, _ in points]
+    ys = [y for _, y in points]
+    bbox_width = max(xs) - min(xs) + 1
+    bbox_height = max(ys) - min(ys) + 1
+    angle = principal_angle_degrees(points)
 
-    expect_color_range(pixel(rows, 10, 10), background, 2, "background corner")
-    expect_color_range(pixel(rows, 60, 60), dark, 4, "first image dark region")
-    expect_color_range(pixel(rows, 240, 240), orange, 8, "first image circle region")
-    expect_color_range(pixel(rows, 432, 192), orange, 8, "scaled image center")
-    expect_color_range(pixel(rows, 534, 126), dark, 6, "cropped image region")
-    expect_color_range(pixel(rows, 240, 48), dark, 6, "image data blit")
-    expect_color_range(pixel(rows, 132, 264), red, 10, "quadratic curve stroke")
-    expect_color_range(pixel(rows, 330, 282), teal, 8, "ellipse fill")
-    expect_color_range(pixel(rows, 564, 276), purple, 8, "arcTo fill")
-    expect_color_range(pixel(rows, 552, 18), green, 8, "requestAnimationFrame queue")
-    expect_color_range(pixel(rows, 600, 18), sky, 8, "setTimeout queue")
+    if not (15.0 <= angle <= 45.0):
+        raise AssertionError(f"text principal angle should be rotated, got {angle:.2f}")
+    if bbox_height < 70:
+        raise AssertionError(f"rotated text bbox is too short: {bbox_height}")
+    if bbox_width < 130:
+        raise AssertionError(f"text bbox is too narrow: {bbox_width}")
 
-    print("render_regression ok")
+    print(
+        f"text_rotate_regression ok angle={angle:.2f} "
+        f"bbox={bbox_width}x{bbox_height}"
+    )
 
 
 if __name__ == "__main__":

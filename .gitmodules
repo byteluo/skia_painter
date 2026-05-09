@@ -1,3 +1,4 @@
 [submodule "third_party/skia"]
 	path = third_party/skia
 	url = https://skia.googlesource.com/skia.git
+	branch = 31521f8508c712615b3d35e8e4554ccb5bf568e1

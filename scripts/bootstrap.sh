@@ -8,6 +8,7 @@ SKIA_DIR="${ROOT_DIR}/third_party/skia"
 BUILD_PRESET="${1:-dev}"
 BAZEL_OUTPUT_ROOT="${BAZEL_OUTPUT_ROOT:-${ROOT_DIR}/build/bazel-root}"
 FORCE_SKIA_BUILD="${FORCE_SKIA_BUILD:-0}"
+SKIA_COMMIT="${SKIA_COMMIT:-31521f8508c712615b3d35e8e4554ccb5bf568e1}"
 
 readonly REQUIRED_BREW_PACKAGES=(
   cmake
@@ -84,8 +85,16 @@ ensure_skia_checkout() {
 
   if [[ -d "${ROOT_DIR}/.git" ]] && [[ -f "${ROOT_DIR}/.gitmodules" ]]; then
     log "Syncing Git submodules"
-    git -C "${ROOT_DIR}" submodule update --init --recursive third_party/skia
+    if git -C "${ROOT_DIR}" submodule update --init --recursive third_party/skia; then
+      [[ -f "${SKIA_DIR}/MODULE.bazel" ]] && return
+    fi
   fi
+
+  log "Fetching Skia archive ${SKIA_COMMIT}"
+  rm -rf "${SKIA_DIR}"
+  mkdir -p "${SKIA_DIR}"
+  curl -fsSL "https://skia.googlesource.com/skia/+archive/${SKIA_COMMIT}.tar.gz" \
+    | tar xz -C "${SKIA_DIR}"
 
   [[ -d "${SKIA_DIR}" ]] || fail "missing Skia checkout at ${SKIA_DIR}"
   [[ -f "${SKIA_DIR}/MODULE.bazel" ]] || fail "Skia checkout is incomplete at ${SKIA_DIR}"
@@ -97,8 +106,21 @@ build_skia_minimal() {
   if [[ "${FORCE_SKIA_BUILD}" != "1" ]] &&
      [[ -f "${SKIA_DIR}/bazel-bin/src/core/libcore.a" ]] &&
      [[ -f "${SKIA_DIR}/bazel-bin/src/base/libbase.a" ]] &&
-     [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.o" ]] &&
-     [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.o" ]]; then
+     [[ -f "${SKIA_DIR}/bazel-bin/src/encode/libpng_encode.a" ]] &&
+     [[ -f "${SKIA_DIR}/bazel-bin/src/encode/libpng_encode_base.a" ]] &&
+     [[ -f "${SKIA_DIR}/bazel-bin/src/encode/libencoder_common.a" ]] &&
+     [[ -f "${SKIA_DIR}/bazel-bin/src/encode/libicc_support.a" ]] &&
+     [[ -f "${SKIA_DIR}/bazel-bin/src/codec/libany_decoder.a" ]] &&
+     [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfontmgr_fontconfig.a" ]] &&
+     [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfreetype_support.a" ]] &&
+     [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libtypeface_proxy.a" ]] &&
+     [[ -f "${SKIA_DIR}/bazel-bin/src/utils/libchar_to_glyphcache.a" ]] &&
+     [[ -f "${SKIA_DIR}/bazel-bin/external/+cpp_modules+freetype/libfreetype.a" ]] &&
+     [[ -f "${SKIA_DIR}/bazel-bin/src/opts/libml3.a" ]] &&
+     [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.pic.o" ]] &&
+     [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o" ]] &&
+     [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o" ]] &&
+     [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o" ]]; then
     log "Reusing existing Skia build outputs"
     return
   fi
@@ -116,15 +138,41 @@ build_skia_minimal() {
       --noworkspace_rc \
       --output_user_root="${BAZEL_OUTPUT_ROOT}" \
       build \
+      --cxxopt=-std=c++20 \
+      --cxxopt=-Wno-error=ignored-attributes \
       //:core \
       //src/base:base \
-      //modules/skcms:skcms
+      //src/codec:any_decoder \
+      //src/encode:encoder_common \
+      //src/encode:icc_support \
+      //src/encode:png_encode \
+      //src/encode:png_encode_base \
+      //src/ports:fontmgr_fontconfig \
+      //src/ports:freetype_support \
+      //src/ports:typeface_proxy \
+      //src/utils:char_to_glyphcache \
+      //src/opts:ml3 \
+      //modules/skcms:skcms \
+      @freetype//:freetype
   )
 
   [[ -f "${SKIA_DIR}/bazel-bin/src/core/libcore.a" ]] || fail "Skia core archive was not produced"
   [[ -f "${SKIA_DIR}/bazel-bin/src/base/libbase.a" ]] || fail "Skia base archive was not produced"
-  [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.o" ]] || fail "Skia skcms object was not produced"
-  [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.o" ]] || fail "Skia skcms baseline object was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/src/encode/libpng_encode.a" ]] || fail "Skia png encoder archive was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/src/encode/libpng_encode_base.a" ]] || fail "Skia png encoder base archive was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/src/encode/libencoder_common.a" ]] || fail "Skia encoder common archive was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/src/encode/libicc_support.a" ]] || fail "Skia ICC support archive was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/src/codec/libany_decoder.a" ]] || fail "Skia codec support archive was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfontmgr_fontconfig.a" ]] || fail "Skia fontconfig font manager archive was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfreetype_support.a" ]] || fail "Skia freetype support archive was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libtypeface_proxy.a" ]] || fail "Skia typeface proxy archive was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/src/utils/libchar_to_glyphcache.a" ]] || fail "Skia char-to-glyph cache archive was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/external/+cpp_modules+freetype/libfreetype.a" ]] || fail "Skia bundled freetype archive was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/src/opts/libml3.a" ]] || fail "Skia opts archive was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.pic.o" ]] || fail "Skia skcms object was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o" ]] || fail "Skia skcms baseline object was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o" ]] || fail "Skia skcms hsw object was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o" ]] || fail "Skia skcms skx object was not produced"
 }
 
 configure_and_build_engine() {

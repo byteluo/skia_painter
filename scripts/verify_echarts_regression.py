@@ -35,7 +35,10 @@ def read_png(path):
             break
 
     if bit_depth != 8 or color_type != 6:
-        raise ValueError(f"{path}: unsupported PNG format {bit_depth=}, {color_type=}")
+        raise ValueError(
+            f"{path}: unsupported PNG format bit_depth={bit_depth}, "
+            f"color_type={color_type}"
+        )
 
     raw = zlib.decompress(b"".join(idat_chunks))
     stride = width * 4

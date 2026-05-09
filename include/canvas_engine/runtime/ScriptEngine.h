@@ -1,9 +1,11 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "libplatform/libplatform.h"
@@ -23,13 +25,16 @@ class ScriptEngine {
 
  private:
   struct CanvasHandle;
+  struct ContextObjectFinalizerData;
   struct GradientHandle;
+  struct HandleFinalizerData;
   struct ImageHandle;
   struct PatternHandle;
   struct PendingTask {
     std::uint32_t id = 0;
     bool animation_frame = false;
     bool cancelled = false;
+    std::chrono::steady_clock::time_point ready_at;
     v8::Global<v8::Function> callback;
   };
 
@@ -43,11 +48,21 @@ class ScriptEngine {
                          v8::Local<v8::Value>* out_result);
   bool DrainPendingTasks();
   std::uint32_t EnqueueTask(v8::Local<v8::Function> callback,
-                            bool animation_frame);
+                            bool animation_frame,
+                            std::chrono::steady_clock::time_point ready_at);
   void CancelTask(std::uint32_t task_id);
+  std::uint64_t NextHandleId();
   std::filesystem::path ResolveScriptPath(const std::string& script_path) const;
+  CanvasHandle* LiveCanvasHandle(CanvasHandle* handle) const;
+  GradientHandle* LiveGradientHandle(GradientHandle* handle) const;
+  ImageHandle* LiveImageHandle(ImageHandle* handle) const;
+  PatternHandle* LivePatternHandle(PatternHandle* handle) const;
 
   static ScriptEngine* From(v8::Isolate* isolate);
+  static void HandleWeakFinalizer(
+      const v8::WeakCallbackInfo<HandleFinalizerData>& data);
+  static void ContextObjectWeakFinalizer(
+      const v8::WeakCallbackInfo<ContextObjectFinalizerData>& data);
 
   static void PrintCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void ConsoleLogCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
@@ -59,6 +74,7 @@ class ScriptEngine {
   static void CancelAnimationFrameCallback(
       const v8::FunctionCallbackInfo<v8::Value>& info);
   static void PerformanceNowCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void HandleCountsCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CanvasConstructor(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CanvasGetContext(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CanvasSaveToPng(const v8::FunctionCallbackInfo<v8::Value>& info);
@@ -232,13 +248,14 @@ class ScriptEngine {
   v8::Global<v8::FunctionTemplate> pattern_template_;
   std::vector<std::filesystem::path> script_stack_;
   std::uint32_t next_timer_id_ = 1;
+  std::uint64_t next_handle_id_ = 1;
   bool draining_tasks_ = false;
   std::string last_error_;
-  std::vector<std::unique_ptr<CanvasHandle>> canvases_;
-  std::vector<std::unique_ptr<GradientHandle>> gradients_;
-  std::vector<std::unique_ptr<ImageHandle>> images_;
+  std::unordered_map<std::uint64_t, std::unique_ptr<CanvasHandle>> canvases_;
+  std::unordered_map<std::uint64_t, std::unique_ptr<GradientHandle>> gradients_;
+  std::unordered_map<std::uint64_t, std::unique_ptr<ImageHandle>> images_;
   std::vector<PendingTask> pending_tasks_;
-  std::vector<std::unique_ptr<PatternHandle>> patterns_;
+  std::unordered_map<std::uint64_t, std::unique_ptr<PatternHandle>> patterns_;
 };
 
 }  // namespace canvas_engine
