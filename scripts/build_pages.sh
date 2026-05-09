@@ -123,54 +123,5 @@ else
   echo "Warning: output/ directory not found, no pre-generated PNGs will be included"
 fi
 
-# Patch app.js for static deployment
-# 1. Replace API cases endpoint with static JSON
-sed -i 's|fetch("/api/cases")|fetch("cases.json")|g' "$DIST_DIR/app.js"
-
-# 2. Replace renderEngineCase to load pre-generated PNGs instead of calling render API
-cat > /tmp/patch_render.py << 'PYEOF'
-import re, sys
-content = open(sys.argv[1]).read()
-
-old_func = re.search(
-    r'async function renderEngineCase\(\) \{.*?\n\}',
-    content, re.DOTALL
-).group(0)
-
-new_func = '''async function renderEngineCase() {
-  const caseInfo = findCase(currentCaseId);
-  if (!caseInfo) {
-    return;
-  }
-
-  const requestId = ++engineRenderRequestId;
-  const imageUrl = caseInfo.outputFile + "?t=" + Date.now();
-
-  try {
-    await preloadImage(imageUrl);
-
-    if (requestId !== engineRenderRequestId) {
-      return;
-    }
-
-    engineImageElement.src = imageUrl;
-    engineImageElement.style.display = "block";
-    enginePlaceholderElement.style.display = "none";
-    setStatus("后端 PNG 已加载: " + caseInfo.title);
-  } catch (e) {
-    if (requestId === engineRenderRequestId) {
-      enginePlaceholderElement.textContent = "预生成 PNG 未找到";
-      enginePlaceholderElement.style.display = "block";
-      engineImageElement.style.display = "none";
-      setStatus("PNG 未找到: " + caseInfo.title);
-    }
-  }
-}'''
-
-content = content.replace(old_func, new_func)
-open(sys.argv[1], 'w').write(content)
-PYEOF
-python3 /tmp/patch_render.py "$DIST_DIR/app.js"
-
 echo "Build complete: $DIST_DIR"
 ls -la "$DIST_DIR"
