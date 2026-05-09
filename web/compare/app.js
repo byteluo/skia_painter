@@ -38,7 +38,7 @@ function preloadImage(imageUrl) {
 }
 
 async function loadCases() {
-  const response = await fetch("/api/cases");
+  const response = await fetch("cases.json");
   if (!response.ok) {
     throw new Error(`failed to load cases: ${response.status}`);
   }
@@ -4654,29 +4654,28 @@ async function renderEngineCase() {
   }
 
   const requestId = ++engineRenderRequestId;
-  setEngineLoading(true, `后端 PNG 渲染中: ${caseInfo.title}`);
-  setStatus(`后端渲染中: ${caseInfo.title}`);
+  const imageUrl = `${caseInfo.outputFile}?t=${Date.now()}`;
+  setEngineLoading(true, `加载后端 PNG: ${caseInfo.title}`);
+  setStatus(`加载后端 PNG: ${caseInfo.title}`);
 
   try {
-    const response = await fetch(`/api/render/${caseInfo.id}`, {
-      method: "POST"
-    });
-    const payload = await response.json();
-
-    if (!response.ok || !payload.ok) {
-      throw new Error(payload.error || `render failed: ${response.status}`);
-    }
-
-    await preloadImage(payload.imageUrl);
+    await preloadImage(imageUrl);
 
     if (requestId !== engineRenderRequestId) {
       return;
     }
 
-    engineImageElement.src = payload.imageUrl;
+    engineImageElement.src = imageUrl;
     engineImageElement.style.display = "block";
     enginePlaceholderElement.style.display = "none";
-    setStatus(`后端 PNG 已更新: ${caseInfo.title}`);
+    setStatus(`后端 PNG 已加载: ${caseInfo.title}`);
+  } catch (error) {
+    if (requestId === engineRenderRequestId) {
+      enginePlaceholderElement.textContent = `预生成 PNG 未找到: ${caseInfo.outputFile}`;
+      enginePlaceholderElement.style.display = "block";
+      engineImageElement.style.display = "none";
+      setStatus(`PNG 未找到: ${caseInfo.title}`);
+    }
   } finally {
     if (requestId === engineRenderRequestId) {
       setEngineLoading(false);
