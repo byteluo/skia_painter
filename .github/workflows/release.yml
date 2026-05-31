@@ -25,12 +25,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout Skia submodule
+      - name: Checkout Skia source at pinned commit
         run: |
+          set -euxo pipefail
           rm -rf third_party/skia
-          git clone --filter=blob:none --no-checkout \
-            https://skia.googlesource.com/skia.git third_party/skia
-          git -C third_party/skia checkout ${{ env.SKIA_COMMIT }}
+          mkdir -p third_party/skia
+
+          archive_url="https://skia.googlesource.com/skia/+archive/${SKIA_COMMIT}.tar.gz"
+          echo "Downloading Skia archive: ${archive_url}"
+          if curl -fsSL --retry 5 --retry-delay 5 --max-time 300 \
+               "${archive_url}" | tar xz -C third_party/skia; then
+            echo "Skia archive extracted."
+          else
+            echo "Archive method failed, falling back to git clone."
+            rm -rf third_party/skia
+            for attempt in 1 2 3; do
+              echo "git clone attempt ${attempt}"
+              if git clone --filter=blob:none --no-checkout \
+                   https://skia.googlesource.com/skia.git third_party/skia; then
+                break
+              fi
+              rm -rf third_party/skia
+              sleep $((attempt * 10))
+            done
+            git -C third_party/skia checkout "${SKIA_COMMIT}"
+          fi
+
+          ls third_party/skia | head -20
+          test -f third_party/skia/BUILD.bazel || {
+            echo "Skia checkout is missing BUILD.bazel — aborting."
+            exit 1
+          }
 
       - name: Install Homebrew dependencies
         run: |
@@ -102,12 +127,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout Skia submodule
+      - name: Checkout Skia source at pinned commit
         run: |
+          set -euxo pipefail
           rm -rf third_party/skia
-          git clone --filter=blob:none --no-checkout \
-            https://skia.googlesource.com/skia.git third_party/skia
-          git -C third_party/skia checkout ${{ env.SKIA_COMMIT }}
+          mkdir -p third_party/skia
+
+          archive_url="https://skia.googlesource.com/skia/+archive/${SKIA_COMMIT}.tar.gz"
+          echo "Downloading Skia archive: ${archive_url}"
+          if curl -fsSL --retry 5 --retry-delay 5 --max-time 300 \
+               "${archive_url}" | tar xz -C third_party/skia; then
+            echo "Skia archive extracted."
+          else
+            echo "Archive method failed, falling back to git clone."
+            rm -rf third_party/skia
+            for attempt in 1 2 3; do
+              echo "git clone attempt ${attempt}"
+              if git clone --filter=blob:none --no-checkout \
+                   https://skia.googlesource.com/skia.git third_party/skia; then
+                break
+              fi
+              rm -rf third_party/skia
+              sleep $((attempt * 10))
+            done
+            git -C third_party/skia checkout "${SKIA_COMMIT}"
+          fi
+
+          ls third_party/skia | head -20
+          test -f third_party/skia/BUILD.bazel || {
+            echo "Skia checkout is missing BUILD.bazel — aborting."
+            exit 1
+          }
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
