@@ -1,0 +1,184 @@
+name: Benchmark
+
+# Builds the engine (Skia + V8) on a clean Ubuntu runner and runs the
+# reproducible benchmark harness against the installable competitors.
+# Manual trigger only — V8 is built from source on the first run (cached
+# afterwards), so a cold run can take over an hour.
+
+on:
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: "Iterations per chart"
+        required: false
+        default: "50"
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      V8_ROOT: /usr/local
+      V8_ICU_DATA_DIR: /usr/local/share/v8
+      LD_LIBRARY_PATH: /usr/local/lib
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            cmake ninja-build pkg-config g++ clang \
+            libpng-dev libfreetype-dev libfontconfig1-dev zlib1g-dev \
+            python3 default-jdk \
+            libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+
+      - name: Install Bazelisk
+        run: |
+          if ! command -v bazel &>/dev/null; then
+            curl -fsSL "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64" \
+              -o /tmp/bazelisk
+            chmod +x /tmp/bazelisk
+            sudo mv /tmp/bazelisk /usr/local/bin/bazel
+          fi
+
+      # ── Skia ──────────────────────────────────────────────────────────────
+      - name: Cache Skia
+        uses: actions/cache@v4
+        with:
+          path: |
+            third_party/skia
+            build/bazel-root
+          key: skia-linux-${{ hashFiles('.gitmodules') }}
+          restore-keys: skia-linux-
+
+      - name: Download Skia source
+        run: |
+          if [[ -f "third_party/skia/MODULE.bazel" ]]; then
+            echo "Skia already present (from cache)"; exit 0
+          fi
+          SKIA_COMMIT="31521f8508c712615b3d35e8e4554ccb5bf568e1"
+          rm -rf third_party/skia && mkdir -p third_party/skia
+          for attempt in 1 2 3 4; do
+            if curl -fsSL --retry 3 "https://skia.googlesource.com/skia/+archive/${SKIA_COMMIT}.tar.gz" \
+                | tar xz -C third_party/skia; then
+              ls third_party/skia/MODULE.bazel && exit 0
+            fi
+            echo "attempt $attempt failed, retrying..."; sleep $((attempt * 10))
+          done
+          exit 1
+
+      - name: Build Skia (minimal target set)
+        run: |
+          if [[ -f "third_party/skia/bazel-bin/src/core/libcore.a" ]]; then
+            echo "Skia artifacts found in cache"; exit 0
+          fi
+          cd third_party/skia
+          CC=clang CXX=clang++ bazel \
+            --batch --noworkspace_rc \
+            --output_user_root="${GITHUB_WORKSPACE}/build/bazel-root" \
+            build \
+            --cxxopt=-std=c++20 \
+            --cxxopt=-Wno-error=ignored-attributes \
+            //:core \
+            //src/base:base \
+            //src/codec:any_decoder \
+            //src/encode:encoder_common \
+            //src/encode:icc_support \
+            //src/encode:png_encode \
+            //src/encode:png_encode_base \
+            //src/ports:fontmgr_fontconfig \
+            //src/ports:freetype_support \
+            //src/ports:typeface_proxy \
+            //src/utils:char_to_glyphcache \
+            //src/opts:ml3 \
+            //modules/skcms:skcms \
+            @freetype//:freetype
+
+      # ── V8 (slow; cached after first build) ───────────────────────────────
+      - name: Cache V8 build
+        id: cache-v8
+        uses: actions/cache@v4
+        with:
+          path: build/v8-build
+          key: v8-linux-x64-15.0.39
+
+      - name: Build V8 from source
+        if: steps.cache-v8.outputs.cache-hit != 'true'
+        timeout-minutes: 150
+        run: |
+          mkdir -p build/v8-build && cd build/v8-build
+          if [ ! -d depot_tools ]; then
+            git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          fi
+          export PATH="$(pwd)/depot_tools:$PATH"
+          if [ ! -d v8 ]; then fetch v8; fi
+          cd v8
+          git checkout 15.0.39
+          gclient sync
+          tools/dev/v8gen.py x64.release -- \
+            is_component_build=true \
+            use_custom_libcxx=false \
+            use_sysroot=false \
+            v8_enable_sandbox=false \
+            v8_use_external_startup_data=true \
+            v8_enable_i18n_support=true \
+            treat_warnings_as_errors=false
+          ninja -C out.gn/x64.release v8 v8_libplatform
+
+      - name: Install V8
+        run: |
+          V8="build/v8-build/v8"
+          sudo mkdir -p /usr/local/include /usr/local/lib /usr/local/share/v8
+          sudo cp -r "${V8}/include/"* /usr/local/include/
+          sudo cp ${V8}/out.gn/x64.release/lib*.so /usr/local/lib/ 2>/dev/null || true
+          sudo cp ${V8}/out.gn/x64.release/*.so /usr/local/lib/ 2>/dev/null || true
+          sudo cp ${V8}/out.gn/x64.release/icudtl.dat /usr/local/share/v8/
+          sudo cp ${V8}/out.gn/x64.release/snapshot_blob.bin /usr/local/share/v8/
+          sudo ldconfig
+
+      # ── Engine ────────────────────────────────────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build canvas engine
+        run: |
+          cmake --preset release \
+            -DV8_INCLUDE_DIRS="/usr/local/include" \
+            -DV8_LINK_DIRECTORIES="/usr/local/lib" \
+            -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase" \
+            -DV8_COMPILE_DEFINITIONS="V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH"
+          cmake --build --preset release
+
+      # ── Competitors (best-effort; harness skips any that fail) ─────────────
+      - name: Install benchmark competitors
+        run: |
+          npm i -D canvas puppeteer || echo "competitor install partially failed; harness will skip"
+          npx puppeteer browsers install chrome || echo "chromium install failed; puppeteer will be skipped"
+
+      # ── Run ───────────────────────────────────────────────────────────────
+      - name: Run benchmark
+        env:
+          ITERATIONS: ${{ github.event.inputs.iterations }}
+          CANVAS_ENGINE_BIN: ${{ github.workspace }}/build/release/canvas_engine
+        run: |
+          node bench/benchmark.mjs | tee bench-result.md
+          {
+            echo "## Benchmark result"
+            echo ""
+            echo '```'
+            cat bench-result.md
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-result
+          path: bench-result.md

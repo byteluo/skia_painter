@@ -42,6 +42,8 @@ CANVAS_ENGINE_BIN=/path node bench/benchmark.mjs   # custom binary
 
 The harness prints a Markdown table you can paste straight back into this file.
 
+**No local toolchain?** Trigger the [`Benchmark` GitHub Actions workflow](../.github/workflows/benchmark.yml) (`workflow_dispatch`). It builds Skia + V8 + the engine on a clean Ubuntu runner, installs the competitors, runs the harness and prints the table to the job summary — so you get the engine's own numbers without building anything locally.
+
 ### Sample results
 
 > Real numbers from one run (50 iterations, median ms per chart, lower is
@@ -105,6 +107,8 @@ CANVAS_ENGINE_BIN=/path node bench/benchmark.mjs   # 自定义二进制
 ```
 
 harness 会打印一张 Markdown 表，可直接粘回本文件。
+
+**本地没有工具链？** 手动触发 [`Benchmark` GitHub Actions workflow](../.github/workflows/benchmark.yml)（`workflow_dispatch`）。它会在干净的 Ubuntu runner 上构建 Skia + V8 + 引擎、安装对比方案、跑 harness 并把表格输出到作业摘要——无需在本地构建任何东西就能拿到本引擎自己的数字。
 
 ### 示例结果
 
