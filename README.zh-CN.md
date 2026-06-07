@@ -234,7 +234,7 @@ npm i -D canvas puppeteer        # 可选的对比方案
 node bench/benchmark.mjs         # ITERATIONS=50 可加大采样
 ```
 
-方法学、注意事项（PNG 与 SVG 是不同产物；无头 Chrome 是视觉*参考*实现）以及示例数据见 [`docs/benchmarks.md`](docs/benchmarks.md)。**引用任何数字前请在你自己的硬件上重新测量。**
+本地没有工具链？[`Benchmark` workflow](.github/workflows/benchmark.yml) 会在干净的 Ubuntu runner 上构建引擎并在云端跑 harness（手动触发）。方法学、注意事项（PNG 与 SVG 是不同产物；无头 Chrome 是视觉*参考*实现）以及示例数据见 [`docs/benchmarks.md`](docs/benchmarks.md)。**引用任何数字前请在你自己的硬件上重新测量。**
 
 ## 已知限制
 

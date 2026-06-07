@@ -234,7 +234,7 @@ npm i -D canvas puppeteer        # optional competitors
 node bench/benchmark.mjs         # ITERATIONS=50 for more samples
 ```
 
-See [`docs/benchmarks.md`](docs/benchmarks.md) for the methodology, caveats (PNG vs SVG are different artifacts; headless Chrome is the visual *reference*), and sample numbers. **Run it on your own hardware before quoting any figure.**
+No local toolchain? The [`Benchmark` workflow](.github/workflows/benchmark.yml) builds the engine on a clean Ubuntu runner and runs the harness in the cloud (manual trigger). See [`docs/benchmarks.md`](docs/benchmarks.md) for the methodology, caveats (PNG vs SVG are different artifacts; headless Chrome is the visual *reference*), and sample numbers. **Run it on your own hardware before quoting any figure.**
 
 ## Known limitations
 
