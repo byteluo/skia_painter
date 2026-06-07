@@ -2,6 +2,8 @@
 
 Thanks for your interest in improving Skia Painter! 感谢你愿意改进 Skia Painter！
 
+By participating you agree to our [Code of Conduct](CODE_OF_CONDUCT.md). 参与即表示你同意遵守[行为准则](CODE_OF_CONDUCT.md)。
+
 [English](#english) · [中文](#中文)
 
 ---
