@@ -1,477 +1,134 @@
-# Skia Painter
+<div align="center">
 
-一个基于 `C++ + V8 + Skia` 的 Canvas 后端引擎。它的目标不是完整实现浏览器 DOM，而是提供一套足够驱动 `ECharts` canvas 渲染链路的宿主运行时，并把结果稳定导出为 PNG。
+# 🎨 Skia Painter
 
-当前仓库已经具备这几类能力：
+**A headless Canvas backend that renders [Apache ECharts](https://echarts.apache.org/) to high-resolution PNG — powered by C++, V8 and Skia.**
 
-- 通过 `V8` 执行 JavaScript
-- 通过 `Skia` 完成 2D 栅格绘制
-- 提供 `Canvas` / `CanvasRenderingContext2D` / `Image` 宿主对象
-- 直接加载 `ECharts` UMD 产物并完成 canvas 渲染
-- 默认导出高清 PNG
-- 提供基础冒烟测试和渲染回归测试
+**一个基于 C++ + V8 + Skia 的无头 Canvas 后端，把 [Apache ECharts](https://echarts.apache.org/) 渲染链路稳定导出为高清 PNG。**
 
-## 当前状态
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C.svg?logo=cplusplus)](CMakeLists.txt)
+[![Skia](https://img.shields.io/badge/Skia-2D%20Graphics-EA4335.svg)](https://skia.org/)
+[![V8](https://img.shields.io/badge/V8-15.0-4B8BF5.svg)](https://v8.dev/)
+[![ECharts](https://img.shields.io/badge/ECharts-6.0-AA344D.svg)](https://echarts.apache.org/)
+[![Live Demo](https://img.shields.io/badge/Live-Demo-success.svg)](https://byteluo.github.io/skia_painter/)
 
-这套工程现在已经不是“骨架”，而是一套可运行的最小 Canvas 渲染后端，重点覆盖了 `ECharts` 真正会走到的那部分 API。
+[**English**](#english) · [**中文**](#中文)
 
-目前已经稳定支持：
+</div>
 
-- 本地脚本加载：`loadScript(path)`
-- 本地图片解码：`new Image()` + `image.src = "..."`
-- 2D 路径、文本、阴影、虚线、渐变、pattern、像素读写
-- `requestAnimationFrame` / `setTimeout` 的最小任务队列语义
-- 默认高清导出
+---
 
-当前默认渲染策略：
+<div align="center">
 
-- 内部 backing store 默认使用 `DPR = 3`
-- `canvas.saveToPng(path)` 默认直接导出 backing store 分辨率
-- 例如逻辑尺寸 `960x540`，导出 PNG 默认是 `2880x1620`
+<img src="output/echarts_bar.png" width="32%" alt="bar"/>
+<img src="output/echarts_line.png" width="32%" alt="line"/>
+<img src="output/echarts_pie.png" width="32%" alt="pie"/>
+<img src="output/echarts_gauge.png" width="32%" alt="gauge"/>
+<img src="output/echarts_sankey.png" width="32%" alt="sankey"/>
+<img src="output/echarts_sunburst.png" width="32%" alt="sunburst"/>
 
-路径语义：
+<sub>A few samples from the demo gallery — see the <a href="https://byteluo.github.io/skia_painter/">live comparison demo</a> for all 50+ charts.</sub>
 
-- `loadScript(path)`、`image.src = path`、`canvas.saveToPng(path)` 的相对路径都按“当前脚本文件所在目录”解析
-- 不是按进程启动目录解析
+</div>
 
-## 已实现 API
+---
 
-### 宿主对象
+## English
 
-- `new Canvas(width, height)`
-- `canvas.width`
-- `canvas.height`
-- `canvas.getContext("2d")`
-- `canvas.saveToPng(path)`
-- `canvas.setAttribute(name, value)`
-- `canvas.addEventListener(...)`
-- `canvas.removeEventListener(...)`
+### Overview
 
-- `new Image()`
-- `image.width`
-- `image.height`
-- `image.src`
-- `image.complete`
-- `image.onload`
-- `image.onerror`
+**Skia Painter** is *not* a full browser DOM implementation. It is a minimal host runtime designed to drive the part of the Canvas API that **ECharts** actually exercises, and to export the result as a deterministic high-resolution PNG.
 
-### 2D Context
+It can:
 
-- `ctx.fillStyle`
-- `ctx.strokeStyle`
-- `ctx.lineWidth`
-- `ctx.font`
-- `ctx.textAlign`
-- `ctx.textBaseline`
-- `ctx.globalAlpha`
-- `ctx.globalCompositeOperation`
-- `ctx.lineCap`
-- `ctx.lineJoin`
-- `ctx.miterLimit`
-- `ctx.shadowBlur`
-- `ctx.shadowColor`
-- `ctx.shadowOffsetX`
-- `ctx.shadowOffsetY`
-- `ctx.lineDashOffset`
+- Execute JavaScript through **V8**
+- Rasterize 2D graphics through **Skia**
+- Provide `Canvas` / `CanvasRenderingContext2D` / `Image` host objects
+- Load the **ECharts** UMD build directly and render its canvas pipeline
+- Export crisp, high-DPI PNGs by default
+- Run smoke tests and rendering regression tests
 
-- `ctx.save()`
-- `ctx.restore()`
-- `ctx.translate(x, y)`
-- `ctx.scale(x, y)`
-- `ctx.rotate(radians)`
-- `ctx.transform(a, b, c, d, e, f)`
-- `ctx.setTransform(a, b, c, d, e, f)`
-- `ctx.resetTransform()`
+### Why?
 
-- `ctx.clearRect(x, y, w, h)`
-- `ctx.fillRect(x, y, w, h)`
-- `ctx.strokeRect(x, y, w, h)`
+Server-side chart rendering usually means running a headless browser (Puppeteer/Playwright) or `node-canvas`. Skia Painter takes a leaner path: a single native binary that boots V8, hands ECharts a Skia-backed canvas, and writes a PNG — no browser, no display server, no DOM.
 
-- `ctx.beginPath()`
-- `ctx.moveTo(x, y)`
-- `ctx.lineTo(x, y)`
-- `ctx.quadraticCurveTo(cpx, cpy, x, y)`
-- `ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y)`
-- `ctx.rect(x, y, w, h)`
-- `ctx.arc(x, y, radius, startAngle, endAngle, counterClockwise = false)`
-- `ctx.arcTo(x1, y1, x2, y2, radius)`
-- `ctx.ellipse(x, y, rx, ry, rotation, startAngle, endAngle, counterClockwise = false)`
-- `ctx.closePath()`
-- `ctx.clip()`
-- `ctx.fill()`
-- `ctx.stroke()`
+### Status
 
-- `ctx.setLineDash(segments)`
-- `ctx.getLineDash()`
+This is a **runnable minimal Canvas rendering backend**, not a skeleton. It stably supports:
 
-- `ctx.createLinearGradient(x0, y0, x1, y1)`
-- `ctx.createRadialGradient(x0, y0, r0, x1, y1, r1)`
-- `ctx.createPattern(imageOrCanvas, repeat?)`
+- Local script loading: `loadScript(path)`
+- Local image decoding: `new Image()` + `image.src = "..."`
+- 2D paths, text, shadows, dashed lines, gradients, patterns, pixel read/write
+- A minimal task-queue semantics for `requestAnimationFrame` / `setTimeout`
+- High-DPI export by default
 
-- `ctx.measureText(text)`
-- `ctx.fillText(text, x, y)`
-- `ctx.strokeText(text, x, y)`
+**Default rendering policy:**
 
-- `ctx.drawImage(imageOrCanvas, ...)`
-- `ctx.getImageData(x, y, w, h)`
-- `ctx.putImageData(imageData, dx, dy)`
+- The internal backing store uses `DPR = 3` by default
+- `canvas.saveToPng(path)` exports at backing-store resolution
+- e.g. a logical size of `960×540` produces a `2880×1620` PNG
 
-### 全局能力
+**Path resolution:** relative paths in `loadScript(path)`, `image.src = path` and `canvas.saveToPng(path)` are resolved against **the directory of the current script file**, not the process working directory.
 
-- `print(...)`
-- `console.log(...)`
-- `console.warn(...)`
-- `console.error(...)`
-- `loadScript(path)`
-- `setTimeout(...)`
-- `clearTimeout(...)`
-- `requestAnimationFrame(...)`
-- `cancelAnimationFrame(...)`
-- `performance.now()`
+### Quick Start
 
-## 已验证的 ECharts 图表类型
-
-下面这些示例都已经在当前仓库里实际跑通过，并能导出 PNG：
-
-基于当前仓库安装的 `echarts@6.0.0`，内建 core chart series 现在已经全部有对应示例覆盖。
-
-### 基础图表
-
-- `bar`
-- `boxplot`
-- `line`
-- `pie`
-- `scatter`
-- `effectScatter`
-- `candlestick`
-- `funnel`
-- `gauge`
-- `radar`
-- `heatmap`
-- `calendar heatmap`
-
-### 图关系与流向
-
-- `graph`
-- `map`
-- `sankey`
-- `lines`
-- `parallel`
-- `themeRiver`
-
-### 层级与布局
-
-- `tree`
-- `treemap`
-- `sunburst`
-
-### 自定义与组件能力
-
-- `custom series`
-- `pictorialBar`
-- `timeline`
-- `dataZoom + markArea`
-- `markPoint + markLine`
-- `toolbox`
-- `brush`
-- `dataset + transform`
-- `legend scroll`
-- `axisPointer`
-- `visualMap`
-- `piecewise visualMap`
-- `multi-grid axisPointer`
-- `dataset multi-series`
-- `toolbox magicType`
-- `toolbox dataZoom`
-- `legend selected mode`
-
-### 坐标系与布局容器
-
-- `polar`
-- `singleAxis`
-- `calendar`
-- `geo`
-- `geo + effectScatter`
-- `calendar + scatter`
-- `calendar + effectScatter`
-- `geo + lines`
-- `map + piecewise visualMap`
-- `map + scatter + visualMap`
-
-### 图片 / 富文本 / 图形混合
-
-- `image scatter`
-- `rich graphic`
-- `pattern bar`
-- `geo heatmap`
-
-## 示例索引
-
-### 冒烟与基础
-
-- [examples/smoke.js](examples/smoke.js)
-- [examples/demo.js](examples/demo.js)
-- [examples/image_demo.js](examples/image_demo.js)
-
-### ECharts 示例
-
-- [examples/echarts_bar.js](examples/echarts_bar.js)
-- [examples/echarts_boxplot.js](examples/echarts_boxplot.js)
-- [examples/echarts_line.js](examples/echarts_line.js)
-- [examples/echarts_pie.js](examples/echarts_pie.js)
-- [examples/echarts_scatter.js](examples/echarts_scatter.js)
-- [examples/echarts_effect_scatter.js](examples/echarts_effect_scatter.js)
-- [examples/echarts_heatmap.js](examples/echarts_heatmap.js)
-- [examples/echarts_calendar_heatmap.js](examples/echarts_calendar_heatmap.js)
-- [examples/echarts_candlestick.js](examples/echarts_candlestick.js)
-- [examples/echarts_funnel.js](examples/echarts_funnel.js)
-- [examples/echarts_gauge.js](examples/echarts_gauge.js)
-- [examples/echarts_radar.js](examples/echarts_radar.js)
-- [examples/echarts_map.js](examples/echarts_map.js)
-- [examples/echarts_graph.js](examples/echarts_graph.js)
-- [examples/echarts_sankey.js](examples/echarts_sankey.js)
-- [examples/echarts_lines.js](examples/echarts_lines.js)
-- [examples/echarts_parallel.js](examples/echarts_parallel.js)
-- [examples/echarts_theme_river.js](examples/echarts_theme_river.js)
-- [examples/echarts_tree.js](examples/echarts_tree.js)
-- [examples/echarts_treemap.js](examples/echarts_treemap.js)
-- [examples/echarts_sunburst.js](examples/echarts_sunburst.js)
-- [examples/echarts_polar_bar.js](examples/echarts_polar_bar.js)
-- [examples/echarts_single_axis_scatter.js](examples/echarts_single_axis_scatter.js)
-- [examples/echarts_custom_series.js](examples/echarts_custom_series.js)
-- [examples/echarts_pictorial_bar.js](examples/echarts_pictorial_bar.js)
-- [examples/echarts_markpoint_markline.js](examples/echarts_markpoint_markline.js)
-- [examples/echarts_dataset_transform.js](examples/echarts_dataset_transform.js)
-- [examples/echarts_toolbox.js](examples/echarts_toolbox.js)
-- [examples/echarts_brush.js](examples/echarts_brush.js)
-- [examples/echarts_legend_scroll.js](examples/echarts_legend_scroll.js)
-- [examples/echarts_axis_pointer.js](examples/echarts_axis_pointer.js)
-- [examples/echarts_visualmap_scatter.js](examples/echarts_visualmap_scatter.js)
-- [examples/echarts_visualmap_piecewise.js](examples/echarts_visualmap_piecewise.js)
-- [examples/echarts_axis_pointer_multigrid.js](examples/echarts_axis_pointer_multigrid.js)
-- [examples/echarts_dataset_multi_series.js](examples/echarts_dataset_multi_series.js)
-- [examples/echarts_geo_effect_scatter.js](examples/echarts_geo_effect_scatter.js)
-- [examples/echarts_calendar_scatter.js](examples/echarts_calendar_scatter.js)
-- [examples/echarts_calendar_effect_scatter.js](examples/echarts_calendar_effect_scatter.js)
-- [examples/echarts_geo_lines.js](examples/echarts_geo_lines.js)
-- [examples/echarts_toolbox_magic_type.js](examples/echarts_toolbox_magic_type.js)
-- [examples/echarts_toolbox_datazoom.js](examples/echarts_toolbox_datazoom.js)
-- [examples/echarts_map_piecewise.js](examples/echarts_map_piecewise.js)
-- [examples/echarts_visualmap_map_scatter.js](examples/echarts_visualmap_map_scatter.js)
-- [examples/echarts_legend_selected.js](examples/echarts_legend_selected.js)
-- [examples/echarts_timeline_bar.js](examples/echarts_timeline_bar.js)
-- [examples/echarts_datazoom_markarea.js](examples/echarts_datazoom_markarea.js)
-- [examples/echarts_image_scatter.js](examples/echarts_image_scatter.js)
-- [examples/echarts_rich_graphic.js](examples/echarts_rich_graphic.js)
-- [examples/echarts_pattern_bar.js](examples/echarts_pattern_bar.js)
-- [examples/echarts_geo_heatmap.js](examples/echarts_geo_heatmap.js)
-
-## 构建与依赖
-
-### 本机前提
-
-当前仓库的默认 bootstrap 目标是 macOS + Homebrew。脚本会自动处理这批依赖：
-
-- `cmake`
-- `ninja`
-- `v8`
-- `libpng`
-- `freetype`
-- `zlib`
-- `pkgconf`
-- `openjdk`
-- `bazel@8`
-
-### 一键安装与构建
-
-如果你想从零拉起这套工程，直接运行：
+> The default bootstrap target is **macOS + Homebrew**. A Linux bootstrap script (`scripts/bootstrap_linux.sh`) is also provided.
 
 ```bash
-./scripts/bootstrap.sh
+# Clone with submodules
+git clone --recursive https://github.com/byteluo/skia_painter.git
+cd skia_painter
+
+# One-shot install + build + test
+./scripts/bootstrap.sh          # debug
+./scripts/bootstrap.sh release  # release
 ```
 
-如果要构建 release：
+The bootstrap script installs Homebrew dependencies, configures `JAVA_HOME`, initializes `third_party/skia`, builds the minimal Skia artifacts, then configures, compiles and tests the main project.
 
-```bash
-./scripts/bootstrap.sh release
-```
-
-这个脚本会完成：
-
-- 安装 Homebrew 依赖
-- 配置 `JAVA_HOME`
-- 初始化 `third_party/skia`
-- 构建当前工程需要的最小 Skia 产物
-- 配置并编译主工程
-- 运行测试
-
-如果你要强制重建 Skia：
+Force a Skia rebuild:
 
 ```bash
 FORCE_SKIA_BUILD=1 ./scripts/bootstrap.sh
 ```
 
-## 前端对比 Dev 服务
-
-如果你想直接在浏览器里对比“浏览器原生 ECharts canvas 渲染”和“当前后端导出的 PNG”，现在可以启动一个本地 dev 服务：
+### Run an example
 
 ```bash
-npm run dev:compare
+mkdir -p output
+./build/dev/canvas_engine examples/echarts_bar.js
+# or, if you built into ./build directly:
+./build/canvas_engine examples/echarts_bar.js
+# or the basic demo:
+./scripts/run_demo.sh
 ```
 
-默认地址：
+### Compare against the browser
+
+Spin up a local dev server that renders the **native browser ECharts canvas** on top and the **PNG exported by this backend** below, so you can compare them visually:
 
 ```bash
-http://127.0.0.1:8787
+npm run dev:compare          # serves http://127.0.0.1:8787
 ```
 
-这个页面会：
-
-- 上半部分直接用浏览器里的 `ECharts`
-- 下半部分调用当前仓库编译出来的 `build/canvas_engine`
-- 运行对应的 `examples/*.js`
-- 重新生成 `output/*.png`
-- 让你上下对比两边的视觉效果
-
-当前 compare 页面已经覆盖当前仓库里的全部 `examples/echarts_*.js` 示例，包括：
-
-- 基础系列：`bar`、`line`、`pie`、`scatter`、`heatmap`、`candlestick`、`funnel`、`gauge`、`radar`
-- 关系与层级：`graph`、`sankey`、`tree`、`treemap`、`sunburst`
-- 坐标系与组合：`parallel`、`polar bar`、`single axis scatter`、`calendar heatmap/scatter/effectScatter`
-- 组件与数据链路：`timeline`、`dataset`、`legend`、`toolbox`、`brush`、`axisPointer`、`dataZoom`
-- 地图与地理：`map`、`map piecewise`、`geo effect scatter`、`geo lines`、`geo heatmap`
-- 图形能力：`custom series`、`pictorial bar`、`image scatter`、`rich graphic`、`pattern bar`
-
-如果你的二进制不在默认位置，可以这样启动：
+The compare page covers every `examples/echarts_*.js` in the repo. Point at a custom binary with:
 
 ```bash
 CANVAS_ENGINE_BIN=/absolute/path/to/canvas_engine npm run dev:compare
 ```
 
-### 直接使用 CMake Presets
-
-开发构建：
+### Build with CMake Presets
 
 ```bash
-cmake --preset dev
-cmake --build --preset dev
-ctest --preset dev
+cmake --preset dev      && cmake --build --preset dev      && ctest --preset dev
+cmake --preset release  && cmake --build --preset release  && ctest --preset release
+# output dirs: build/dev, build/release
 ```
 
-Release 构建：
+### Integrating ECharts
 
-```bash
-cmake --preset release
-cmake --build --preset release
-ctest --preset release
-```
-
-预设输出目录：
-
-- `build/dev`
-- `build/release`
-
-### V8 / Skia 自动探测
-
-当前 pin 的第三方源码版本：
-
-- Skia: `31521f8508c712615b3d35e8e4554ccb5bf568e1`
-- V8: `15.0.39`
-
-在 macOS + Homebrew `v8` 场景下，`CMakeLists.txt` 会自动探测：
-
-- `/opt/homebrew/opt/v8/include`
-- `/opt/homebrew/opt/v8/lib`
-- `/opt/homebrew/opt/v8/libexec`
-- Homebrew V8 对应的 compile definitions
-
-如果仓库内已经存在可用的本地 Skia 产物，也会自动探测：
-
-- `third_party/skia`
-- `third_party/skia/bazel-bin/src/core/libcore.a`
-- `third_party/skia/bazel-bin/src/base/libbase.a`
-- `third_party/skia/bazel-bin/src/codec/libany_decoder.a`
-- `third_party/skia/bazel-bin/src/encode/libencoder_common.a`
-- `third_party/skia/bazel-bin/src/encode/libicc_support.a`
-- `third_party/skia/bazel-bin/src/encode/libpng_encode.a`
-- `third_party/skia/bazel-bin/src/encode/libpng_encode_base.a`
-- `third_party/skia/bazel-bin/src/ports/libfontmgr_fontconfig.a`
-- `third_party/skia/bazel-bin/src/ports/libfreetype_support.a`
-- `third_party/skia/bazel-bin/src/ports/libtypeface_proxy.a`
-- `third_party/skia/bazel-bin/src/utils/libchar_to_glyphcache.a`
-- `third_party/skia/bazel-bin/external/+cpp_modules+freetype/libfreetype.a`
-- `third_party/skia/bazel-bin/src/opts/libml3.a`
-- `third_party/skia/bazel-bin/modules/skcms/_objs/skcms_public/skcms.pic.o`
-- `third_party/skia/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o`
-- `third_party/skia/bazel-bin/modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o`
-- `third_party/skia/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o`
-
-如果你换成了自己的 V8 / Skia 构建产物，再手动覆盖这些变量：
-
-- `V8_INCLUDE_DIRS`
-- `V8_LINK_DIRECTORIES`
-- `V8_LIBRARIES`
-- `V8_COMPILE_DEFINITIONS`
-- `SKIA_INCLUDE_DIRS`
-- `SKIA_LINK_DIRECTORIES`
-- `SKIA_LIBRARIES`
-
-## 测试
-
-当前有两类测试：
-
-- 冒烟测试：验证 V8 宿主和脚本执行链路
-- 渲染回归测试：验证高清导出、图片绘制、曲线、椭圆、`arcTo`、`ImageData`、任务队列冲刷语义没有回退
-- compare 覆盖回归：验证每个 `examples/echarts_*.js` 都已接入 `web/compare/cases.json`，并且浏览器侧 `createOption` 已完成 wiring
-
-直接运行：
-
-```bash
-ctest --test-dir build --output-on-failure
-```
-
-或者使用 preset：
-
-```bash
-ctest --preset dev
-```
-
-只跑 compare 覆盖校验：
-
-```bash
-python3 scripts/verify_compare_coverage.py
-ctest --preset dev -R compare_coverage_verify
-```
-
-## 运行示例
-
-先准备输出目录：
-
-```bash
-mkdir -p output
-```
-
-开发构建的示例运行方式：
-
-```bash
-./build/dev/canvas_engine examples/echarts_bar.js
-```
-
-如果你是直接构建到根目录 `build/` 下，也可以这样跑：
-
-```bash
-./build/canvas_engine examples/echarts_bar.js
-```
-
-运行基础 demo：
-
-```bash
-./scripts/run_demo.sh
-```
-
-## ECharts 集成方式
-
-当前推荐的接入方式是直接加载 `ECharts` 的 UMD 构建，并通过宿主提供的 `Canvas` 作为渲染目标：
+The recommended path is to load the ECharts UMD build and use the host `Canvas` as the render target:
 
 ```js
 loadScript("../node_modules/echarts/dist/echarts.js");
@@ -489,82 +146,362 @@ echarts.setPlatformAPI({
   },
   loadImage(src, onload) {
     const image = new Image();
-    if (typeof onload === "function") {
-      image.onload = onload;
-    }
+    if (typeof onload === "function") image.onload = onload;
     image.src = src;
     return image;
   }
 });
 
-const chart = echarts.init(canvas, null, {
-  renderer: "canvas",
-  width,
-  height
-});
-```
+const chart = echarts.init(canvas, null, { renderer: "canvas", width, height });
 
-渲染完成后导出：
+// ... setOption ...
 
-```js
 chart.getZr().refreshImmediately();
 canvas.saveToPng("../output/chart.png");
 ```
 
-## 目录结构
+### Verified ECharts charts
+
+All 50+ examples below have actually been rendered to PNG in this repo (based on `echarts@6.0.0`). Every built-in core chart series now has example coverage.
+
+| Category | Charts |
+| --- | --- |
+| **Basic** | bar · boxplot · line · pie · scatter · effectScatter · candlestick · funnel · gauge · radar · heatmap · calendar heatmap |
+| **Graph & flow** | graph · map · sankey · lines · parallel · themeRiver |
+| **Hierarchy & layout** | tree · treemap · sunburst |
+| **Custom & components** | custom series · pictorialBar · timeline · dataZoom+markArea · markPoint+markLine · toolbox · brush · dataset+transform · legend scroll · axisPointer · visualMap · piecewise visualMap · multi-grid axisPointer · toolbox magicType / dataZoom · legend selected |
+| **Coordinates & containers** | polar · singleAxis · calendar · geo · geo+effectScatter · geo+lines · map+piecewise visualMap · map+scatter+visualMap |
+| **Image / rich / mixed** | image scatter · rich graphic · pattern bar · geo heatmap |
+
+The full example index lives in [`examples/`](examples/).
+
+### Implemented API
+
+<details>
+<summary><b>Host objects</b></summary>
+
+`new Canvas(width, height)` · `canvas.width` · `canvas.height` · `canvas.getContext("2d")` · `canvas.saveToPng(path)` · `canvas.setAttribute(name, value)` · `canvas.addEventListener(...)` · `canvas.removeEventListener(...)`
+
+`new Image()` · `image.width` · `image.height` · `image.src` · `image.complete` · `image.onload` · `image.onerror`
+</details>
+
+<details>
+<summary><b>2D context</b></summary>
+
+**State:** `fillStyle` · `strokeStyle` · `lineWidth` · `font` · `textAlign` · `textBaseline` · `globalAlpha` · `globalCompositeOperation` · `lineCap` · `lineJoin` · `miterLimit` · `shadowBlur` · `shadowColor` · `shadowOffsetX` · `shadowOffsetY` · `lineDashOffset`
+
+**Transform:** `save` · `restore` · `translate` · `scale` · `rotate` · `transform` · `setTransform` · `resetTransform`
+
+**Rects:** `clearRect` · `fillRect` · `strokeRect`
+
+**Paths:** `beginPath` · `moveTo` · `lineTo` · `quadraticCurveTo` · `bezierCurveTo` · `rect` · `arc` · `arcTo` · `ellipse` · `closePath` · `clip` · `fill` · `stroke`
+
+**Dash / style factories:** `setLineDash` · `getLineDash` · `createLinearGradient` · `createRadialGradient` · `createPattern`
+
+**Text:** `measureText` · `fillText` · `strokeText`
+
+**Images / pixels:** `drawImage` · `getImageData` · `putImageData`
+</details>
+
+<details>
+<summary><b>Globals</b></summary>
+
+`print(...)` · `console.log/warn/error` · `loadScript(path)` · `setTimeout` · `clearTimeout` · `requestAnimationFrame` · `cancelAnimationFrame` · `performance.now()`
+</details>
+
+### Testing
+
+```bash
+ctest --test-dir build --output-on-failure   # all tests
+ctest --preset dev                            # via preset
+python3 scripts/verify_compare_coverage.py    # compare-coverage check only
+```
+
+Three test classes: **smoke** (V8 host + script execution), **rendering regression** (HiDPI export, image draw, curves, ellipse, `arcTo`, `ImageData`, task-queue flush), and **compare coverage** (every `examples/echarts_*.js` wired into `web/compare/cases.json`).
+
+### Project layout
 
 ```text
 .
-├── CMakeLists.txt
-├── CMakePresets.json
-├── README.md
-├── examples
-├── include
-│   └── canvas_engine
-│       ├── canvas
-│       └── runtime
-├── scripts
-├── src
-│   ├── canvas
-│   └── runtime
-└── third_party
-    └── skia
+├── CMakeLists.txt / CMakePresets.json
+├── examples/              # ECharts + smoke examples
+├── include/canvas_engine/ # public headers (canvas/, runtime/)
+├── scripts/               # bootstrap, build, dev server, verifiers
+├── src/                   # canvas/ (2D, surface, image), runtime/ (V8 bindings)
+├── web/                   # browser-vs-backend compare page
+└── third_party/skia       # Skia submodule
 ```
 
-核心实现位置：
+Core implementation:
 
-- 2D 绘制实现: [src/canvas/Canvas2DContext.cc](src/canvas/Canvas2DContext.cc)
-- Canvas surface / PNG 导出: [src/canvas/CanvasSurface.cc](src/canvas/CanvasSurface.cc)
-- 图片解码: [src/canvas/ImageAsset.cc](src/canvas/ImageAsset.cc)
-- V8 绑定与宿主运行时: [src/runtime/ScriptEngine.cc](src/runtime/ScriptEngine.cc)
+- 2D drawing — [`src/canvas/Canvas2DContext.cc`](src/canvas/Canvas2DContext.cc)
+- Surface / PNG export — [`src/canvas/CanvasSurface.cc`](src/canvas/CanvasSurface.cc)
+- Image decoding — [`src/canvas/ImageAsset.cc`](src/canvas/ImageAsset.cc)
+- V8 bindings & host runtime — [`src/runtime/ScriptEngine.cc`](src/runtime/ScriptEngine.cc)
 
-## 已知限制
+Pinned third-party versions — Skia: `31521f8508c712615b3d35e8e4554ccb5bf568e1`, V8: `15.0.39`.
 
-这套运行时目前仍然是“面向渲染导出”的最小宿主，不是浏览器环境，也不是完整 `node-canvas` 替代品。
+### Known limitations
 
-当前明确限制：
+This runtime is a **render-and-export host**, not a browser and not a drop-in `node-canvas` replacement:
+
+- No DOM, CSSOM or layout system
+- `Image.src` only supports local file paths — no `http(s)` URLs
+- No full event system (`addEventListener` is mostly a compatibility stub)
+- No `Path2D`, no `isPointInPath` / `isPointInStroke`, no `createImageData`
+- No full browser-grade async event loop
+
+**Timer semantics:** `requestAnimationFrame` / `setTimeout` are no longer synchronous — they enter a minimal task queue that drains at the end of script execution and before `saveToPng()`. Enough for the ECharts/zrender refresh chain, but not a general event loop.
+
+### Roadmap
+
+- `Path2D`
+- Fuller pixel API (e.g. `createImageData`)
+- Hit-testing API
+- Closer-to-browser timer / event-loop semantics
+- Systematize the ECharts compatibility matrix into automated regression
+
+### Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for the dev setup, the compare workflow, and how to add a new ECharts example.
+
+### License
+
+Released under the [MIT License](LICENSE).
+
+---
+
+## 中文
+
+### 简介
+
+**Skia Painter** 是一个基于 `C++ + V8 + Skia` 的 Canvas 后端引擎。它的目标**不是**完整实现浏览器 DOM，而是提供一套足够驱动 **ECharts** canvas 渲染链路的宿主运行时，并把结果稳定导出为高清 PNG。
+
+它能够：
+
+- 通过 **V8** 执行 JavaScript
+- 通过 **Skia** 完成 2D 栅格绘制
+- 提供 `Canvas` / `CanvasRenderingContext2D` / `Image` 宿主对象
+- 直接加载 **ECharts** UMD 产物并完成 canvas 渲染
+- 默认导出高清 PNG
+- 提供冒烟测试与渲染回归测试
+
+### 为什么做这个？
+
+服务端渲染图表通常要么跑无头浏览器（Puppeteer/Playwright），要么用 `node-canvas`。Skia Painter 走了一条更轻的路：一个原生二进制启动 V8，把 Skia 支持的 canvas 交给 ECharts，然后写出 PNG —— 没有浏览器、没有显示服务器、没有 DOM。
+
+### 当前状态
+
+这套工程已经不是“骨架”，而是一套**可运行的最小 Canvas 渲染后端**，稳定支持：
+
+- 本地脚本加载：`loadScript(path)`
+- 本地图片解码：`new Image()` + `image.src = "..."`
+- 2D 路径、文本、阴影、虚线、渐变、pattern、像素读写
+- `requestAnimationFrame` / `setTimeout` 的最小任务队列语义
+- 默认高清导出
+
+**默认渲染策略：**
+
+- 内部 backing store 默认使用 `DPR = 3`
+- `canvas.saveToPng(path)` 默认直接导出 backing store 分辨率
+- 例如逻辑尺寸 `960×540`，导出 PNG 默认是 `2880×1620`
+
+**路径语义：** `loadScript(path)`、`image.src = path`、`canvas.saveToPng(path)` 的相对路径都按“**当前脚本文件所在目录**”解析，而不是进程启动目录。
+
+### 快速开始
+
+> 默认 bootstrap 目标是 **macOS + Homebrew**，同时也提供 Linux 脚本（`scripts/bootstrap_linux.sh`）。
+
+```bash
+# 带子模块克隆
+git clone --recursive https://github.com/byteluo/skia_painter.git
+cd skia_painter
+
+# 一键安装 + 构建 + 测试
+./scripts/bootstrap.sh          # debug
+./scripts/bootstrap.sh release  # release
+```
+
+该脚本会安装 Homebrew 依赖、配置 `JAVA_HOME`、初始化 `third_party/skia`、构建最小 Skia 产物，然后配置、编译并运行测试。
+
+强制重建 Skia：
+
+```bash
+FORCE_SKIA_BUILD=1 ./scripts/bootstrap.sh
+```
+
+### 运行示例
+
+```bash
+mkdir -p output
+./build/dev/canvas_engine examples/echarts_bar.js
+# 或者直接构建到 ./build 时：
+./build/canvas_engine examples/echarts_bar.js
+# 或运行基础 demo：
+./scripts/run_demo.sh
+```
+
+### 与浏览器对比
+
+启动一个本地 dev 服务，上半部分是**浏览器原生 ECharts canvas 渲染**，下半部分是**当前后端导出的 PNG**，方便上下对比视觉效果：
+
+```bash
+npm run dev:compare          # 默认 http://127.0.0.1:8787
+```
+
+对比页面已覆盖仓库里全部 `examples/echarts_*.js`。二进制不在默认位置时：
+
+```bash
+CANVAS_ENGINE_BIN=/absolute/path/to/canvas_engine npm run dev:compare
+```
+
+### 使用 CMake Presets 构建
+
+```bash
+cmake --preset dev      && cmake --build --preset dev      && ctest --preset dev
+cmake --preset release  && cmake --build --preset release  && ctest --preset release
+# 输出目录：build/dev、build/release
+```
+
+### 集成 ECharts
+
+推荐直接加载 ECharts 的 UMD 构建，并用宿主提供的 `Canvas` 作为渲染目标：
+
+```js
+loadScript("../node_modules/echarts/dist/echarts.js");
+
+const width = 960;
+const height = 540;
+const canvas = new Canvas(width, height);
+canvas.style = {};
+
+echarts.setPlatformAPI({
+  createCanvas() {
+    const next = new Canvas(width, height);
+    next.style = {};
+    return next;
+  },
+  loadImage(src, onload) {
+    const image = new Image();
+    if (typeof onload === "function") image.onload = onload;
+    image.src = src;
+    return image;
+  }
+});
+
+const chart = echarts.init(canvas, null, { renderer: "canvas", width, height });
+
+// ... setOption ...
+
+chart.getZr().refreshImmediately();
+canvas.saveToPng("../output/chart.png");
+```
+
+### 已验证的 ECharts 图表
+
+下面 50+ 个示例都已在当前仓库实际跑通并导出 PNG（基于 `echarts@6.0.0`），内建 core chart series 已全部有示例覆盖。
+
+| 分类 | 图表 |
+| --- | --- |
+| **基础图表** | bar · boxplot · line · pie · scatter · effectScatter · candlestick · funnel · gauge · radar · heatmap · calendar heatmap |
+| **图关系与流向** | graph · map · sankey · lines · parallel · themeRiver |
+| **层级与布局** | tree · treemap · sunburst |
+| **自定义与组件** | custom series · pictorialBar · timeline · dataZoom+markArea · markPoint+markLine · toolbox · brush · dataset+transform · legend scroll · axisPointer · visualMap · piecewise visualMap · multi-grid axisPointer · toolbox magicType / dataZoom · legend selected |
+| **坐标系与容器** | polar · singleAxis · calendar · geo · geo+effectScatter · geo+lines · map+piecewise visualMap · map+scatter+visualMap |
+| **图片/富文本/混合** | image scatter · rich graphic · pattern bar · geo heatmap |
+
+完整示例索引见 [`examples/`](examples/) 目录。
+
+### 已实现 API
+
+<details>
+<summary><b>宿主对象</b></summary>
+
+`new Canvas(width, height)` · `canvas.width` · `canvas.height` · `canvas.getContext("2d")` · `canvas.saveToPng(path)` · `canvas.setAttribute(name, value)` · `canvas.addEventListener(...)` · `canvas.removeEventListener(...)`
+
+`new Image()` · `image.width` · `image.height` · `image.src` · `image.complete` · `image.onload` · `image.onerror`
+</details>
+
+<details>
+<summary><b>2D Context</b></summary>
+
+**状态：** `fillStyle` · `strokeStyle` · `lineWidth` · `font` · `textAlign` · `textBaseline` · `globalAlpha` · `globalCompositeOperation` · `lineCap` · `lineJoin` · `miterLimit` · `shadowBlur` · `shadowColor` · `shadowOffsetX` · `shadowOffsetY` · `lineDashOffset`
+
+**变换：** `save` · `restore` · `translate` · `scale` · `rotate` · `transform` · `setTransform` · `resetTransform`
+
+**矩形：** `clearRect` · `fillRect` · `strokeRect`
+
+**路径：** `beginPath` · `moveTo` · `lineTo` · `quadraticCurveTo` · `bezierCurveTo` · `rect` · `arc` · `arcTo` · `ellipse` · `closePath` · `clip` · `fill` · `stroke`
+
+**虚线 / 样式工厂：** `setLineDash` · `getLineDash` · `createLinearGradient` · `createRadialGradient` · `createPattern`
+
+**文本：** `measureText` · `fillText` · `strokeText`
+
+**图片 / 像素：** `drawImage` · `getImageData` · `putImageData`
+</details>
+
+<details>
+<summary><b>全局能力</b></summary>
+
+`print(...)` · `console.log/warn/error` · `loadScript(path)` · `setTimeout` · `clearTimeout` · `requestAnimationFrame` · `cancelAnimationFrame` · `performance.now()`
+</details>
+
+### 测试
+
+```bash
+ctest --test-dir build --output-on-failure   # 全部测试
+ctest --preset dev                            # 通过 preset
+python3 scripts/verify_compare_coverage.py    # 只跑 compare 覆盖校验
+```
+
+三类测试：**冒烟测试**（V8 宿主 + 脚本执行链路）、**渲染回归**（高清导出、图片绘制、曲线、椭圆、`arcTo`、`ImageData`、任务队列冲刷语义）、**compare 覆盖**（每个 `examples/echarts_*.js` 都已接入 `web/compare/cases.json`）。
+
+### 目录结构
+
+```text
+.
+├── CMakeLists.txt / CMakePresets.json
+├── examples/              # ECharts 与冒烟示例
+├── include/canvas_engine/ # 公共头文件（canvas/、runtime/）
+├── scripts/               # bootstrap、构建、dev 服务、校验脚本
+├── src/                   # canvas/（2D、surface、image）、runtime/（V8 绑定）
+├── web/                   # 浏览器 vs 后端 对比页面
+└── third_party/skia       # Skia 子模块
+```
+
+核心实现：
+
+- 2D 绘制 —— [`src/canvas/Canvas2DContext.cc`](src/canvas/Canvas2DContext.cc)
+- Surface / PNG 导出 —— [`src/canvas/CanvasSurface.cc`](src/canvas/CanvasSurface.cc)
+- 图片解码 —— [`src/canvas/ImageAsset.cc`](src/canvas/ImageAsset.cc)
+- V8 绑定与宿主运行时 —— [`src/runtime/ScriptEngine.cc`](src/runtime/ScriptEngine.cc)
+
+pin 的第三方版本 —— Skia：`31521f8508c712615b3d35e8e4554ccb5bf568e1`，V8：`15.0.39`。
+
+### 已知限制
+
+这套运行时是“**面向渲染导出**”的最小宿主，不是浏览器环境，也不是完整 `node-canvas` 替代品：
 
 - 没有 DOM、CSSOM、布局系统
 - `Image.src` 目前只支持本地文件路径，不支持 `http(s)` URL
-- 没有完整事件系统，`addEventListener` 主要用于兼容占位
-- 没有 `Path2D`
-- 没有 `isPointInPath` / `isPointInStroke`
-- 没有 `createImageData`
+- 没有完整事件系统（`addEventListener` 主要用于兼容占位）
+- 没有 `Path2D`、`isPointInPath` / `isPointInStroke`、`createImageData`
 - 没有完整浏览器级异步事件循环
 
-关于定时器语义：
+**定时器语义：** `requestAnimationFrame` / `setTimeout` 不再是“立即同步执行”，它们会进入最小任务队列，在脚本执行末尾和 `saveToPng()` 前统一 drain。足以支撑 ECharts/zrender 的刷新链，但不是通用事件循环。
 
-- 现在的 `requestAnimationFrame` / `setTimeout` 已经不是“立即同步执行”
-- 它们会进入最小任务队列
-- 队列会在脚本执行末尾和 `saveToPng()` 前统一 drain
-- 这足以支撑 `ECharts` / `zrender` 的刷新链，但仍然不是通用浏览器事件循环实现
-
-## 下一步
-
-如果继续扩展，优先级建议是：
+### 路线图
 
 - 补 `Path2D`
-- 补更完整的像素 API，比如 `createImageData`
-- 补命中测试 API
-- 补更接近浏览器的定时器 / 事件循环语义
-- 把当前 ECharts 兼容矩阵继续系统化成自动化回归
+- 更完整的像素 API（如 `createImageData`）
+- 命中测试 API
+- 更接近浏览器的定时器 / 事件循环语义
+- 把 ECharts 兼容矩阵系统化成自动化回归
+
+### 参与贡献
+
+欢迎贡献！开发环境、对比工作流、以及如何新增一个 ECharts 示例，请见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+### 许可证
+
+基于 [MIT License](LICENSE) 开源。
