@@ -6,6 +6,7 @@
 
 **一个基于 C++ + V8 + Skia 的无头 Canvas 后端，把 [Apache ECharts](https://echarts.apache.org/) 渲染链路稳定导出为高清 PNG。**
 
+[![Deploy Pages](https://github.com/byteluo/skia_painter/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/byteluo/skia_painter/actions/workflows/deploy-pages.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C.svg?logo=cplusplus)](CMakeLists.txt)
 [![Skia](https://img.shields.io/badge/Skia-2D%20Graphics-EA4335.svg)](https://skia.org/)
@@ -240,6 +241,26 @@ Core implementation:
 - V8 bindings & host runtime — [`src/runtime/ScriptEngine.cc`](src/runtime/ScriptEngine.cc)
 
 Pinned third-party versions — Skia: `31521f8508c712615b3d35e8e4554ccb5bf568e1`, V8: `15.0.39`.
+
+### Benchmarks
+
+How does this compare to the usual ways of rendering ECharts on a server? Architecturally:
+
+| Backend | Render target | Output | Browser? | DOM? |
+| --- | --- | --- | --- | --- |
+| **Skia Painter** (this project) | Skia (native 2D) | PNG (raster, HiDPI) | No | No |
+| **Headless Chrome** (Puppeteer/Playwright) | Browser compositor | PNG / screenshot | Yes (~150–300 MB) | Yes |
+| **node-canvas + ECharts** | Cairo | PNG (raster) | No | No |
+| **ECharts SVG SSR** | — | SVG (vector string) | No | No |
+
+There is a **reproducible harness** in [`bench/benchmark.mjs`](bench/benchmark.mjs) that renders the *same* ECharts options through every available backend and prints a Markdown table. Any backend whose dependency is missing is skipped, never faked:
+
+```bash
+npm i -D canvas puppeteer        # optional competitors
+node bench/benchmark.mjs         # ITERATIONS=50 for more samples
+```
+
+See [`docs/benchmarks.md`](docs/benchmarks.md) for the methodology, caveats (PNG vs SVG are different artifacts; headless Chrome is the visual *reference*), and sample numbers. **Run it on your own hardware before quoting any figure.**
 
 ### Known limitations
 
@@ -477,6 +498,26 @@ python3 scripts/verify_compare_coverage.py    # 只跑 compare 覆盖校验
 - V8 绑定与宿主运行时 —— [`src/runtime/ScriptEngine.cc`](src/runtime/ScriptEngine.cc)
 
 pin 的第三方版本 —— Skia：`31521f8508c712615b3d35e8e4554ccb5bf568e1`，V8：`15.0.39`。
+
+### 性能对比
+
+和服务端渲染 ECharts 的常见做法相比，从架构上看：
+
+| 方案 | 渲染目标 | 输出 | 需要浏览器？ | 需要 DOM？ |
+| --- | --- | --- | --- | --- |
+| **Skia Painter**（本项目） | Skia（原生 2D） | PNG（栅格，高清） | 否 | 否 |
+| **无头 Chrome**（Puppeteer/Playwright） | 浏览器合成器 | PNG / 截图 | 是（约 150–300 MB） | 是 |
+| **node-canvas + ECharts** | Cairo | PNG（栅格） | 否 | 否 |
+| **ECharts SVG SSR** | — | SVG（矢量字符串） | 否 | 否 |
+
+仓库里有一套**可复现的基准 harness** [`bench/benchmark.mjs`](bench/benchmark.mjs)：把*同一组* ECharts option 喂给每个可用后端并打印 Markdown 表格。依赖缺失的后端会被跳过，绝不编造数字：
+
+```bash
+npm i -D canvas puppeteer        # 可选的对比方案
+node bench/benchmark.mjs         # ITERATIONS=50 可加大采样
+```
+
+方法学、注意事项（PNG 与 SVG 是不同产物；无头 Chrome 是视觉*参考*实现）以及示例数据见 [`docs/benchmarks.md`](docs/benchmarks.md)。**引用任何数字前请在你自己的硬件上重新测量。**
 
 ### 已知限制
 
