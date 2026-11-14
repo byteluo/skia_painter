@@ -1803,8 +1803,6 @@ void ScriptEngine::ImageSrcSetter(
         }
       },
       engine->NowMs());
-    }
-  }
 }
 
 void ScriptEngine::ImageCompleteGetter(
