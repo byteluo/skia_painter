@@ -230,7 +230,7 @@ bool Canvas2DContext::SetFillStyle(std::string_view css_color) {
     return false;
   }
   state_.fill_style = parsed.value();
-  state_.fill_shader.reset();
+  state_.fill_source.reset();
   state_.fill_style_css = NormalizeCssColor(css_color);
   return true;
 }
@@ -241,7 +241,7 @@ bool Canvas2DContext::SetStrokeStyle(std::string_view css_color) {
     return false;
   }
   state_.stroke_style = parsed.value();
-  state_.stroke_shader.reset();
+  state_.stroke_source.reset();
   state_.stroke_style_css = NormalizeCssColor(css_color);
   return true;
 }
@@ -409,16 +409,22 @@ void Canvas2DContext::SetShadowOffsetY(float value) {
   state_.shadow_offset_y = value;
 }
 
-void Canvas2DContext::SetFillShader(sk_sp<SkShader> shader,
-                                    std::string_view description) {
-  state_.fill_shader = std::move(shader);
-  state_.fill_style_css = std::string(description);
+void Canvas2DContext::SetFillSource(
+    std::shared_ptr<const PaintSource> source) {
+  if (!source) {
+    return;
+  }
+  state_.fill_style_css = source->description();
+  state_.fill_source = std::move(source);
 }
 
-void Canvas2DContext::SetStrokeShader(sk_sp<SkShader> shader,
-                                      std::string_view description) {
-  state_.stroke_shader = std::move(shader);
-  state_.stroke_style_css = std::string(description);
+void Canvas2DContext::SetStrokeSource(
+    std::shared_ptr<const PaintSource> source) {
+  if (!source) {
+    return;
+  }
+  state_.stroke_style_css = source->description();
+  state_.stroke_source = std::move(source);
 }
 
 void Canvas2DContext::SetLineDash(const std::vector<float>& segments) {
@@ -596,12 +602,16 @@ void Canvas2DContext::ClosePath() {
   current_path_.close();
 }
 
-void Canvas2DContext::Clip() {
-  surface_->canvas()->clipPath(current_path_.snapshot(), true);
+void Canvas2DContext::Clip(SkPathFillType fill_type) {
+  SkPath path = current_path_.snapshot();
+  path.setFillType(fill_type);
+  surface_->canvas()->clipPath(path, true);
 }
 
-void Canvas2DContext::Fill() {
-  surface_->canvas()->drawPath(current_path_.snapshot(), MakeFillPaint());
+void Canvas2DContext::Fill(SkPathFillType fill_type) {
+  SkPath path = current_path_.snapshot();
+  path.setFillType(fill_type);
+  surface_->canvas()->drawPath(path, MakeFillPaint());
 }
 
 void Canvas2DContext::Stroke() {
@@ -884,11 +894,11 @@ SkPaint Canvas2DContext::MakeFillPaint() const {
   SkPaint paint;
   paint.setAntiAlias(true);
   paint.setStyle(SkPaint::kFill_Style);
-  if (state_.fill_shader) {
+  if (state_.fill_source) {
     paint.setColor(SkColorSetARGB(static_cast<U8CPU>(
                                       std::lround(state_.global_alpha * 255.0f)),
                                   255, 255, 255));
-    paint.setShader(state_.fill_shader);
+    paint.setShader(state_.fill_source->shader());
   } else {
     paint.setColor(ApplyGlobalAlpha(state_.fill_style, state_.global_alpha));
   }
@@ -900,11 +910,11 @@ SkPaint Canvas2DContext::MakeStrokePaint() const {
   SkPaint paint;
   paint.setAntiAlias(true);
   paint.setStyle(SkPaint::kStroke_Style);
-  if (state_.stroke_shader) {
+  if (state_.stroke_source) {
     paint.setColor(SkColorSetARGB(static_cast<U8CPU>(
                                       std::lround(state_.global_alpha * 255.0f)),
                                   255, 255, 255));
-    paint.setShader(state_.stroke_shader);
+    paint.setShader(state_.stroke_source->shader());
   } else {
     paint.setColor(ApplyGlobalAlpha(state_.stroke_style, state_.global_alpha));
   }
@@ -917,8 +927,16 @@ SkPaint Canvas2DContext::MakeTextPaint(bool stroke) const {
   SkPaint paint;
   paint.setAntiAlias(true);
   paint.setStyle(stroke ? SkPaint::kStroke_Style : SkPaint::kFill_Style);
-  paint.setColor(ApplyGlobalAlpha(stroke ? state_.stroke_style : state_.fill_style,
-                                  state_.global_alpha));
+  const auto& source = stroke ? state_.stroke_source : state_.fill_source;
+  if (source) {
+    paint.setColor(SkColorSetARGB(static_cast<U8CPU>(
+                                      std::lround(state_.global_alpha * 255.0f)),
+                                  255, 255, 255));
+    paint.setShader(source->shader());
+  } else {
+    paint.setColor(ApplyGlobalAlpha(stroke ? state_.stroke_style : state_.fill_style,
+                                    state_.global_alpha));
+  }
   paint.setStrokeWidth(state_.line_width);
   ConfigurePaint(&paint, stroke);
   return paint;
@@ -958,6 +976,7 @@ void Canvas2DContext::ConfigurePaint(SkPaint* paint, bool allow_line_dash) const
 void Canvas2DContext::DrawText(std::string_view text, float x, float y,
                                const SkPaint& paint) const {
 #if defined(__APPLE__)
+  if (paint.getShader() == nullptr) {
   SkPixmap pixmap;
   if (surface_->PeekPixels(&pixmap)) {
     CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
@@ -1045,6 +1064,7 @@ void Canvas2DContext::DrawText(std::string_view text, float x, float y,
         CGContextRelease(cg);
       }
     }
+  }
   }
 #endif
 

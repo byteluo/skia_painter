@@ -212,6 +212,103 @@ SkTileMode RepeatModeToTileMode(const std::string& repeat, bool for_x_axis) {
   return SkTileMode::kRepeat;
 }
 
+class GradientSource final : public PaintSource {
+ public:
+  enum class Kind {
+    kLinear,
+    kRadial,
+  };
+
+  struct ColorStop {
+    float offset = 0.0f;
+    SkColor color = SK_ColorBLACK;
+  };
+
+  GradientSource(Kind kind, float x0, float y0, float r0, float x1, float y1,
+                 float r1)
+      : kind_(kind),
+        x0_(x0),
+        y0_(y0),
+        r0_(r0),
+        x1_(x1),
+        y1_(y1),
+        r1_(r1) {}
+
+  sk_sp<SkShader> shader() const override {
+    if (cache_valid_) {
+      return cached_shader_;
+    }
+    cache_valid_ = true;
+    if (stops_.empty()) {
+      cached_shader_.reset();
+      return cached_shader_;
+    }
+
+    std::vector<ColorStop> sorted = stops_;
+    std::sort(sorted.begin(), sorted.end(),
+              [](const ColorStop& lhs, const ColorStop& rhs) {
+                return lhs.offset < rhs.offset;
+              });
+
+    std::vector<SkScalar> positions;
+    std::vector<SkColor4f> colors4f;
+    positions.reserve(sorted.size());
+    colors4f.reserve(sorted.size());
+    for (const auto& stop : sorted) {
+      colors4f.push_back(SkColor4f::FromColor(stop.color));
+      positions.push_back(stop.offset);
+    }
+
+    SkGradient gradient(
+        SkGradient::Colors(colors4f, positions, SkTileMode::kClamp),
+        SkGradient::Interpolation());
+    if (kind_ == Kind::kLinear) {
+      const SkPoint points[2] = {SkPoint::Make(x0_, y0_),
+                                 SkPoint::Make(x1_, y1_)};
+      cached_shader_ = SkShaders::LinearGradient(points, gradient);
+    } else {
+      cached_shader_ = SkShaders::TwoPointConicalGradient(
+          SkPoint::Make(x0_, y0_), r0_, SkPoint::Make(x1_, y1_), r1_,
+          gradient);
+    }
+    return cached_shader_;
+  }
+
+  const std::string& description() const override { return description_; }
+
+  void AddColorStop(float offset, SkColor color) {
+    stops_.push_back({offset, color});
+    cache_valid_ = false;
+    cached_shader_.reset();
+  }
+
+ private:
+  Kind kind_;
+  float x0_ = 0.0f;
+  float y0_ = 0.0f;
+  float r0_ = 0.0f;
+  float x1_ = 0.0f;
+  float y1_ = 0.0f;
+  float r1_ = 0.0f;
+  std::vector<ColorStop> stops_;
+  mutable bool cache_valid_ = false;
+  mutable sk_sp<SkShader> cached_shader_;
+  const std::string description_ = "[object CanvasGradient]";
+};
+
+class FixedShaderSource final : public PaintSource {
+ public:
+  FixedShaderSource(sk_sp<SkShader> shader, std::string description)
+      : shader_(std::move(shader)), description_(std::move(description)) {}
+
+  sk_sp<SkShader> shader() const override { return shader_; }
+  const std::string& description() const override { return description_; }
+
+ private:
+  sk_sp<SkShader> shader_;
+  std::string description_;
+};
+
 bool ExtractSixNumbers(const v8::FunctionCallbackInfo<v8::Value>& info,
                        float* a, float* b, float* c, float* d, float* e,
                        float* f) {
@@ -291,69 +388,18 @@ struct ScriptEngine::PatternHandle {
   std::uint64_t id = 0;
   v8::Global<v8::Object> object;
   std::unique_ptr<HandleFinalizerData> finalizer_data;
-  sk_sp<SkShader> shader;
-  std::string description = "[object CanvasPattern]";
+  std::shared_ptr<const PaintSource> source;
 };
 
 struct ScriptEngine::GradientHandle {
-  enum class Kind {
-    kLinear,
-    kRadial,
-  };
-
-  struct ColorStop {
-    float offset = 0.0f;
-    SkColor color = SK_ColorBLACK;
-  };
-
-  GradientHandle(std::uint64_t handle_id, Kind gradient_kind)
-      : id(handle_id), kind(gradient_kind) {}
-
-  sk_sp<SkShader> BuildShader() const {
-    if (stops.empty()) {
-      return nullptr;
-    }
-
-    std::vector<ColorStop> sorted = stops;
-    std::sort(sorted.begin(), sorted.end(),
-              [](const ColorStop& lhs, const ColorStop& rhs) {
-                return lhs.offset < rhs.offset;
-              });
-
-    std::vector<SkScalar> positions;
-    std::vector<SkColor4f> colors4f;
-    positions.reserve(sorted.size());
-    colors4f.reserve(sorted.size());
-    for (const auto& stop : sorted) {
-      colors4f.push_back(SkColor4f::FromColor(stop.color));
-      positions.push_back(stop.offset);
-    }
-
-    SkGradient gradient(
-        SkGradient::Colors(colors4f, positions, SkTileMode::kClamp),
-        SkGradient::Interpolation());
-
-    if (kind == Kind::kLinear) {
-      const SkPoint points[2] = {SkPoint::Make(x0, y0), SkPoint::Make(x1, y1)};
-      return SkShaders::LinearGradient(points, gradient);
-    }
-
-    return SkShaders::TwoPointConicalGradient(SkPoint::Make(x0, y0), r0,
-                                              SkPoint::Make(x1, y1), r1,
-                                              gradient);
-  }
+  GradientHandle(std::uint64_t handle_id,
+                 std::shared_ptr<GradientSource> gradient_source)
+      : id(handle_id), source(std::move(gradient_source)) {}
 
   std::uint64_t id = 0;
   v8::Global<v8::Object> object;
   std::unique_ptr<HandleFinalizerData> finalizer_data;
-  Kind kind;
-  float x0 = 0.0f;
-  float y0 = 0.0f;
-  float r0 = 0.0f;
-  float x1 = 0.0f;
-  float y1 = 0.0f;
-  float r1 = 0.0f;
-  std::vector<ColorStop> stops;
+  std::shared_ptr<GradientSource> source;
 };
 
 ScriptEngine::ScriptEngine() {
@@ -1720,12 +1766,12 @@ void ScriptEngine::FillStyleSetter(
     auto object = value.As<v8::Object>();
     if (auto* gradient = engine->LiveGradientHandle(Unwrap<GradientHandle>(
             info.GetIsolate(), object, kGradientHandleTag))) {
-      handle->context->SetFillShader(gradient->BuildShader(), "[object CanvasGradient]");
+      handle->context->SetFillSource(gradient->source);
       return;
     }
     if (auto* pattern = engine->LivePatternHandle(Unwrap<PatternHandle>(
             info.GetIsolate(), object, kPatternHandleTag))) {
-      handle->context->SetFillShader(pattern->shader, pattern->description);
+      handle->context->SetFillSource(pattern->source);
       return;
     }
   }
@@ -1766,13 +1812,12 @@ void ScriptEngine::StrokeStyleSetter(
     auto object = value.As<v8::Object>();
     if (auto* gradient = engine->LiveGradientHandle(Unwrap<GradientHandle>(
             info.GetIsolate(), object, kGradientHandleTag))) {
-      handle->context->SetStrokeShader(gradient->BuildShader(),
-                                       "[object CanvasGradient]");
+      handle->context->SetStrokeSource(gradient->source);
       return;
     }
     if (auto* pattern = engine->LivePatternHandle(Unwrap<PatternHandle>(
             info.GetIsolate(), object, kPatternHandleTag))) {
-      handle->context->SetStrokeShader(pattern->shader, pattern->description);
+      handle->context->SetStrokeSource(pattern->source);
       return;
     }
   }
@@ -2491,17 +2536,51 @@ void ScriptEngine::CtxClosePath(
 }
 
 void ScriptEngine::CtxClip(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  if (auto* handle =
-          Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag)) {
-    handle->context->Clip();
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  if (!handle) {
+    return;
   }
+
+  SkPathFillType fill_type = SkPathFillType::kWinding;
+  if (info.Length() > 0 && !info[0]->IsUndefined()) {
+    if (!info[0]->IsString()) {
+      ThrowTypeError(info.GetIsolate(), "clip fillRule must be nonzero or evenodd");
+      return;
+    }
+    const std::string fill_rule = ToStdString(info.GetIsolate(), info[0]);
+    if (fill_rule == "evenodd") {
+      fill_type = SkPathFillType::kEvenOdd;
+    } else if (fill_rule != "nonzero") {
+      ThrowTypeError(info.GetIsolate(), "clip fillRule must be nonzero or evenodd");
+      return;
+    }
+  }
+  handle->context->Clip(fill_type);
 }
 
 void ScriptEngine::CtxFill(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  if (auto* handle =
-          Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag)) {
-    handle->context->Fill();
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  if (!handle) {
+    return;
   }
+
+  SkPathFillType fill_type = SkPathFillType::kWinding;
+  if (info.Length() > 0 && !info[0]->IsUndefined()) {
+    if (!info[0]->IsString()) {
+      ThrowTypeError(info.GetIsolate(), "fill fillRule must be nonzero or evenodd");
+      return;
+    }
+    const std::string fill_rule = ToStdString(info.GetIsolate(), info[0]);
+    if (fill_rule == "evenodd") {
+      fill_type = SkPathFillType::kEvenOdd;
+    } else if (fill_rule != "nonzero") {
+      ThrowTypeError(info.GetIsolate(), "fill fillRule must be nonzero or evenodd");
+      return;
+    }
+  }
+  handle->context->Fill(fill_type);
 }
 
 void ScriptEngine::CtxStroke(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -2668,13 +2747,12 @@ void ScriptEngine::CtxCreateLinearGradient(
   auto it = engine->gradients_
                 .emplace(handle_id,
                          std::make_unique<GradientHandle>(
-                             handle_id, GradientHandle::Kind::kLinear))
+                             handle_id,
+                             std::make_shared<GradientSource>(
+                                 GradientSource::Kind::kLinear, x0, y0, 0.0f,
+                                 x1, y1, 0.0f)))
                 .first;
   auto* gradient = it->second.get();
-  gradient->x0 = x0;
-  gradient->y0 = y0;
-  gradient->x1 = x1;
-  gradient->y1 = y1;
 
   auto context = info.GetIsolate()->GetCurrentContext();
   auto object = engine->GetGradientTemplate()
@@ -2718,15 +2796,12 @@ void ScriptEngine::CtxCreateRadialGradient(
   auto it = engine->gradients_
                 .emplace(handle_id,
                          std::make_unique<GradientHandle>(
-                             handle_id, GradientHandle::Kind::kRadial))
+                             handle_id,
+                             std::make_shared<GradientSource>(
+                                 GradientSource::Kind::kRadial, x0, y0, r0, x1,
+                                 y1, r1)))
                 .first;
   auto* gradient = it->second.get();
-  gradient->x0 = x0;
-  gradient->y0 = y0;
-  gradient->r0 = r0;
-  gradient->x1 = x1;
-  gradient->y1 = y1;
-  gradient->r1 = r1;
 
   auto context = info.GetIsolate()->GetCurrentContext();
   auto object = engine->GetGradientTemplate()
@@ -2799,14 +2874,16 @@ void ScriptEngine::CtxCreatePattern(
     local_matrix.setScale(1.0f / source_pixel_ratio, 1.0f / source_pixel_ratio);
   }
 
-  pattern->shader = image->makeShader(
+  auto shader = image->makeShader(
       RepeatModeToTileMode(repeat, true), RepeatModeToTileMode(repeat, false),
       SkSamplingOptions(SkFilterMode::kLinear), &local_matrix);
-  if (!pattern->shader) {
+  if (!shader) {
     engine->patterns_.erase(handle_id);
     info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
     return;
   }
+  pattern->source = std::make_shared<FixedShaderSource>(
+      std::move(shader), "[object CanvasPattern]");
 
   auto context = info.GetIsolate()->GetCurrentContext();
   auto object = engine->GetPatternTemplate()
@@ -2962,7 +3039,8 @@ void ScriptEngine::GradientAddColorStop(
     return;
   }
 
-  gradient->stops.push_back({std::clamp(offset, 0.0f, 1.0f), parsed.value()});
+  gradient->source->AddColorStop(std::clamp(offset, 0.0f, 1.0f),
+                                 parsed.value());
 }
 
 void ScriptEngine::CtxMeasureText(

@@ -275,6 +275,15 @@ if(BUILD_TESTING)
   )
 
   add_test(
+    NAME canvas_semantics
+    COMMAND $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/canvas_semantics.js
+  )
+  set_tests_properties(canvas_semantics PROPERTIES
+    PASS_REGULAR_EXPRESSION "canvas_semantics ok"
+  )
+
+  add_test(
     NAME task_queue
     COMMAND $<TARGET_FILE:canvas_engine>
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/task_queue.js

@@ -20,6 +20,13 @@
 
 namespace canvas_engine {
 
+class PaintSource {
+ public:
+  virtual ~PaintSource() = default;
+  virtual sk_sp<SkShader> shader() const = 0;
+  virtual const std::string& description() const = 0;
+};
+
 class Canvas2DContext {
  public:
   struct ImageData {
@@ -51,8 +58,8 @@ class Canvas2DContext {
   bool SetShadowColor(std::string_view css_color);
   void SetShadowOffsetX(float value);
   void SetShadowOffsetY(float value);
-  void SetFillShader(sk_sp<SkShader> shader, std::string_view description);
-  void SetStrokeShader(sk_sp<SkShader> shader, std::string_view description);
+  void SetFillSource(std::shared_ptr<const PaintSource> source);
+  void SetStrokeSource(std::shared_ptr<const PaintSource> source);
   void SetLineDash(const std::vector<float>& segments);
   const std::vector<float>& line_dash() const { return state_.line_dash; }
   void SetLineDashOffset(float value);
@@ -105,8 +112,8 @@ class Canvas2DContext {
   void Ellipse(float x, float y, float radius_x, float radius_y, float rotation,
                float start_angle, float end_angle, bool counter_clockwise);
   void ClosePath();
-  void Clip();
-  void Fill();
+  void Clip(SkPathFillType fill_type = SkPathFillType::kWinding);
+  void Fill(SkPathFillType fill_type = SkPathFillType::kWinding);
   void Stroke();
   void DrawImage(const sk_sp<SkImage>& image, float sx, float sy, float sw,
                  float sh, float dx, float dy, float dw, float dh);
@@ -140,8 +147,8 @@ class Canvas2DContext {
     std::string shadow_color_css = "rgba(0, 0, 0, 0)";
     float shadow_offset_x = 0.0f;
     float shadow_offset_y = 0.0f;
-    sk_sp<SkShader> fill_shader;
-    sk_sp<SkShader> stroke_shader;
+    std::shared_ptr<const PaintSource> fill_source;
+    std::shared_ptr<const PaintSource> stroke_source;
     std::vector<float> line_dash;
     float line_dash_offset = 0.0f;
   };
