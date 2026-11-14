@@ -714,10 +714,24 @@ bool ScriptEngine::DrainPendingTasks() {
                 return lhs.id < rhs.id;
               });
 
-    if (std::any_of(ready_tasks.begin(), ready_tasks.end(),
+    const bool advances_frame =
+        std::any_of(ready_tasks.begin(), ready_tasks.end(),
                     [](const PendingTask& task) {
                       return task.animation_frame && !task.cancelled;
-                    })) {
+                    });
+    if (advances_frame) {
+      const double remaining_advance_ms =
+          kMaxVirtualAdvanceMs - virtual_advance_ms;
+      if (kFrameDurationMs > remaining_advance_ms) {
+        const std::size_t dropped_tasks =
+            ready_tasks.size() + pending_tasks_.size();
+        pending_tasks_.clear();
+        std::cerr << "[canvas_engine] DrainPendingTasks hit the "
+                  << kMaxVirtualAdvanceMs << "ms virtual advance cap, "
+                  << dropped_tasks << " task(s) dropped" << std::endl;
+        draining_tasks_ = false;
+        return true;
+      }
       next_frame_ms_ = batch_time_ms + kFrameDurationMs;
     }
 
@@ -771,6 +785,11 @@ bool ScriptEngine::DrainPendingTasks() {
         pending_tasks_.clear();
         return false;
       }
+    }
+
+    if (advances_frame) {
+      clock_offset_ms_ += kFrameDurationMs;
+      virtual_advance_ms += kFrameDurationMs;
     }
   }
 }
