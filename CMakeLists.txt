@@ -152,7 +152,9 @@ target_link_libraries(color_parser_test
     PNG::PNG
     ZLIB::ZLIB
 )
-target_link_libraries(color_parser_test PRIVATE fontconfig)
+if(UNIX AND NOT APPLE)
+  target_link_libraries(color_parser_test PRIVATE fontconfig)
+endif()
 
 add_executable(font_parser_test
   tests/font_parser_test.cc
@@ -191,7 +193,9 @@ target_link_libraries(canvas_engine
     Threads::Threads
     ZLIB::ZLIB
 )
-target_link_libraries(canvas_engine PRIVATE fontconfig)
+if(UNIX AND NOT APPLE)
+  target_link_libraries(canvas_engine PRIVATE fontconfig)
+endif()
 
 if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
   set_target_properties(canvas_engine PROPERTIES
