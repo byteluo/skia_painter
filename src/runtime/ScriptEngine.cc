@@ -39,8 +39,6 @@ constexpr v8::EmbedderDataTypeTag kGradientHandleTag = 3;
 constexpr v8::EmbedderDataTypeTag kImageHandleTag = 4;
 constexpr v8::EmbedderDataTypeTag kPatternHandleTag = 5;
 
-using Clock = std::chrono::steady_clock;
-
 template <typename T>
 T* Unwrap(v8::Isolate* isolate, v8::Local<v8::Object> object,
           v8::EmbedderDataTypeTag tag) {
@@ -182,11 +180,6 @@ void PrintArgs(const v8::FunctionCallbackInfo<v8::Value>& info) {
   }
   std::fputc('\n', stdout);
   std::fflush(stdout);
-}
-
-double NowMilliseconds() {
-  const auto now = Clock::now().time_since_epoch();
-  return std::chrono::duration<double, std::milli>(now).count();
 }
 
 float GetDefaultDevicePixelRatio() {
@@ -492,43 +485,113 @@ bool ScriptEngine::DrainPendingTasks() {
   v8::Context::Scope context_scope(context);
   draining_tasks_ = true;
 
-  constexpr int kMaxDrainRounds = 64;
-  for (int round = 0; round < kMaxDrainRounds; ++round) {
+  constexpr std::size_t kMaxExecutedTasks = 100000;
+  constexpr double kMaxVirtualAdvanceMs = 60000.0;
+  constexpr double kFrameDurationMs = 1000.0 / 60.0;
+  double virtual_advance_ms = 0.0;
+  std::size_t executed_tasks = 0;
+
+  while (true) {
+    pending_tasks_.erase(
+        std::remove_if(pending_tasks_.begin(), pending_tasks_.end(),
+                       [](const PendingTask& task) { return task.cancelled; }),
+        pending_tasks_.end());
     if (pending_tasks_.empty()) {
       draining_tasks_ = false;
       return true;
     }
 
+    const auto earliest_task =
+        std::min_element(pending_tasks_.begin(), pending_tasks_.end(),
+                         [](const PendingTask& lhs, const PendingTask& rhs) {
+                           if (lhs.ready_at_ms != rhs.ready_at_ms) {
+                             return lhs.ready_at_ms < rhs.ready_at_ms;
+                           }
+                           return lhs.id < rhs.id;
+                         });
+    const double now = NowMs();
+    if (earliest_task->ready_at_ms > now) {
+      const double advance_ms = earliest_task->ready_at_ms - now;
+      const double remaining_advance_ms =
+          kMaxVirtualAdvanceMs - virtual_advance_ms;
+      if (advance_ms > remaining_advance_ms) {
+        const std::size_t dropped_tasks = pending_tasks_.size();
+        pending_tasks_.clear();
+        std::cerr << "[canvas_engine] DrainPendingTasks hit the "
+                  << kMaxVirtualAdvanceMs << "ms virtual advance cap, "
+                  << dropped_tasks << " task(s) dropped" << std::endl;
+        draining_tasks_ = false;
+        return true;
+      }
+      clock_offset_ms_ += advance_ms;
+      virtual_advance_ms += advance_ms;
+    }
+
     std::vector<PendingTask> ready_tasks;
     std::vector<PendingTask> deferred_tasks;
-    const auto now = Clock::now();
+    const double batch_time_ms = NowMs();
     for (auto& task : pending_tasks_) {
-      if (task.ready_at <= now) {
+      if (task.ready_at_ms <= batch_time_ms) {
         ready_tasks.push_back(std::move(task));
       } else {
         deferred_tasks.push_back(std::move(task));
       }
     }
     pending_tasks_ = std::move(deferred_tasks);
-    if (ready_tasks.empty()) {
-      draining_tasks_ = false;
-      return true;
+    std::sort(ready_tasks.begin(), ready_tasks.end(),
+              [](const PendingTask& lhs, const PendingTask& rhs) {
+                if (lhs.ready_at_ms != rhs.ready_at_ms) {
+                  return lhs.ready_at_ms < rhs.ready_at_ms;
+                }
+                return lhs.id < rhs.id;
+              });
+
+    if (std::any_of(ready_tasks.begin(), ready_tasks.end(),
+                    [](const PendingTask& task) {
+                      return task.animation_frame && !task.cancelled;
+                    })) {
+      next_frame_ms_ = batch_time_ms + kFrameDurationMs;
     }
 
-    for (auto& task : ready_tasks) {
-      if (task.cancelled || task.callback.IsEmpty()) {
+    for (std::size_t index = 0; index < ready_tasks.size(); ++index) {
+      auto& task = ready_tasks[index];
+      if (task.cancelled ||
+          (task.callback.IsEmpty() && !task.native)) {
+        continue;
+      }
+      if (executed_tasks >= kMaxExecutedTasks) {
+        const std::size_t dropped_tasks =
+            ready_tasks.size() - index + pending_tasks_.size();
+        pending_tasks_.clear();
+        std::cerr << "[canvas_engine] DrainPendingTasks hit the "
+                  << kMaxExecutedTasks << " executed-task cap, "
+                  << dropped_tasks << " task(s) dropped" << std::endl;
+        draining_tasks_ = false;
+        return true;
+      }
+
+      ++executed_tasks;
+      if (task.native) {
+        task.native();
         continue;
       }
 
       v8::TryCatch try_catch(isolate_);
       v8::Local<v8::Function> callback = task.callback.Get(isolate_);
-      v8::Local<v8::Value> argv[] = {
-          v8::Number::New(isolate_, NowMilliseconds())};
+      std::vector<v8::Local<v8::Value>> argv;
+      if (task.animation_frame) {
+        argv.push_back(v8::Number::New(isolate_, batch_time_ms));
+      } else {
+        argv.reserve(task.arguments.size());
+        for (const auto& argument : task.arguments) {
+          argv.push_back(argument.Get(isolate_));
+        }
+      }
       v8::Local<v8::Value> result;
-      const int argc = task.animation_frame ? 1 : 0;
       if (!callback
-               ->Call(context, context->Global(), argc,
-                      task.animation_frame ? argv : nullptr)
+               ->Call(context, context->Global(),
+                      static_cast<int>(argv.size()),
+                      argv.empty() ? nullptr : argv.data())
                .ToLocal(&result)) {
         last_error_ = FormatException(isolate_, &try_catch);
         draining_tasks_ = false;
@@ -537,24 +600,41 @@ bool ScriptEngine::DrainPendingTasks() {
       }
     }
   }
-
-  std::cerr << "[canvas_engine] DrainPendingTasks reached " << kMaxDrainRounds
-            << " rounds, " << pending_tasks_.size()
-            << " task(s) deferred" << std::endl;
-  draining_tasks_ = false;
-  return true;
 }
 
 std::uint32_t ScriptEngine::EnqueueTask(v8::Local<v8::Function> callback,
                                         bool animation_frame,
-                                        Clock::time_point ready_at) {
+                                        double ready_at_ms,
+                                        const std::vector<v8::Local<v8::Value>>&
+                                            arguments) {
   PendingTask task;
   task.id = next_timer_id_++;
   task.animation_frame = animation_frame;
-  task.ready_at = ready_at;
+  task.ready_at_ms = ready_at_ms;
   task.callback.Reset(isolate_, callback);
+  task.arguments.reserve(arguments.size());
+  for (auto argument : arguments) {
+    task.arguments.emplace_back(isolate_, argument);
+  }
   pending_tasks_.push_back(std::move(task));
   return pending_tasks_.back().id;
+}
+
+std::uint32_t ScriptEngine::EnqueueNativeTask(std::function<void()> callback,
+                                              double ready_at_ms) {
+  PendingTask task;
+  task.id = next_timer_id_++;
+  task.ready_at_ms = ready_at_ms;
+  task.native = std::move(callback);
+  pending_tasks_.push_back(std::move(task));
+  return pending_tasks_.back().id;
+}
+
+double ScriptEngine::NowMs() const {
+  const auto elapsed =
+      std::chrono::steady_clock::now() - engine_start_time_;
+  return std::chrono::duration<double, std::milli>(elapsed).count() +
+         clock_offset_ms_;
 }
 
 void ScriptEngine::CancelTask(std::uint32_t task_id) {
@@ -562,6 +642,8 @@ void ScriptEngine::CancelTask(std::uint32_t task_id) {
     if (task.id == task_id) {
       task.cancelled = true;
       task.callback.Reset();
+      task.arguments.clear();
+      task.native = {};
       return;
     }
   }
@@ -1109,12 +1191,13 @@ void ScriptEngine::SetTimeoutCallback(
     ExtractDouble(info, 1, &delay_ms);
   }
   delay_ms = std::max(0.0, delay_ms);
-  const auto ready_at =
-      Clock::now() +
-      std::chrono::duration_cast<Clock::duration>(
-          std::chrono::duration<double, std::milli>(delay_ms));
-  const std::uint32_t timer_id =
-      engine->EnqueueTask(info[0].As<v8::Function>(), false, ready_at);
+  std::vector<v8::Local<v8::Value>> arguments;
+  for (int i = 2; i < info.Length(); ++i) {
+    arguments.push_back(info[i]);
+  }
+  const std::uint32_t timer_id = engine->EnqueueTask(
+      info[0].As<v8::Function>(), false, engine->NowMs() + delay_ms,
+      arguments);
   info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(isolate, timer_id));
 }
 
@@ -1138,8 +1221,9 @@ void ScriptEngine::RequestAnimationFrameCallback(
   }
 
   auto* engine = From(isolate);
-  const std::uint32_t timer_id =
-      engine->EnqueueTask(info[0].As<v8::Function>(), true, Clock::now());
+  const std::uint32_t timer_id = engine->EnqueueTask(
+      info[0].As<v8::Function>(), true,
+      std::max(engine->NowMs(), engine->next_frame_ms_));
   info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(isolate, timer_id));
 }
 
@@ -1155,7 +1239,9 @@ void ScriptEngine::CancelAnimationFrameCallback(
 
 void ScriptEngine::PerformanceNowCallback(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), NowMilliseconds()));
+  auto* engine = From(info.GetIsolate());
+  info.GetReturnValue().Set(
+      v8::Number::New(info.GetIsolate(), engine->NowMs()));
 }
 
 void ScriptEngine::HandleCountsCallback(

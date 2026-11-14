@@ -254,7 +254,7 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/task_queue.js
   )
   set_tests_properties(task_queue PROPERTIES
-    PASS_REGULAR_EXPRESSION "deferred"
+    PASS_REGULAR_EXPRESSION "task_queue ok"
   )
 
   add_test(

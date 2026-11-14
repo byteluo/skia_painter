@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -34,8 +35,10 @@ class ScriptEngine {
     std::uint32_t id = 0;
     bool animation_frame = false;
     bool cancelled = false;
-    std::chrono::steady_clock::time_point ready_at;
+    double ready_at_ms = 0.0;
     v8::Global<v8::Function> callback;
+    std::vector<v8::Global<v8::Value>> arguments;
+    std::function<void()> native;
   };
 
   v8::Local<v8::Context> GetContext();
@@ -49,7 +52,11 @@ class ScriptEngine {
   bool DrainPendingTasks();
   std::uint32_t EnqueueTask(v8::Local<v8::Function> callback,
                             bool animation_frame,
-                            std::chrono::steady_clock::time_point ready_at);
+                            double ready_at_ms,
+                            const std::vector<v8::Local<v8::Value>>& arguments = {});
+  std::uint32_t EnqueueNativeTask(std::function<void()> callback,
+                                 double ready_at_ms);
+  double NowMs() const;
   void CancelTask(std::uint32_t task_id);
   std::uint64_t NextHandleId();
   std::filesystem::path ResolveScriptPath(const std::string& script_path) const;
@@ -249,6 +256,10 @@ class ScriptEngine {
   std::vector<std::filesystem::path> script_stack_;
   std::uint32_t next_timer_id_ = 1;
   std::uint64_t next_handle_id_ = 1;
+  std::chrono::steady_clock::time_point engine_start_time_ =
+      std::chrono::steady_clock::now();
+  double clock_offset_ms_ = 0.0;
+  double next_frame_ms_ = 0.0;
   bool draining_tasks_ = false;
   std::string last_error_;
   std::unordered_map<std::uint64_t, std::unique_ptr<CanvasHandle>> canvases_;
