@@ -13,8 +13,8 @@ By participating you agree to our [Code of Conduct](CODE_OF_CONDUCT.md). 参与�
 ### Development setup
 
 ```bash
-git clone --recursive https://github.com/byteluo/skia_painter.git
-cd skia_painter
+git clone --recursive https://github.com/byteluo/MD-Render.git
+cd MD-Render
 ./scripts/bootstrap.sh         # installs deps, builds Skia + the engine, runs tests
 ```
 
@@ -53,8 +53,8 @@ Open an issue with: the example/script that reproduces it, the command you ran, 
 ### 开发环境
 
 ```bash
-git clone --recursive https://github.com/byteluo/skia_painter.git
-cd skia_painter
+git clone --recursive https://github.com/byteluo/MD-Render.git
+cd MD-Render
 ./scripts/bootstrap.sh         # 安装依赖、构建 Skia 与引擎、运行测试
 ```
 
