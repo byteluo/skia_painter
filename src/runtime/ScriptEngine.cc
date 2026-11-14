@@ -1827,9 +1827,8 @@ void ScriptEngine::FontSetter(
   if (!handle) {
     return;
   }
-  if (!value->IsString() ||
-      !handle->context->SetFont(ToStdString(info.GetIsolate(), value))) {
-    ThrowTypeError(info.GetIsolate(), "font must contain a valid px size");
+  if (value->IsString()) {
+    handle->context->SetFont(ToStdString(info.GetIsolate(), value));
   }
 }
 

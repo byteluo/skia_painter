@@ -16,6 +16,7 @@
 #include "include/core/SkShader.h"
 
 #include "canvas_engine/canvas/CanvasSurface.h"
+#include "canvas_engine/canvas/FontParser.h"
 
 namespace canvas_engine {
 
@@ -123,7 +124,7 @@ class Canvas2DContext {
     std::string stroke_style_css = "#000000";
     float line_width = 1.0f;
     std::string font_css = "10px sans-serif";
-    float font_size = 10.0f;
+    FontDescriptor font_descriptor;
     std::string text_align = "start";
     std::string text_baseline = "alphabetic";
     float global_alpha = 1.0f;

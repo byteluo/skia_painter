@@ -129,6 +129,7 @@ add_executable(canvas_engine
   src/canvas/CanvasSurface.cc
   src/canvas/Canvas2DContext.cc
   src/canvas/ColorParser.cc
+  src/canvas/FontParser.cc
   src/canvas/ImageAsset.cc
   src/runtime/ScriptEngine.cc
 )
@@ -152,6 +153,17 @@ target_link_libraries(color_parser_test
     ZLIB::ZLIB
 )
 target_link_libraries(color_parser_test PRIVATE fontconfig)
+
+add_executable(font_parser_test
+  tests/font_parser_test.cc
+  src/canvas/FontParser.cc
+)
+
+target_include_directories(font_parser_test
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${SKIA_INCLUDE_DIRS}
+)
 
 target_include_directories(canvas_engine
   PRIVATE
@@ -246,6 +258,20 @@ if(BUILD_TESTING)
   add_test(
     NAME color_parser
     COMMAND color_parser_test
+  )
+
+  add_test(
+    NAME font_parser
+    COMMAND font_parser_test
+  )
+
+  add_test(
+    NAME font_weight_regression
+    COMMAND $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/font_weight_regression.js
+  )
+  set_tests_properties(font_weight_regression PROPERTIES
+    PASS_REGULAR_EXPRESSION "font_weight_regression ok"
   )
 
   add_test(
