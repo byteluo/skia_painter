@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
@@ -105,6 +106,126 @@ bool ReadFile(const std::string& path, std::string* out_source) {
   std::ostringstream buffer;
   buffer << input.rdbuf();
   *out_source = buffer.str();
+  return true;
+}
+
+bool StartsWithCaseInsensitive(std::string_view value,
+                               std::string_view prefix) {
+  if (value.size() < prefix.size()) {
+    return false;
+  }
+  for (std::size_t i = 0; i < prefix.size(); ++i) {
+    if (std::tolower(static_cast<unsigned char>(value[i])) !=
+        std::tolower(static_cast<unsigned char>(prefix[i]))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+int Base64Digit(unsigned char value) {
+  if (value >= 'A' && value <= 'Z') {
+    return value - 'A';
+  }
+  if (value >= 'a' && value <= 'z') {
+    return value - 'a' + 26;
+  }
+  if (value >= '0' && value <= '9') {
+    return value - '0' + 52;
+  }
+  if (value == '+') {
+    return 62;
+  }
+  if (value == '/') {
+    return 63;
+  }
+  return -1;
+}
+
+int HexDigit(unsigned char value) {
+  if (value >= '0' && value <= '9') {
+    return value - '0';
+  }
+  if (value >= 'a' && value <= 'f') {
+    return value - 'a' + 10;
+  }
+  if (value >= 'A' && value <= 'F') {
+    return value - 'A' + 10;
+  }
+  return -1;
+}
+
+bool DecodeDataUrl(std::string_view url, std::vector<std::uint8_t>* bytes) {
+  if (!StartsWithCaseInsensitive(url, "data:")) {
+    return false;
+  }
+  const std::size_t comma = url.find(',');
+  if (comma == std::string_view::npos) {
+    return false;
+  }
+
+  std::string_view metadata = url.substr(5, comma - 5);
+  const bool base64 =
+      metadata.size() >= 7 &&
+      StartsWithCaseInsensitive(metadata.substr(metadata.size() - 7),
+                                ";base64");
+  if (base64) {
+    metadata.remove_suffix(7);
+  }
+
+  const std::string_view payload = url.substr(comma + 1);
+  bytes->clear();
+  bytes->reserve(payload.size());
+  if (base64) {
+    if (payload.size() % 4 != 0) {
+      return false;
+    }
+    for (std::size_t i = 0; i < payload.size(); i += 4) {
+      const bool last_group = i + 4 == payload.size();
+      const int first = Base64Digit(static_cast<unsigned char>(payload[i]));
+      const int second =
+          Base64Digit(static_cast<unsigned char>(payload[i + 1]));
+      const char third_char = payload[i + 2];
+      const char fourth_char = payload[i + 3];
+      const int third = third_char == '='
+                            ? 0
+                            : Base64Digit(static_cast<unsigned char>(third_char));
+      const int fourth =
+          fourth_char == '='
+              ? 0
+              : Base64Digit(static_cast<unsigned char>(fourth_char));
+      if (first < 0 || second < 0 || third < 0 || fourth < 0 ||
+          (third_char == '=' && fourth_char != '=') ||
+          ((!last_group) && (third_char == '=' || fourth_char == '='))) {
+        return false;
+      }
+      bytes->push_back(static_cast<std::uint8_t>((first << 2) | (second >> 4)));
+      if (third_char != '=') {
+        bytes->push_back(static_cast<std::uint8_t>((second << 4) | (third >> 2)));
+      }
+      if (fourth_char != '=') {
+        bytes->push_back(static_cast<std::uint8_t>((third << 6) | fourth));
+      }
+    }
+    return true;
+  }
+
+  for (std::size_t i = 0; i < payload.size(); ++i) {
+    if (payload[i] == '%') {
+      if (i + 2 >= payload.size()) {
+        return false;
+      }
+      const int high = HexDigit(static_cast<unsigned char>(payload[i + 1]));
+      const int low = HexDigit(static_cast<unsigned char>(payload[i + 2]));
+      if (high < 0 || low < 0) {
+        return false;
+      }
+      bytes->push_back(static_cast<std::uint8_t>((high << 4) | low));
+      i += 2;
+    } else {
+      bytes->push_back(static_cast<std::uint8_t>(payload[i]));
+    }
+  }
   return true;
 }
 
@@ -376,6 +497,7 @@ struct ScriptEngine::ImageHandle {
   std::shared_ptr<ImageAsset> asset;
   bool complete = false;
   bool failed = false;
+  std::uint64_t source_generation = 0;
   v8::Global<v8::Object> object;
   v8::Global<v8::Function> onload;
   v8::Global<v8::Function> onerror;
@@ -619,6 +741,11 @@ bool ScriptEngine::DrainPendingTasks() {
       ++executed_tasks;
       if (task.native) {
         task.native();
+        if (!last_error_.empty()) {
+          draining_tasks_ = false;
+          pending_tasks_.clear();
+          return false;
+        }
         continue;
       }
 
@@ -1618,31 +1745,64 @@ void ScriptEngine::ImageSrcSetter(
 
   auto* engine = From(info.GetIsolate());
   handle->src = ToStdString(info.GetIsolate(), value);
+  const std::uint64_t generation = ++handle->source_generation;
   handle->asset.reset();
   handle->complete = false;
   handle->failed = false;
 
-  const auto resolved = engine->ResolveScriptPath(handle->src);
-  handle->asset = ImageAsset::LoadFromFile(resolved.string());
+  if (StartsWithCaseInsensitive(handle->src, "data:")) {
+    std::vector<std::uint8_t> encoded;
+    if (DecodeDataUrl(handle->src, &encoded)) {
+      handle->asset = ImageAsset::LoadFromEncodedBytes(
+          std::span<const std::uint8_t>(encoded.data(), encoded.size()),
+          handle->src);
+    }
+  } else if (StartsWithCaseInsensitive(handle->src, "http://") ||
+             StartsWithCaseInsensitive(handle->src, "https://")) {
+    static bool http_warning_printed = false;
+    if (!http_warning_printed) {
+      std::cerr << "[canvas_engine] HTTP(S) image loading is unsupported "
+                   "without network access"
+                << std::endl;
+      http_warning_printed = true;
+    }
+  } else {
+    const auto resolved = engine->ResolveScriptPath(handle->src);
+    handle->asset = ImageAsset::LoadFromFile(resolved.string());
+  }
   handle->complete = true;
   handle->failed = !handle->asset;
 
-  auto context = info.GetIsolate()->GetCurrentContext();
-  auto self = handle->object.Get(info.GetIsolate());
-  v8::TryCatch try_catch(info.GetIsolate());
-  v8::Local<v8::Value> unused;
-  if (handle->asset && !handle->onload.IsEmpty()) {
-    auto callback = handle->onload.Get(info.GetIsolate());
-    if (!callback->Call(context, self, 0, nullptr).ToLocal(&unused)) {
-      ThrowError(info.GetIsolate(), FormatException(info.GetIsolate(), &try_catch));
-    }
-    return;
-  }
+  const std::uint64_t image_id = handle->id;
+  engine->EnqueueNativeTask(
+      [engine, image_id, generation]() {
+        const auto it = engine->images_.find(image_id);
+        if (it == engine->images_.end()) {
+          return;
+        }
+        auto* current = it->second.get();
+        if (current->source_generation != generation) {
+          return;
+        }
 
-  if (!handle->asset && !handle->onerror.IsEmpty()) {
-    auto callback = handle->onerror.Get(info.GetIsolate());
-    if (!callback->Call(context, self, 0, nullptr).ToLocal(&unused)) {
-      ThrowError(info.GetIsolate(), FormatException(info.GetIsolate(), &try_catch));
+        auto& callback_handle =
+            current->failed ? current->onerror : current->onload;
+        if (callback_handle.IsEmpty()) {
+          return;
+        }
+        v8::Local<v8::Function> callback =
+            callback_handle.Get(engine->isolate_);
+        v8::Local<v8::Object> self = current->object.Get(engine->isolate_);
+        v8::TryCatch try_catch(engine->isolate_);
+        v8::Local<v8::Value> unused;
+        if (!callback
+                 ->Call(engine->context_.Get(engine->isolate_), self, 0, nullptr)
+                 .ToLocal(&unused)) {
+          engine->last_error_ =
+              FormatException(engine->isolate_, &try_catch);
+        }
+      },
+      engine->NowMs());
     }
   }
 }
@@ -1684,16 +1844,6 @@ void ScriptEngine::ImageOnloadSetter(
   }
 
   handle->onload.Reset(info.GetIsolate(), value.As<v8::Function>());
-  if (handle->complete && !handle->failed && handle->asset) {
-    auto context = info.GetIsolate()->GetCurrentContext();
-    auto self = handle->object.Get(info.GetIsolate());
-    auto callback = handle->onload.Get(info.GetIsolate());
-    v8::TryCatch try_catch(info.GetIsolate());
-    v8::Local<v8::Value> unused;
-    if (!callback->Call(context, self, 0, nullptr).ToLocal(&unused)) {
-      ThrowError(info.GetIsolate(), FormatException(info.GetIsolate(), &try_catch));
-    }
-  }
 }
 
 void ScriptEngine::ImageOnerrorGetter(
@@ -1722,16 +1872,6 @@ void ScriptEngine::ImageOnerrorSetter(
   }
 
   handle->onerror.Reset(info.GetIsolate(), value.As<v8::Function>());
-  if (handle->complete && handle->failed) {
-    auto context = info.GetIsolate()->GetCurrentContext();
-    auto self = handle->object.Get(info.GetIsolate());
-    auto callback = handle->onerror.Get(info.GetIsolate());
-    v8::TryCatch try_catch(info.GetIsolate());
-    v8::Local<v8::Value> unused;
-    if (!callback->Call(context, self, 0, nullptr).ToLocal(&unused)) {
-      ThrowError(info.GetIsolate(), FormatException(info.GetIsolate(), &try_catch));
-    }
-  }
 }
 
 void ScriptEngine::FillStyleGetter(

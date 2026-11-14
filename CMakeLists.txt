@@ -284,6 +284,15 @@ if(BUILD_TESTING)
   )
 
   add_test(
+    NAME image_loading
+    COMMAND $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/image_loading.js
+  )
+  set_tests_properties(image_loading PROPERTIES
+    PASS_REGULAR_EXPRESSION "image_loading ok"
+  )
+
+  add_test(
     NAME task_queue
     COMMAND $<TARGET_FILE:canvas_engine>
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/task_queue.js
