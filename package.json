@@ -4,13 +4,13 @@
   "private": true,
   "description": "A headless Canvas backend that renders Apache ECharts to high-resolution PNG, powered by C++, V8 and Skia.",
   "license": "MIT",
-  "homepage": "https://github.com/byteluo/MD-Render#readme",
+  "homepage": "https://github.com/byteluo/skia_painter#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/byteluo/MD-Render.git"
+    "url": "git+https://github.com/byteluo/skia_painter.git"
   },
   "bugs": {
-    "url": "https://github.com/byteluo/MD-Render/issues"
+    "url": "https://github.com/byteluo/skia_painter/issues"
   },
   "keywords": [
     "skia",

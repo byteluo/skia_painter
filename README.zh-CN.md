@@ -4,13 +4,13 @@
 
 **一个基于 C++ + V8 + Skia 的无头 Canvas 后端，把 [Apache ECharts](https://echarts.apache.org/) 渲染链路稳定导出为高清 PNG。**
 
-[![Deploy Pages](https://github.com/byteluo/MD-Render/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/byteluo/MD-Render/actions/workflows/deploy-pages.yml)
+[![Deploy Pages](https://github.com/byteluo/skia_painter/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/byteluo/skia_painter/actions/workflows/deploy-pages.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C.svg?logo=cplusplus)](CMakeLists.txt)
 [![Skia](https://img.shields.io/badge/Skia-2D%20Graphics-EA4335.svg)](https://skia.org/)
 [![V8](https://img.shields.io/badge/V8-15.0-4B8BF5.svg)](https://v8.dev/)
 [![ECharts](https://img.shields.io/badge/ECharts-6.0-AA344D.svg)](https://echarts.apache.org/)
-[![Live Demo](https://img.shields.io/badge/Live-Demo-success.svg)](https://byteluo.github.io/MD-Render/)
+[![Live Demo](https://img.shields.io/badge/Live-Demo-success.svg)](https://byteluo.github.io/skia_painter/)
 
 [English](README.md) · **中文**
 
@@ -27,7 +27,7 @@
 <img src="output/echarts_sankey.png" width="32%" alt="sankey"/>
 <img src="output/echarts_sunburst.png" width="32%" alt="sunburst"/>
 
-<sub>demo 画廊里的几个示例 —— 全部 50+ 图表见<a href="https://byteluo.github.io/MD-Render/">在线对比 demo</a>。</sub>
+<sub>demo 画廊里的几个示例 —— 全部 50+ 图表见<a href="https://byteluo.github.io/skia_painter/">在线对比 demo</a>。</sub>
 
 </div>
 
@@ -74,8 +74,8 @@
 
 ```bash
 # 带子模块克隆
-git clone --recursive https://github.com/byteluo/MD-Render.git
-cd MD-Render
+git clone --recursive https://github.com/byteluo/skia_painter.git
+cd skia_painter
 
 # 一键安装 + 构建 + 测试
 ./scripts/bootstrap.sh          # debug

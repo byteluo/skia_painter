@@ -4,13 +4,13 @@
 
 **A headless Canvas backend that renders [Apache ECharts](https://echarts.apache.org/) to high-resolution PNG — powered by C++, V8 and Skia.**
 
-[![Deploy Pages](https://github.com/byteluo/MD-Render/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/byteluo/MD-Render/actions/workflows/deploy-pages.yml)
+[![Deploy Pages](https://github.com/byteluo/skia_painter/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/byteluo/skia_painter/actions/workflows/deploy-pages.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C.svg?logo=cplusplus)](CMakeLists.txt)
 [![Skia](https://img.shields.io/badge/Skia-2D%20Graphics-EA4335.svg)](https://skia.org/)
 [![V8](https://img.shields.io/badge/V8-15.0-4B8BF5.svg)](https://v8.dev/)
 [![ECharts](https://img.shields.io/badge/ECharts-6.0-AA344D.svg)](https://echarts.apache.org/)
-[![Live Demo](https://img.shields.io/badge/Live-Demo-success.svg)](https://byteluo.github.io/MD-Render/)
+[![Live Demo](https://img.shields.io/badge/Live-Demo-success.svg)](https://byteluo.github.io/skia_painter/)
 
 **English** · [中文](README.zh-CN.md)
 
@@ -27,7 +27,7 @@
 <img src="output/echarts_sankey.png" width="32%" alt="sankey"/>
 <img src="output/echarts_sunburst.png" width="32%" alt="sunburst"/>
 
-<sub>A few samples from the demo gallery — see the <a href="https://byteluo.github.io/MD-Render/">live comparison demo</a> for all 50+ charts.</sub>
+<sub>A few samples from the demo gallery — see the <a href="https://byteluo.github.io/skia_painter/">live comparison demo</a> for all 50+ charts.</sub>
 
 </div>
 
@@ -74,8 +74,8 @@ This is a **runnable minimal Canvas rendering backend**, not a skeleton. It stab
 
 ```bash
 # Clone with submodules
-git clone --recursive https://github.com/byteluo/MD-Render.git
-cd MD-Render
+git clone --recursive https://github.com/byteluo/skia_painter.git
+cd skia_painter
 
 # One-shot install + build + test
 ./scripts/bootstrap.sh          # debug
