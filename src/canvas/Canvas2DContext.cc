@@ -213,8 +213,11 @@ CTLineRef CreateTextLine(std::string_view text,
 
 }  // namespace
 
-Canvas2DContext::Canvas2DContext(std::shared_ptr<CanvasSurface> surface)
-    : surface_(std::move(surface)) {
+Canvas2DContext::Canvas2DContext(
+    std::shared_ptr<CanvasSurface> surface,
+    std::function<void()> draw_op_callback)
+    : surface_(std::move(surface)),
+      draw_op_callback_(std::move(draw_op_callback)) {
   ApplyDeviceScale();
 }
 
@@ -495,16 +498,19 @@ void Canvas2DContext::ResetTransform() {
 }
 
 void Canvas2DContext::ClearRect(float x, float y, float width, float height) {
+  RecordDrawOp();
   SkPaint paint;
   paint.setBlendMode(SkBlendMode::kClear);
   surface_->canvas()->drawRect(SkRect::MakeXYWH(x, y, width, height), paint);
 }
 
 void Canvas2DContext::FillRect(float x, float y, float width, float height) {
+  RecordDrawOp();
   surface_->canvas()->drawRect(SkRect::MakeXYWH(x, y, width, height), MakeFillPaint());
 }
 
 void Canvas2DContext::StrokeRect(float x, float y, float width, float height) {
+  RecordDrawOp();
   surface_->canvas()->drawRect(SkRect::MakeXYWH(x, y, width, height), MakeStrokePaint());
 }
 
@@ -609,12 +615,14 @@ void Canvas2DContext::Clip(SkPathFillType fill_type) {
 }
 
 void Canvas2DContext::Fill(SkPathFillType fill_type) {
+  RecordDrawOp();
   SkPath path = current_path_.snapshot();
   path.setFillType(fill_type);
   surface_->canvas()->drawPath(path, MakeFillPaint());
 }
 
 void Canvas2DContext::Stroke() {
+  RecordDrawOp();
   surface_->canvas()->drawPath(current_path_.snapshot(), MakeStrokePaint());
 }
 
@@ -625,6 +633,7 @@ void Canvas2DContext::DrawImage(const sk_sp<SkImage>& image, float sx, float sy,
     return;
   }
 
+  RecordDrawOp();
   const SkRect src = SkRect::MakeXYWH(sx, sy, sw, sh);
   const SkRect dst = SkRect::MakeXYWH(dx, dy, dw, dh);
   surface_->canvas()->drawImageRect(image, src, dst,
@@ -735,6 +744,7 @@ bool Canvas2DContext::PutImageData(const ImageData& image_data, int dx, int dy) 
     return false;
   }
 
+  RecordDrawOp();
   const float pixel_ratio = surface_->pixel_ratio();
   for (int row = 0; row < image_data.height; ++row) {
     for (int col = 0; col < image_data.width; ++col) {
@@ -975,6 +985,7 @@ void Canvas2DContext::ConfigurePaint(SkPaint* paint, bool allow_line_dash) const
 
 void Canvas2DContext::DrawText(std::string_view text, float x, float y,
                                const SkPaint& paint) const {
+  RecordDrawOp();
 #if defined(__APPLE__)
   if (paint.getShader() == nullptr) {
   SkPixmap pixmap;
@@ -1093,6 +1104,12 @@ void Canvas2DContext::DrawText(std::string_view text, float x, float y,
   surface_->canvas()->drawSimpleText(text.data(), text.size(),
                                      SkTextEncoding::kUTF8, draw_x, baseline_y,
                                      font, paint);
+}
+
+void Canvas2DContext::RecordDrawOp() const {
+  if (draw_op_callback_) {
+    draw_op_callback_();
+  }
 }
 
 }  // namespace canvas_engine

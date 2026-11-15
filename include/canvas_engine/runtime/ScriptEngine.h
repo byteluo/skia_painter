@@ -57,6 +57,7 @@ class ScriptEngine {
   std::uint32_t EnqueueNativeTask(std::function<void()> callback,
                                  double ready_at_ms);
   double NowMs() const;
+  void RecordDrawOp() { ++draw_op_count_; }
   void CancelTask(std::uint32_t task_id);
   std::uint64_t NextHandleId();
   std::filesystem::path ResolveScriptPath(const std::string& script_path) const;
@@ -259,6 +260,8 @@ class ScriptEngine {
   std::chrono::steady_clock::time_point engine_start_time_ =
       std::chrono::steady_clock::now();
   double clock_offset_ms_ = 0.0;
+  std::uint64_t draw_op_count_ = 0;
+  std::size_t consecutive_idle_frame_batches_ = 0;
   double next_frame_ms_ = 0.0;
   bool draining_tasks_ = false;
   std::string last_error_;

@@ -658,6 +658,7 @@ bool ScriptEngine::DrainPendingTasks() {
   constexpr double kFrameDurationMs = 1000.0 / 60.0;
   double virtual_advance_ms = 0.0;
   std::size_t executed_tasks = 0;
+  consecutive_idle_frame_batches_ = 0;
 
   while (true) {
     pending_tasks_.erase(
@@ -719,6 +720,7 @@ bool ScriptEngine::DrainPendingTasks() {
                     [](const PendingTask& task) {
                       return task.animation_frame && !task.cancelled;
                     });
+    const std::uint64_t draw_ops_before_batch = draw_op_count_;
     if (advances_frame) {
       const double remaining_advance_ms =
           kMaxVirtualAdvanceMs - virtual_advance_ms;
@@ -790,6 +792,24 @@ bool ScriptEngine::DrainPendingTasks() {
     if (advances_frame) {
       clock_offset_ms_ += kFrameDurationMs;
       virtual_advance_ms += kFrameDurationMs;
+    }
+
+    const auto is_frame_task = [](const PendingTask& task) {
+      return task.cancelled || task.animation_frame;
+    };
+    const bool only_frame_tasks_pending =
+        std::all_of(ready_tasks.begin(), ready_tasks.end(), is_frame_task) &&
+        std::all_of(pending_tasks_.begin(), pending_tasks_.end(),
+                    is_frame_task);
+    if (advances_frame && only_frame_tasks_pending &&
+        draw_op_count_ == draw_ops_before_batch) {
+      if (++consecutive_idle_frame_batches_ >= 60) {
+        pending_tasks_.clear();
+        draining_tasks_ = false;
+        return true;
+      }
+    } else {
+      consecutive_idle_frame_batches_ = 0;
     }
   }
 }
@@ -1549,7 +1569,11 @@ void ScriptEngine::CanvasGetContext(
   auto context = isolate->GetCurrentContext();
   if (!canvas->context_handle) {
     canvas->context_handle = std::make_unique<ContextHandle>(
-        std::make_unique<Canvas2DContext>(canvas->surface));
+        std::make_unique<Canvas2DContext>(canvas->surface, [engine]() {
+          if (engine) {
+            engine->RecordDrawOp();
+          }
+        }));
   }
 
   if (canvas->context_object.IsEmpty()) {
@@ -1629,6 +1653,9 @@ void ScriptEngine::CanvasWidthSetter(
     return;
   }
 
+  if (auto* engine = From(info.GetIsolate())) {
+    engine->RecordDrawOp();
+  }
   if (canvas->context_handle) {
     canvas->context_handle->context->ResetState();
   }
@@ -1661,6 +1688,9 @@ void ScriptEngine::CanvasHeightSetter(
     return;
   }
 
+  if (auto* engine = From(info.GetIsolate())) {
+    engine->RecordDrawOp();
+  }
   if (canvas->context_handle) {
     canvas->context_handle->context->ResetState();
   }

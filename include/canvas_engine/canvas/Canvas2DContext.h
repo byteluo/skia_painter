@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <memory>
 #include <string>
@@ -41,7 +42,8 @@ class Canvas2DContext {
     float actual_bounding_box_descent = 0.0f;
   };
 
-  explicit Canvas2DContext(std::shared_ptr<CanvasSurface> surface);
+  explicit Canvas2DContext(std::shared_ptr<CanvasSurface> surface,
+                           std::function<void()> draw_op_callback = {});
 
   bool SetFillStyle(std::string_view css_color);
   bool SetStrokeStyle(std::string_view css_color);
@@ -162,8 +164,10 @@ class Canvas2DContext {
   SkPaint MakeTextPaint(bool stroke) const;
   void ConfigurePaint(SkPaint* paint, bool allow_line_dash) const;
   void DrawText(std::string_view text, float x, float y, const SkPaint& paint) const;
+  void RecordDrawOp() const;
 
   std::shared_ptr<CanvasSurface> surface_;
+  std::function<void()> draw_op_callback_;
   State state_ = MakeDefaultState();
   std::vector<State> state_stack_;
   SkPathBuilder current_path_;

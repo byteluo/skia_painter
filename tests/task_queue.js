@@ -55,9 +55,16 @@ setTimeout((first, second) => {
   }
 }, 100, "first", 42);
 
-function endlessAnimationFrame() {
+let idleFrameCount = 0;
+function endlessAnimationFrame(timestamp) {
+  ++idleFrameCount;
+  if (idleFrameCount === 60) {
+    assert(timestamp >= 1000 && timestamp <= 1100,
+           `idle animation-frame loop stopped at ${timestamp}ms`);
+    print("idle animation-frame loop reached 60 frames");
+  }
   requestAnimationFrame(endlessAnimationFrame);
 }
-requestAnimationFrame(endlessAnimationFrame);
+setTimeout(() => requestAnimationFrame(endlessAnimationFrame), 100);
 
 print("task_queue ok");

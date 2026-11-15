@@ -303,6 +303,16 @@ if(BUILD_TESTING)
   )
   set_tests_properties(task_queue PROPERTIES
     PASS_REGULAR_EXPRESSION "task_queue ok"
+    FAIL_REGULAR_EXPRESSION "DrainPendingTasks hit the 60000ms virtual advance cap"
+  )
+
+  add_test(
+    NAME drawing_animation_frame
+    COMMAND $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawing_animation_frame.js
+  )
+  set_tests_properties(drawing_animation_frame PROPERTIES
+    PASS_REGULAR_EXPRESSION "DrainPendingTasks hit the 60000ms virtual advance cap"
   )
 
   add_test(
