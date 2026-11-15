@@ -88,13 +88,20 @@ jobs:
       - name: Build Skia (minimal target set)
         run: |
           skia_targets=(
-            //:core //src/base:base //src/codec:any_decoder
-            //src/encode:encoder_common //src/encode:icc_support
-            //src/encode:png_encode //src/encode:png_encode_base
-            //src/ports:fontmgr_custom //src/ports:fontmgr_directory_freetype
-            //src/ports:fontmgr_coretext //src/ports:freetype_support
-            //src/ports:typeface_proxy //src/utils:char_to_glyphcache
-            //modules/skcms:skcms @freetype//:freetype
+            //:core
+            //src/base:base
+            //src/codec:any_decoder
+            //src/encode:encoder_common
+            //src/encode:icc_support
+            //src/encode:png_encode
+            //src/encode:png_encode_base
+            //src/ports:fontmgr_custom
+            //src/ports:fontmgr_directory_freetype
+            //src/ports:freetype_support
+            //src/ports:typeface_proxy
+            //src/utils:char_to_glyphcache
+            //modules/skcms:skcms
+            @freetype//:freetype
           )
           required_artifacts=(
             src/core/libcore.a src/base/libbase.a
@@ -103,7 +110,6 @@ jobs:
             src/codec/libany_decoder.a
             src/ports/libfontmgr_custom.a
             src/ports/libfontmgr_directory_freetype.a
-            src/ports/libfontmgr_coretext.a
             src/ports/libfreetype_support.a src/ports/libtypeface_proxy.a
             src/utils/libchar_to_glyphcache.a
             external/+cpp_modules+freetype/libfreetype.a

@@ -152,10 +152,12 @@ Noto Sans Mono 2.014，以及来自 CJK Sans 2.004 的 Noto Sans SC。解压前�
 
 默认使用内置字体以保证确定性文本渲染。字体目录优先级为
 `--font-dir`、`CANVAS_ENGINE_FONT_DIR`、`<可执行文件目录>/fonts`，最后是
-构建时字体目录。`--system-fonts` 允许在缺少字体或字形时回退到系统字体
-管理器；使用系统字体的输出会受到主机已安装字体影响。
-`-DCANVAS_ENGINE_BUNDLED_FONTS=OFF` 会跳过下载，并警告系统字体渲染不具
-确定性。
+构建时字体目录。Linux 上的 `--system-fonts` 允许在缺少字体或字形时回退到
+系统字体管理器；使用系统字体的输出会受到主机已安装字体影响。macOS
+构建不支持系统字体回退；请求 `--system-fonts` 时会打印一次警告，并继续
+仅使用内置字体。
+`-DCANVAS_ENGINE_BUNDLED_FONTS=OFF` 会跳过下载；Linux 上仍可使用系统字体
+回退，但 macOS 不支持此功能。
 
 确定性保证适用于固定的 Skia 版本、上述固定字体版本和相同渲染选项。
 Skia 版本变化可能改变栅格化结果。文本回退按 Unicode 码点进行；此构建

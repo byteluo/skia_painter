@@ -69,15 +69,19 @@ set(SKIA_LOCAL_ANY_DECODER "${SKIA_LOCAL_ROOT}/bazel-bin/src/codec/libany_decode
 set(SKIA_LOCAL_FONTMGR_CUSTOM "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_custom.a")
 set(SKIA_LOCAL_FONTMGR_DIRECTORY "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_directory_freetype.a")
 if(APPLE)
-  set(SKIA_LOCAL_PLATFORM_FONTMGR
-      "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_coretext.a")
   set(SKIA_LOCAL_PLATFORM_FONTMGRS
-      "${SKIA_LOCAL_FONTMGR_DIRECTORY};${SKIA_LOCAL_FONTMGR_CUSTOM};${SKIA_LOCAL_PLATFORM_FONTMGR}")
+      "${SKIA_LOCAL_FONTMGR_DIRECTORY};${SKIA_LOCAL_FONTMGR_CUSTOM}")
+  set(SKIA_LOCAL_PLATFORM_FONTMGR_AVAILABLE TRUE)
 else()
   set(SKIA_LOCAL_PLATFORM_FONTMGR
       "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_fontconfig.a")
   set(SKIA_LOCAL_PLATFORM_FONTMGRS
       "${SKIA_LOCAL_PLATFORM_FONTMGR};${SKIA_LOCAL_FONTMGR_DIRECTORY};${SKIA_LOCAL_FONTMGR_CUSTOM}")
+  if(EXISTS "${SKIA_LOCAL_PLATFORM_FONTMGR}")
+    set(SKIA_LOCAL_PLATFORM_FONTMGR_AVAILABLE TRUE)
+  else()
+    set(SKIA_LOCAL_PLATFORM_FONTMGR_AVAILABLE FALSE)
+  endif()
 endif()
 set(SKIA_LOCAL_FREETYPE_SUPPORT "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfreetype_support.a")
 set(SKIA_LOCAL_TYPEFACE_PROXY "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libtypeface_proxy.a")
@@ -119,7 +123,7 @@ if("${SKIA_LIBRARIES}" STREQUAL "" AND
    EXISTS "${SKIA_LOCAL_ENCODER_COMMON}" AND
    EXISTS "${SKIA_LOCAL_ICC_SUPPORT}" AND
    EXISTS "${SKIA_LOCAL_ANY_DECODER}" AND
-   EXISTS "${SKIA_LOCAL_PLATFORM_FONTMGR}" AND
+   SKIA_LOCAL_PLATFORM_FONTMGR_AVAILABLE AND
    EXISTS "${SKIA_LOCAL_FONTMGR_CUSTOM}" AND
    EXISTS "${SKIA_LOCAL_FONTMGR_DIRECTORY}" AND
    EXISTS "${SKIA_LOCAL_FREETYPE_SUPPORT}" AND
@@ -280,7 +284,6 @@ if(APPLE)
       "-framework CoreFoundation"
       "-framework CoreGraphics"
       "-framework ImageIO"
-      "-framework CoreText"
       "-framework CoreServices"
   )
 elseif(UNIX)

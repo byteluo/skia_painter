@@ -2,13 +2,12 @@
 
 #include <algorithm>
 #include <cctype>
+#include <iostream>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 
-#if defined(__APPLE__)
-#include <ApplicationServices/ApplicationServices.h>
-#include "include/ports/SkFontMgr_mac_ct.h"
-#elif defined(__linux__)
+#if defined(__linux__)
 #include "include/ports/SkFontMgr_fontconfig.h"
 #include "include/ports/SkFontScanner_FreeType.h"
 #endif
@@ -49,6 +48,16 @@ std::string BundledFamily(std::string_view family) {
 FontManager::FontManager(std::filesystem::path font_dir,
                          bool allow_system_fonts)
     : allow_system_fonts_(allow_system_fonts) {
+#if defined(__APPLE__)
+  if (allow_system_fonts_) {
+    static std::once_flag warning_once;
+    std::call_once(warning_once, [] {
+      std::cerr << "Warning: system-font fallback is unsupported on macOS in "
+                   "this build; using bundled fonts only.\n";
+    });
+    allow_system_fonts_ = false;
+  }
+#endif
   if (!font_dir.empty()) {
     if (!std::filesystem::is_directory(font_dir)) {
       if (!allow_system_fonts_) {
@@ -64,9 +73,7 @@ FontManager::FontManager(std::filesystem::path font_dir,
     }
   }
   if (allow_system_fonts_) {
-#if defined(__APPLE__)
-    system_ = SkFontMgr_New_CoreText(nullptr);
-#elif defined(__linux__)
+#if defined(__linux__)
     system_ = SkFontMgr_New_FontConfig(nullptr, SkFontScanner_Make_FreeType());
 #endif
   }

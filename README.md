@@ -159,9 +159,11 @@ Bundled fonts are used by default for deterministic text rendering. Font
 directory resolution is `--font-dir`, `CANVAS_ENGINE_FONT_DIR`,
 `<executable directory>/fonts`, then the build-time font directory.
 `--system-fonts` permits system-manager fallback for missing families or
-glyphs; output using that fallback depends on the host's installed fonts.
-`-DCANVAS_ENGINE_BUNDLED_FONTS=OFF` skips the downloads and warns that
-system-font rendering is nondeterministic.
+glyphs on Linux; output using that fallback depends on the host's installed
+fonts. On macOS, this build does not include system-font fallback; requesting
+`--system-fonts` prints a one-time warning and continues with bundled fonts.
+`-DCANVAS_ENGINE_BUNDLED_FONTS=OFF` skips the downloads; system-font fallback
+remains available on Linux but is unsupported on macOS.
 
 The deterministic guarantee is for a fixed Skia version, these pinned font
 versions, and the same rendering options. Skia version changes can alter

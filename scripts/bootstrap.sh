@@ -112,13 +112,30 @@ build_skia_minimal() {
     //src/encode:png_encode_base
     //src/ports:fontmgr_custom
     //src/ports:fontmgr_directory_freetype
-    //src/ports:fontmgr_coretext
     //src/ports:freetype_support
     //src/ports:typeface_proxy
     //src/utils:char_to_glyphcache
     //modules/skcms:skcms
     @freetype//:freetype
   )
+  local -a required_artifacts=(
+    src/core/libcore.a
+    src/base/libbase.a
+    src/encode/libpng_encode.a
+    src/encode/libpng_encode_base.a
+    src/encode/libencoder_common.a
+    src/encode/libicc_support.a
+    src/codec/libany_decoder.a
+    src/ports/libfontmgr_custom.a
+    src/ports/libfontmgr_directory_freetype.a
+    src/ports/libfreetype_support.a
+    src/ports/libtypeface_proxy.a
+    src/utils/libchar_to_glyphcache.a
+    external/+cpp_modules+freetype/libfreetype.a
+    modules/skcms/_objs/skcms_public/skcms.pic.o
+    modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o
+  )
+  local -a cpu_artifacts=()
   if [[ "$(uname -m)" == "x86_64" ]]; then
     skia_targets+=(//src/opts:ml3)
   fi
@@ -133,7 +150,6 @@ build_skia_minimal() {
      [[ -f "${SKIA_DIR}/bazel-bin/src/codec/libany_decoder.a" ]] &&
      [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfontmgr_custom.a" ]] &&
      [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfontmgr_directory_freetype.a" ]] &&
-     [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfontmgr_coretext.a" ]] &&
      [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfreetype_support.a" ]] &&
      [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libtypeface_proxy.a" ]] &&
      [[ -f "${SKIA_DIR}/bazel-bin/src/utils/libchar_to_glyphcache.a" ]] &&
@@ -176,7 +192,6 @@ build_skia_minimal() {
   [[ -f "${SKIA_DIR}/bazel-bin/src/codec/libany_decoder.a" ]] || fail "Skia codec support archive was not produced"
   [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfontmgr_custom.a" ]] || fail "Skia custom font manager archive was not produced"
   [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfontmgr_directory_freetype.a" ]] || fail "Skia custom directory font manager archive was not produced"
-  [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfontmgr_coretext.a" ]] || fail "Skia CoreText font manager archive was not produced"
   [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfreetype_support.a" ]] || fail "Skia freetype support archive was not produced"
   [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libtypeface_proxy.a" ]] || fail "Skia typeface proxy archive was not produced"
   [[ -f "${SKIA_DIR}/bazel-bin/src/utils/libchar_to_glyphcache.a" ]] || fail "Skia char-to-glyph cache archive was not produced"
