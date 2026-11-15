@@ -47,6 +47,20 @@ void V8FatalError(const char* location, int line, const char* message) {
 }
 
 std::string DetectV8DataDir() {
+  if (const char* env_dir = std::getenv("V8_ICU_DATA_DIR")) {
+    const std::filesystem::path env_path(env_dir);
+    if (*env_dir != '\0' &&
+        std::filesystem::exists(env_path / "icudtl.dat")) {
+      return env_dir;
+    }
+
+    std::cerr << "[canvas_engine] Warning: V8_ICU_DATA_DIR='"
+              << (*env_dir == '\0' ? "<empty>" : env_dir)
+              << "' does not contain icudtl.dat; falling back to built-in "
+                 "V8 data directories."
+              << std::endl;
+  }
+
   constexpr const char* kCandidateDirs[] = {
 #if defined(__APPLE__)
       "/opt/homebrew/opt/v8/libexec",
@@ -60,13 +74,6 @@ std::string DetectV8DataDir() {
   for (const char* dir : kCandidateDirs) {
     if (std::filesystem::exists(std::filesystem::path(dir) / "icudtl.dat")) {
       return dir;
-    }
-  }
-
-  if (const char* env_dir = std::getenv("V8_ICU_DATA_DIR")) {
-    if (std::filesystem::exists(
-            std::filesystem::path(env_dir) / "icudtl.dat")) {
-      return env_dir;
     }
   }
   return {};

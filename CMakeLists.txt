@@ -253,6 +253,20 @@ if(BUILD_TESTING)
     PASS_REGULAR_EXPRESSION "smoke"
   )
 
+  set(V8_ICU_DATA_MISSING_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/test_output/missing-v8-data")
+  add_test(
+    NAME v8_data_dir_fallback
+    COMMAND ${CMAKE_COMMAND} -E env
+            "V8_ICU_DATA_DIR=${V8_ICU_DATA_MISSING_DIR}"
+            $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/smoke.js
+  )
+  set_tests_properties(v8_data_dir_fallback PROPERTIES
+    PASS_REGULAR_EXPRESSION
+      "V8_ICU_DATA_DIR='${V8_ICU_DATA_MISSING_DIR}'.*icudtl.dat"
+  )
+
   add_test(
     NAME handle_gc
     COMMAND $<TARGET_FILE:canvas_engine>
