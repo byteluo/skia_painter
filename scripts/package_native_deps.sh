@@ -39,7 +39,7 @@ done
 [[ "$(uname -s)" == "Linux" ]] || fail "native dependency packages are supported on Linux only"
 [[ "$(uname -m)" == "x86_64" ]] || fail "native dependency packages are supported on x86_64 only"
 
-for command_name in bash cmake c++ clang++ ldd objdump python3 sha256sum tar zstd; do
+for command_name in bash cmake c++ clang++ git ldd objdump python3 sha256sum tar zstd; do
   command -v "${command_name}" >/dev/null 2>&1 || fail "required tool not found: ${command_name}"
 done
 
@@ -49,6 +49,9 @@ done
 [[ -f "${V8_OUT_DIR}/snapshot_blob.bin" ]] || fail "V8 snapshot not found at ${V8_OUT_DIR}/snapshot_blob.bin"
 [[ -f "${SKIA_ROOT}/MODULE.bazel" ]] || fail "Skia source tree not found at ${SKIA_ROOT}"
 [[ -d "${SKIA_ROOT}/bazel-bin" ]] || fail "Skia Bazel outputs not found at ${SKIA_ROOT}/bazel-bin"
+repository_skia_commit="$(git -C "${ROOT_DIR}" ls-tree HEAD third_party/skia | awk '{print $3}')"
+[[ "${repository_skia_commit}" == "${SKIA_COMMIT}" ]] ||
+  fail "expected Skia submodule commit ${SKIA_COMMIT}, found ${repository_skia_commit:-none}"
 
 V8_VERSION="$(python3 - "${V8_SOURCE_DIR}/include/v8-version.h" <<'PY'
 import pathlib
@@ -166,19 +169,19 @@ root = pathlib.Path(sys.argv[1])
 gn_args = pathlib.Path(sys.argv[2]).read_text()
 v8_version, skia_commit, cxx_version, clang_version, bazel_version = sys.argv[3:]
 files = []
-native_files = []
+shared_libraries = []
 for path in sorted(root.rglob("*")):
     if not path.is_file():
         continue
     relative = path.relative_to(root).as_posix()
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     files.append({"path": relative, "size": path.stat().st_size, "sha256": digest})
-    if relative.startswith("v8/lib/") or relative.startswith("skia/bazel-bin/"):
-        native_files.append(path)
+    if relative.startswith("v8/lib/") and path.suffix == ".so":
+        shared_libraries.append(path)
 
 versions = []
 version_pattern = re.compile(r"\bGLIBC_([0-9]+(?:\.[0-9]+)+)\b")
-for path in native_files:
+for path in shared_libraries:
     process = subprocess.Popen(
         ["objdump", "-T", str(path)],
         stdout=subprocess.PIPE,

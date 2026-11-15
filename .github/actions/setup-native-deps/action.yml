@@ -22,7 +22,7 @@ runs:
       shell: bash
       env:
         NATIVE_DEPS_URL: https://github.com/byteluo/skia_painter/releases/download/native-deps-v8-15.0.39-skia-31521f8/native-deps-linux-x86_64-v8-15.0.39-skia-31521f8.tar.zst
-        NATIVE_DEPS_SHA256: pending
+        NATIVE_DEPS_SHA256: 757174a5b24fc839be75574f3a9f6fedd5fd2a5e9785ccae82efc97c4d1f258b
       run: |
         set -euo pipefail
         package_dir="${RUNNER_TEMP}/native-deps-package"
