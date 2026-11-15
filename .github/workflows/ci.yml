@@ -95,7 +95,6 @@ jobs:
             //src/encode:icc_support
             //src/encode:png_encode
             //src/encode:png_encode_base
-            //src/ports:fontmgr_coretext
             //src/ports:freetype_support
             //src/ports:typeface_proxy
             //src/utils:char_to_glyphcache
@@ -110,7 +109,6 @@ jobs:
             src/encode/libencoder_common.a
             src/encode/libicc_support.a
             src/codec/libany_decoder.a
-            src/ports/libfontmgr_coretext.a
             src/ports/libfreetype_support.a
             src/ports/libtypeface_proxy.a
             src/utils/libchar_to_glyphcache.a
