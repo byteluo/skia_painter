@@ -87,7 +87,8 @@ void ScriptEngineImpl::ImageWidthGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle || !handle->asset) {
     info.GetReturnValue().Set(0);
     return;
@@ -99,7 +100,8 @@ void ScriptEngineImpl::ImageHeightGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle || !handle->asset) {
     info.GetReturnValue().Set(0);
     return;
@@ -111,7 +113,8 @@ void ScriptEngineImpl::ImageSrcGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle) {
     return;
   }
@@ -120,9 +123,11 @@ void ScriptEngineImpl::ImageSrcGetter(
 
 void ScriptEngineImpl::ImageSrcSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
   auto* handle =
-      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle || !value->IsString()) {
     ThrowTypeError(info.GetIsolate(), "Image.src must be a string");
     return;
@@ -194,7 +199,8 @@ void ScriptEngineImpl::ImageCompleteGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle) {
     return;
   }
@@ -205,7 +211,8 @@ void ScriptEngineImpl::ImageOnloadGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle || handle->onload.IsEmpty()) {
     return;
   }
@@ -214,9 +221,11 @@ void ScriptEngineImpl::ImageOnloadGetter(
 
 void ScriptEngineImpl::ImageOnloadSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
   auto* handle =
-      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle) {
     return;
   }
@@ -233,7 +242,8 @@ void ScriptEngineImpl::ImageOnerrorGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle || handle->onerror.IsEmpty()) {
     return;
   }
@@ -242,9 +252,11 @@ void ScriptEngineImpl::ImageOnerrorGetter(
 
 void ScriptEngineImpl::ImageOnerrorSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
   auto* handle =
-      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle) {
     return;
   }

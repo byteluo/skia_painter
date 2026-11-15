@@ -549,7 +549,7 @@ struct AccessorBinding {
   void (*getter)(v8::Local<v8::Name>,
                  const v8::PropertyCallbackInfo<v8::Value>&);
   void (*setter)(v8::Local<v8::Name>, v8::Local<v8::Value>,
-                 const v8::PropertyCallbackInfo<void>&);
+                 const V8Compat::SetterInfo&);
 };
 
 struct MethodBinding {
@@ -583,7 +583,8 @@ void ScriptEngineImpl::AccessorGetter(
     v8::Local<v8::Name>,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle = binding_internal::Unwrap<binding_internal::ContextHandle>(
-      info.GetIsolate(), info.HolderV2(), binding_internal::kContextHandleTag);
+      info.GetIsolate(),
+          V8Compat::Holder(info), binding_internal::kContextHandleTag);
   if (!handle) {
     return;
   }
@@ -601,9 +602,11 @@ void ScriptEngineImpl::AccessorGetter(
 template <auto Getter, auto Setter>
 void ScriptEngineImpl::AccessorSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
   auto* handle = binding_internal::Unwrap<binding_internal::ContextHandle>(
-      info.GetIsolate(), info.HolderV2(), binding_internal::kContextHandleTag);
+      info.GetIsolate(),
+          V8Compat::Holder(info), binding_internal::kContextHandleTag);
   if (!handle) {
     return;
   }
