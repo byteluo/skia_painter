@@ -135,7 +135,8 @@ ECharts 动画；渲染会等待 `finished` 事件，或等待 3000 毫秒虚拟
 可通过 `--settle-ms <毫秒>` 修改回退时间。
 
 可使用 `--png-compression fast|default|small` 选择 PNG 编码方式。`default`
-保留现有编码器设置；`fast` 和 `small` 使用测得的 Skia PNG 编码器配置。
+保留现有编码器设置；`fast` 使用 zlib 6 级且不启用 PNG 过滤，`small`
+使用 zlib 9 级且不启用 PNG 过滤。
 脚本可通过 `canvas.saveToPng(path, "fast")` 设置预设，或通过
 `canvas.saveToPng(path, false, "fast")` 在 drain 标志之后设置预设。
 

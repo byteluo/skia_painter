@@ -192,11 +192,10 @@ bool CanvasSurface::SavePng(const std::string& output_path,
   }
 
   SkPngEncoder::Options options;
-  options.fZLibLevel = 6;
-  options.fFilterFlags = SkPngEncoder::FilterFlag::kAll;
-  if (compression != PngCompression::kDefault) {
-    options.fFilterFlags = SkPngEncoder::FilterFlag::kNone;
-  }
+  options.fZLibLevel = compression == PngCompression::kSmall ? 9 : 6;
+  options.fFilterFlags = compression == PngCompression::kDefault
+                             ? SkPngEncoder::FilterFlag::kAll
+                             : SkPngEncoder::FilterFlag::kNone;
   return SkPngEncoder::Encode(&stream, pixmap, options);
 }
 
