@@ -111,7 +111,7 @@ build_skia_minimal() {
      [[ -f "${SKIA_DIR}/bazel-bin/src/encode/libencoder_common.a" ]] &&
      [[ -f "${SKIA_DIR}/bazel-bin/src/encode/libicc_support.a" ]] &&
      [[ -f "${SKIA_DIR}/bazel-bin/src/codec/libany_decoder.a" ]] &&
-     [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfontmgr_fontconfig.a" ]] &&
+     [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfontmgr_coretext.a" ]] &&
      [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfreetype_support.a" ]] &&
      [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libtypeface_proxy.a" ]] &&
      [[ -f "${SKIA_DIR}/bazel-bin/src/utils/libchar_to_glyphcache.a" ]] &&
@@ -147,7 +147,7 @@ build_skia_minimal() {
       //src/encode:icc_support \
       //src/encode:png_encode \
       //src/encode:png_encode_base \
-      //src/ports:fontmgr_fontconfig \
+      //src/ports:fontmgr_coretext \
       //src/ports:freetype_support \
       //src/ports:typeface_proxy \
       //src/utils:char_to_glyphcache \
@@ -163,7 +163,7 @@ build_skia_minimal() {
   [[ -f "${SKIA_DIR}/bazel-bin/src/encode/libencoder_common.a" ]] || fail "Skia encoder common archive was not produced"
   [[ -f "${SKIA_DIR}/bazel-bin/src/encode/libicc_support.a" ]] || fail "Skia ICC support archive was not produced"
   [[ -f "${SKIA_DIR}/bazel-bin/src/codec/libany_decoder.a" ]] || fail "Skia codec support archive was not produced"
-  [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfontmgr_fontconfig.a" ]] || fail "Skia fontconfig font manager archive was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfontmgr_coretext.a" ]] || fail "Skia CoreText font manager archive was not produced"
   [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libfreetype_support.a" ]] || fail "Skia freetype support archive was not produced"
   [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libtypeface_proxy.a" ]] || fail "Skia typeface proxy archive was not produced"
   [[ -f "${SKIA_DIR}/bazel-bin/src/utils/libchar_to_glyphcache.a" ]] || fail "Skia char-to-glyph cache archive was not produced"
