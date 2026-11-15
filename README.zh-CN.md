@@ -274,9 +274,10 @@ canvas.saveToPng("../output/chart.png");
 ctest --test-dir build --output-on-failure   # 全部测试
 ctest --preset dev                            # 通过 preset
 python3 scripts/verify_compare_coverage.py    # 只跑 compare 覆盖校验
+python3 scripts/update_goldens.py --update-goldens  # 有意更新图像基线
 ```
 
-三类测试：**冒烟测试**（V8 宿主 + 脚本执行链路）、**渲染回归**（高清导出、图片绘制、曲线、椭圆、`arcTo`、`ImageData`、任务队列冲刷语义）、**compare 覆盖**（每个 `examples/echarts_*.js` 都已接入 `web/compare/cases.json`）。
+CTest 使用带容差的 PNG 对比，覆盖原生渲染用例和每个 `examples/echarts_*.js` 图表。失败时可检查 `build/dev/golden-diffs/` 下的差异图。仅在有意更新基线时运行 `update_goldens.py`；提交前请审查 `tests/golden/` 的改动。
 
 ## 性能对比
 

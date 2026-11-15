@@ -536,8 +536,15 @@ if(BUILD_TESTING)
   add_test(
     NAME render_regression_verify
     COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_render_regression.py
-            ${CMAKE_CURRENT_BINARY_DIR}/test_output/render_regression.png
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/golden_test.py
+            --actual
+            "${CMAKE_CURRENT_BINARY_DIR}/test_output/render_regression.png"
+            --golden
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/render_regression.png"
+            --config
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/tolerances.json"
+            --diff
+            "${CMAKE_CURRENT_BINARY_DIR}/golden-diffs/render_regression.png"
   )
   set_tests_properties(render_regression_verify PROPERTIES
     DEPENDS render_regression_render
@@ -557,8 +564,15 @@ if(BUILD_TESTING)
   add_test(
     NAME text_rotate_regression_verify
     COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_text_rotate_regression.py
-            ${CMAKE_CURRENT_BINARY_DIR}/test_output/text_rotate_regression.png
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/golden_test.py
+            --actual
+            "${CMAKE_CURRENT_BINARY_DIR}/test_output/text_rotate_regression.png"
+            --golden
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/text_rotate_regression.png"
+            --config
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/tolerances.json"
+            --diff
+            "${CMAKE_CURRENT_BINARY_DIR}/golden-diffs/text_rotate_regression.png"
   )
   set_tests_properties(text_rotate_regression_verify PROPERTIES
     DEPENDS text_rotate_regression_render
@@ -576,6 +590,28 @@ if(BUILD_TESTING)
   set(ECHARTS_DIST_PATH
       "${CMAKE_CURRENT_SOURCE_DIR}/node_modules/echarts/dist/echarts.js")
   if(EXISTS "${ECHARTS_DIST_PATH}")
+    file(GLOB ECHARTS_EXAMPLE_SCRIPTS CONFIGURE_DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/examples/echarts_*.js")
+    foreach(example_script IN LISTS ECHARTS_EXAMPLE_SCRIPTS)
+      get_filename_component(example_name "${example_script}" NAME_WE)
+      add_test(
+        NAME "golden_${example_name}"
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/golden_test.py
+                --engine "$<TARGET_FILE:canvas_engine>"
+                --script "${example_script}"
+                --run-dir
+                "${CMAKE_CURRENT_BINARY_DIR}/golden-runs/${example_name}"
+                --output-name "${example_name}.png"
+                --golden
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/${example_name}.png"
+                --config
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/tolerances.json"
+                --diff
+                "${CMAKE_CURRENT_BINARY_DIR}/golden-diffs/${example_name}.png"
+      )
+    endforeach()
+
     add_test(
       NAME cli_render
       COMMAND ${CMAKE_COMMAND}
@@ -631,19 +667,31 @@ if(BUILD_TESTING)
         "wrote ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_image_scatter_regression\\.png"
     )
 
-    add_test(
-      NAME echarts_regression_verify
-      COMMAND ${Python3_EXECUTABLE}
-              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_echarts_regression.py
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_sunburst_regression.png
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_timeline_regression.png
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_custom_series_regression.png
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_pictorial_bar_regression.png
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_gauge_regression.png
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_image_scatter_regression.png
-    )
-    set_tests_properties(echarts_regression_verify PROPERTIES
-      DEPENDS echarts_regression_render
-    )
+    foreach(regression_name IN ITEMS
+        sunburst
+        timeline
+        custom_series
+        pictorial_bar
+        gauge
+        image_scatter)
+      set(regression_image "echarts_${regression_name}_regression.png")
+      add_test(
+        NAME "golden_${regression_image}"
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/golden_test.py
+                --actual
+                "${CMAKE_CURRENT_BINARY_DIR}/test_output/${regression_image}"
+                --golden
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/${regression_image}"
+                --config
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/tolerances.json"
+                --diff
+                "${CMAKE_CURRENT_BINARY_DIR}/golden-diffs/${regression_image}"
+      )
+      set_tests_properties("golden_${regression_image}" PROPERTIES
+        DEPENDS echarts_regression_render
+      )
+    endforeach()
+
   endif()
 endif()

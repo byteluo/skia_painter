@@ -1,0 +1,299 @@
+{
+  "default": {
+    "max_differing_pixel_ratio": 0.0005,
+    "max_differing_pixels": 2048,
+    "per_channel_delta": 3
+  },
+  "images": {
+    "echarts_axis_pointer.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_axis_pointer_multigrid.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_bar.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_boxplot.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_brush.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_calendar_effect_scatter.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_calendar_heatmap.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_calendar_scatter.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_candlestick.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_custom_series.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_custom_series_regression.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_dataset_multi_series.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_dataset_transform.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_datazoom_markarea.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_effect_scatter.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_funnel.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_gauge.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_gauge_regression.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_geo_effect_scatter.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_geo_heatmap.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_geo_lines.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_graph.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_heatmap.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_image_scatter.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_image_scatter_regression.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_legend_scroll.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_legend_selected.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_line.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_lines.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_map.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_map_piecewise.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_markpoint_markline.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_parallel.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_pattern_bar.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_pictorial_bar.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_pictorial_bar_regression.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_pie.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_polar_bar.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_radar.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_rich_graphic.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_sankey.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_scatter.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_single_axis_scatter.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_sunburst.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_sunburst_regression.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_theme_river.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_timeline_bar.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_timeline_regression.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_toolbox.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_toolbox_datazoom.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_toolbox_magic_type.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_tree.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_treemap.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_visualmap_map_scatter.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_visualmap_piecewise.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "echarts_visualmap_scatter.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "render_regression.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    },
+    "text_rotate_regression.png": {
+      "max_differing_pixel_ratio": 0.0005,
+      "max_differing_pixels": 2048,
+      "per_channel_delta": 3
+    }
+  }
+}
