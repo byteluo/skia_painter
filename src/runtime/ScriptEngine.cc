@@ -681,7 +681,7 @@ bool ScriptEngine::DrainPendingTasks() {
   draining_tasks_ = true;
 
   constexpr std::size_t kMaxExecutedTasks = 100000;
-  constexpr double kMaxVirtualAdvanceMs = 60000.0;
+  constexpr double kMaxVirtualAdvanceMs = 10000.0;
   constexpr double kFrameDurationMs = 1000.0 / 60.0;
   double virtual_advance_ms = 0.0;
   std::size_t executed_tasks = 0;
