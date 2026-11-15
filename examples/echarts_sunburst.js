@@ -1,34 +1,10 @@
-loadScript("../node_modules/echarts/dist/echarts.js");
+const { renderChart } = loadScript("./lib/echarts_setup.js");
 
 const width = 960;
 const height = 540;
 
-function createCanvas(targetWidth, targetHeight) {
-  const canvas = new Canvas(targetWidth, targetHeight);
-  canvas.style = {};
-  return canvas;
-}
 
-echarts.setPlatformAPI({
-  createCanvas() {
-    return createCanvas(width, height);
-  },
-  loadImage(src, onload) {
-    const image = new Image();
-    if (typeof onload === "function") {
-      image.onload = onload;
-    }
-    image.src = src;
-    return image;
-  }
-});
 
-const canvas = createCanvas(width, height);
-const chart = echarts.init(canvas, null, {
-  renderer: "canvas",
-  width,
-  height
-});
 
 const data = [
   {
@@ -108,66 +84,68 @@ const data = [
   }
 ];
 
-chart.setOption({
-  animation: false,
-  backgroundColor: "#fffaf0",
-  title: {
-    text: "Sunburst Compatibility",
-    subtext: "Sector layout + rotated labels",
-    left: "center",
-    top: 18,
-    textStyle: {
-      color: "#1f2937",
-      fontSize: 24,
-      fontWeight: "bold"
-    },
-    subtextStyle: {
-      color: "#6b7280"
-    }
-  },
-  series: [
-    {
-      type: "sunburst",
-      radius: ["16%", "78%"],
-      center: ["50%", "57%"],
-      sort: null,
-      nodeClick: false,
-      itemStyle: {
-        borderColor: "#fffaf0",
-        borderWidth: 3
-      },
-      label: {
-        rotate: "radial",
-        color: "#111827",
-        fontSize: 12
-      },
-      levels: [
-        {},
-        {
-          r0: "16%",
-          r: "36%",
-          label: {
-            rotate: 0,
-            fontWeight: "bold"
-          }
+renderChart({
+  option: {
+      animation: false,
+      backgroundColor: "#fffaf0",
+      title: {
+        text: "Sunburst Compatibility",
+        subtext: "Sector layout + rotated labels",
+        left: "center",
+        top: 18,
+        textStyle: {
+          color: "#1f2937",
+          fontSize: 24,
+          fontWeight: "bold"
         },
-        {
-          r0: "36%",
-          r: "58%"
-        },
-        {
-          r0: "58%",
-          r: "78%",
-          label: {
-            fontSize: 10
-          }
+        subtextStyle: {
+          color: "#6b7280"
         }
-      ],
-      data
-    }
-  ]
+      },
+      series: [
+        {
+          type: "sunburst",
+          radius: ["16%", "78%"],
+          center: ["50%", "57%"],
+          sort: null,
+          nodeClick: false,
+          itemStyle: {
+            borderColor: "#fffaf0",
+            borderWidth: 3
+          },
+          label: {
+            rotate: "radial",
+            color: "#111827",
+            fontSize: 12
+          },
+          levels: [
+            {},
+            {
+              r0: "16%",
+              r: "36%",
+              label: {
+                rotate: 0,
+                fontWeight: "bold"
+              }
+            },
+            {
+              r0: "36%",
+              r: "58%"
+            },
+            {
+              r0: "58%",
+              r: "78%",
+              label: {
+                fontSize: 10
+              }
+            }
+          ],
+          data
+        }
+      ]
+  },
+  width,
+  height,
+  output: "../output/echarts_sunburst.png",
 });
-
-chart.getZr().refreshImmediately();
-canvas.saveToPng("../output/echarts_sunburst.png");
 console.log("wrote ../output/echarts_sunburst.png");
