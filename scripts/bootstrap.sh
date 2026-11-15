@@ -180,6 +180,7 @@ build_skia_minimal() {
       build \
       --cxxopt=-std=c++20 \
       --cxxopt=-Wno-error=ignored-attributes \
+      --copt=-Wno-poison-system-directories \
       "${skia_targets[@]}"
   )
 
