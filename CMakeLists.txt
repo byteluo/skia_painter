@@ -194,7 +194,20 @@ add_library(canvas_engine_core STATIC
   src/canvas/ColorParser.cc
   src/canvas/FontParser.cc
   src/canvas/ImageAsset.cc
+  src/runtime/EventLoop.cc
+  src/runtime/HandleRegistry.cc
   src/runtime/ScriptEngine.cc
+  src/runtime/ScriptEngineImpl.cc
+  src/runtime/ScriptLoader.cc
+  src/runtime/bindings/CanvasBinding.cc
+  src/runtime/bindings/Context2DBinding.cc
+  src/runtime/bindings/Context2DImages.cc
+  src/runtime/bindings/Context2DText.cc
+  src/runtime/bindings/GlobalBindings.cc
+  src/runtime/bindings/GradientBinding.cc
+  src/runtime/bindings/ImageBinding.cc
+  src/runtime/bindings/Path2DBinding.cc
+  src/runtime/bindings/PatternBinding.cc
   src/runtime/V8Platform.cc
 )
 
@@ -246,7 +259,7 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(canvas_engine_core PRIVATE fontconfig)
 endif()
 
-add_executable(canvas_engine src/main.cc)
+add_executable(canvas_engine src/main.cc src/cli/Cli.cc)
 target_link_libraries(canvas_engine PRIVATE canvas_engine_core)
 
 add_executable(color_parser_test tests/color_parser_test.cc)
@@ -257,6 +270,12 @@ target_link_libraries(font_parser_test PRIVATE canvas_engine_core)
 
 add_executable(multi_engine_test tests/multi_engine_test.cc)
 target_link_libraries(multi_engine_test PRIVATE canvas_engine_core)
+
+add_executable(handle_registry_test tests/handle_registry_test.cc)
+target_include_directories(handle_registry_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime
+)
+target_link_libraries(handle_registry_test PRIVATE canvas_engine_core)
 
 function(canvas_engine_apply_v8_rpath target)
   if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
@@ -271,6 +290,7 @@ canvas_engine_apply_v8_rpath(canvas_engine)
 canvas_engine_apply_v8_rpath(color_parser_test)
 canvas_engine_apply_v8_rpath(font_parser_test)
 canvas_engine_apply_v8_rpath(multi_engine_test)
+canvas_engine_apply_v8_rpath(handle_registry_test)
 
 if(APPLE)
   target_link_libraries(canvas_engine_core
@@ -347,6 +367,11 @@ if(BUILD_TESTING)
   )
 
   add_test(
+    NAME handle_registry
+    COMMAND handle_registry_test
+  )
+
+  add_test(
     NAME multi_engine
     COMMAND multi_engine_test
   )
@@ -372,6 +397,14 @@ if(BUILD_TESTING)
   )
   set_tests_properties(canvas_semantics PROPERTIES
     PASS_REGULAR_EXPRESSION "canvas_semantics ok"
+  )
+  add_test(
+    NAME path2d
+    COMMAND $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/path2d.js
+  )
+  set_tests_properties(path2d PROPERTIES
+    PASS_REGULAR_EXPRESSION "path2d ok"
   )
 
   add_test(
