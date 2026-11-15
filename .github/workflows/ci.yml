@@ -127,7 +127,7 @@ jobs:
           fi
           cache_hit=true
           for artifact in "${required_artifacts[@]}" "${cpu_artifacts[@]}"; do
-            [[ -f "third_party/skia/bazel-bin/${artifact}" ]] || cache_hit=false
+            [[ -f "third_party/skia/bazel-bin/${artifact}" || -f "third_party/skia/bazel-bin/${artifact%.pic.o}.o" ]] || cache_hit=false
           done
           if [[ "${cache_hit}" == true ]]; then
             echo "Skia artifacts found in cache"; exit 0

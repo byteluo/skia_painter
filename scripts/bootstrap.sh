@@ -154,12 +154,12 @@ build_skia_minimal() {
      [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libtypeface_proxy.a" ]] &&
      [[ -f "${SKIA_DIR}/bazel-bin/src/utils/libchar_to_glyphcache.a" ]] &&
      [[ -f "${SKIA_DIR}/bazel-bin/external/+cpp_modules+freetype/libfreetype.a" ]] &&
-     [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.pic.o" ]] &&
-     [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o" ]]; then
+     [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.pic.o" || -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.o" ]] &&
+     [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o" || -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.o" ]]; then
     if [[ "$(uname -m)" != "x86_64" ]] ||
        { [[ -f "${SKIA_DIR}/bazel-bin/src/opts/libml3.a" ]] &&
-         [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o" ]] &&
-         [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o" ]]; }; then
+         [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o" || -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.o" ]] &&
+         [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o" || -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.o" ]]; }; then
       log "Reusing existing Skia build outputs"
       return
     fi
@@ -197,12 +197,12 @@ build_skia_minimal() {
   [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libtypeface_proxy.a" ]] || fail "Skia typeface proxy archive was not produced"
   [[ -f "${SKIA_DIR}/bazel-bin/src/utils/libchar_to_glyphcache.a" ]] || fail "Skia char-to-glyph cache archive was not produced"
   [[ -f "${SKIA_DIR}/bazel-bin/external/+cpp_modules+freetype/libfreetype.a" ]] || fail "Skia bundled freetype archive was not produced"
-  [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.pic.o" ]] || fail "Skia skcms object was not produced"
-  [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o" ]] || fail "Skia skcms baseline object was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.pic.o" || -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.o" ]] || fail "Skia skcms object was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o" || -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.o" ]] || fail "Skia skcms baseline object was not produced"
   if [[ "$(uname -m)" == "x86_64" ]]; then
     [[ -f "${SKIA_DIR}/bazel-bin/src/opts/libml3.a" ]] || fail "Skia opts archive was not produced"
-    [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o" ]] || fail "Skia skcms hsw object was not produced"
-    [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o" ]] || fail "Skia skcms skx object was not produced"
+    [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o" || -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.o" ]] || fail "Skia skcms hsw object was not produced"
+    [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o" || -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.o" ]] || fail "Skia skcms skx object was not produced"
   fi
 }
 
