@@ -87,23 +87,62 @@ jobs:
 
       - name: Build Skia (minimal target set)
         run: |
-          if [[ -f "third_party/skia/bazel-bin/src/core/libcore.a" &&
-                -f "third_party/skia/bazel-bin/src/base/libbase.a" &&
-                -f "third_party/skia/bazel-bin/src/encode/libpng_encode.a" &&
-                -f "third_party/skia/bazel-bin/src/encode/libpng_encode_base.a" &&
-                -f "third_party/skia/bazel-bin/src/encode/libencoder_common.a" &&
-                -f "third_party/skia/bazel-bin/src/encode/libicc_support.a" &&
-                -f "third_party/skia/bazel-bin/src/codec/libany_decoder.a" &&
-                -f "third_party/skia/bazel-bin/src/ports/libfontmgr_coretext.a" &&
-                -f "third_party/skia/bazel-bin/src/ports/libfreetype_support.a" &&
-                -f "third_party/skia/bazel-bin/src/ports/libtypeface_proxy.a" &&
-                -f "third_party/skia/bazel-bin/src/utils/libchar_to_glyphcache.a" &&
-                -f "third_party/skia/bazel-bin/src/opts/libml3.a" &&
-                -f "third_party/skia/bazel-bin/external/+cpp_modules+freetype/libfreetype.a" &&
-                -f "third_party/skia/bazel-bin/modules/skcms/_objs/skcms_public/skcms.pic.o" &&
-                -f "third_party/skia/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o" &&
-                -f "third_party/skia/bazel-bin/modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o" &&
-                -f "third_party/skia/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o" ]]; then
+          skia_targets=(
+            //:core
+            //src/base:base
+            //src/codec:any_decoder
+            //src/encode:encoder_common
+            //src/encode:icc_support
+            //src/encode:png_encode
+            //src/encode:png_encode_base
+            //src/ports:fontmgr_coretext
+            //src/ports:freetype_support
+            //src/ports:typeface_proxy
+            //src/utils:char_to_glyphcache
+            //modules/skcms:skcms
+            @freetype//:freetype
+          )
+          required_artifacts=(
+            src/core/libcore.a
+            src/base/libbase.a
+            src/encode/libpng_encode.a
+            src/encode/libpng_encode_base.a
+            src/encode/libencoder_common.a
+            src/encode/libicc_support.a
+            src/codec/libany_decoder.a
+            src/ports/libfontmgr_coretext.a
+            src/ports/libfreetype_support.a
+            src/ports/libtypeface_proxy.a
+            src/utils/libchar_to_glyphcache.a
+            external/+cpp_modules+freetype/libfreetype.a
+            modules/skcms/_objs/skcms_public/skcms.pic.o
+            modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o
+          )
+          cpu_artifacts=()
+          if [[ "$(uname -m)" == "x86_64" ]]; then
+            skia_targets+=(//src/opts:ml3)
+            cpu_artifacts+=(
+              src/opts/libml3.a
+              modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o
+              modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o
+            )
+          fi
+          cache_hit=true
+          for artifact in "${required_artifacts[@]}"; do
+            if [[ ! -f "third_party/skia/bazel-bin/${artifact}" ]]; then
+              cache_hit=false
+              break
+            fi
+          done
+          if [[ "${cache_hit}" == true ]]; then
+            for artifact in "${cpu_artifacts[@]}"; do
+              if [[ ! -f "third_party/skia/bazel-bin/${artifact}" ]]; then
+                cache_hit=false
+                break
+              fi
+            done
+          fi
+          if [[ "${cache_hit}" == true ]]; then
             echo "Skia artifacts found in cache"; exit 0
           fi
           cd third_party/skia
@@ -113,20 +152,7 @@ jobs:
             build \
             --cxxopt=-std=c++20 \
             --cxxopt=-Wno-error=ignored-attributes \
-            //:core \
-            //src/base:base \
-            //src/codec:any_decoder \
-            //src/encode:encoder_common \
-            //src/encode:icc_support \
-            //src/encode:png_encode \
-            //src/encode:png_encode_base \
-            //src/ports:fontmgr_coretext \
-            //src/ports:freetype_support \
-            //src/ports:typeface_proxy \
-            //src/utils:char_to_glyphcache \
-            //src/opts:ml3 \
-            //modules/skcms:skcms \
-            @freetype//:freetype
+            "${skia_targets[@]}"
 
       - uses: actions/setup-node@v4
         with:
