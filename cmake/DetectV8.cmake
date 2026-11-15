@@ -91,6 +91,59 @@ foreach(_directory IN LISTS V8_LINK_DIRECTORIES)
   list(APPEND _v8_link_options "-L${_directory}" "-Wl,-rpath,${_directory}")
 endforeach()
 
+set(_v8_had_icu_environment FALSE)
+if(DEFINED ENV{V8_ICU_DATA_DIR})
+  set(_v8_original_icu_data_dir "$ENV{V8_ICU_DATA_DIR}")
+  set(_v8_had_icu_environment TRUE)
+endif()
+
+set(_v8_probe_icu_dir)
+if(_v8_had_icu_environment AND
+   EXISTS "${_v8_original_icu_data_dir}/icudtl.dat")
+  set(_v8_probe_icu_dir "${_v8_original_icu_data_dir}")
+else()
+  set(_v8_icu_candidates)
+  if(DEFINED ENV{V8_ROOT})
+    list(APPEND _v8_icu_candidates
+      "$ENV{V8_ROOT}/share/v8"
+      "$ENV{V8_ROOT}/lib"
+      "$ENV{V8_ROOT}/libexec"
+    )
+  endif()
+  foreach(_directory IN LISTS V8_LINK_DIRECTORIES V8_INCLUDE_DIRS)
+    list(APPEND _v8_icu_candidates
+      "${_directory}"
+      "${_directory}/../share/v8"
+      "${_directory}/../libexec"
+    )
+  endforeach()
+  list(APPEND _v8_icu_candidates
+    "/opt/homebrew/opt/v8/share/v8"
+    "/opt/homebrew/opt/v8/libexec"
+    "/opt/homebrew/opt/v8/lib"
+  )
+  list(REMOVE_DUPLICATES _v8_icu_candidates)
+  foreach(_candidate IN LISTS _v8_icu_candidates)
+    if(EXISTS "${_candidate}/icudtl.dat")
+      set(_v8_probe_icu_dir "${_candidate}")
+      break()
+    endif()
+  endforeach()
+endif()
+
+if(NOT _v8_probe_icu_dir)
+  message(FATAL_ERROR
+    "The V8 ABI probe needs icudtl.dat. Set V8_ICU_DATA_DIR to its directory "
+    "or install it under V8_ROOT or one of V8_LINK_DIRECTORIES.")
+endif()
+if(_v8_had_icu_environment AND
+   NOT "${_v8_original_icu_data_dir}" STREQUAL "${_v8_probe_icu_dir}")
+  message(WARNING
+    "V8_ICU_DATA_DIR='${_v8_original_icu_data_dir}' does not contain icudtl.dat; "
+    "using '${_v8_probe_icu_dir}' for the V8 ABI probe.")
+endif()
+set(ENV{V8_ICU_DATA_DIR} "${_v8_probe_icu_dir}")
+
 if(DEFINED _v8_candidates)
   set(_v8_candidates_to_try ${_v8_candidates})
 else()
@@ -110,6 +163,8 @@ foreach(_candidate IN LISTS _v8_candidates_to_try)
 
   set(_v8_run_var "_V8_ABI_RUN_${_v8_candidate_index}")
   set(_v8_compile_var "_V8_ABI_COMPILE_${_v8_candidate_index}")
+  unset(${_v8_run_var} CACHE)
+  unset(${_v8_compile_var} CACHE)
   set(_v8_try_args
     CMAKE_FLAGS
       "-DCMAKE_CXX_STANDARD:STRING=20"
@@ -139,6 +194,12 @@ foreach(_candidate IN LISTS _v8_candidates_to_try)
     "definitions='${_v8_candidate_definitions}', compile='${${_v8_compile_var}}', "
     "run='${${_v8_run_var}}', output='${_v8_run_output}${_v8_compile_output}'")
 endforeach()
+
+if(_v8_had_icu_environment)
+  set(ENV{V8_ICU_DATA_DIR} "${_v8_original_icu_data_dir}")
+else()
+  unset(ENV{V8_ICU_DATA_DIR})
+endif()
 
 if(NOT _v8_config_validated)
   message(FATAL_ERROR
