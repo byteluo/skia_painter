@@ -14,6 +14,8 @@
 
 namespace canvas_engine {
 
+class HandleRegistry;
+
 class ScriptEngine {
  public:
   struct Options {
@@ -76,12 +78,19 @@ class ScriptEngine {
   void CancelTask(std::uint32_t task_id);
   std::uint64_t NextHandleId();
   std::filesystem::path ResolveScriptPath(const std::string& script_path) const;
-  CanvasHandle* LiveCanvasHandle(CanvasHandle* handle) const;
-  GradientHandle* LiveGradientHandle(GradientHandle* handle) const;
-  ImageHandle* LiveImageHandle(ImageHandle* handle) const;
-  PatternHandle* LivePatternHandle(PatternHandle* handle) const;
 
   static ScriptEngine* From(v8::Isolate* isolate);
+  void* LookupHandle(v8::Isolate* isolate, v8::Local<v8::Object> object,
+                     v8::EmbedderDataTypeTag tag) const;
+  template <typename T>
+  static T* UnwrapHandle(v8::Isolate* isolate,
+                         v8::Local<v8::Object> object,
+                         v8::EmbedderDataTypeTag tag) {
+    auto* engine = From(isolate);
+    return engine
+               ? static_cast<T*>(engine->LookupHandle(isolate, object, tag))
+               : nullptr;
+  }
   static void HandleWeakFinalizer(
       const v8::WeakCallbackInfo<HandleFinalizerData>& data);
   static void ContextObjectWeakFinalizer(
@@ -283,6 +292,7 @@ class ScriptEngine {
   double next_frame_ms_ = 0.0;
   bool draining_tasks_ = false;
   std::string last_error_;
+  std::unique_ptr<HandleRegistry> handle_registry_;
   std::unordered_map<std::uint64_t, std::unique_ptr<CanvasHandle>> canvases_;
   std::unordered_map<std::uint64_t, std::unique_ptr<GradientHandle>> gradients_;
   std::unordered_map<std::uint64_t, std::unique_ptr<ImageHandle>> images_;

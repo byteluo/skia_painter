@@ -22,6 +22,7 @@
 #include "canvas_engine/canvas/ColorParser.h"
 #include "canvas_engine/canvas/ImageAsset.h"
 #include "canvas_engine/runtime/V8Platform.h"
+#include "HandleRegistry.h"
 #include "include/effects/SkGradient.h"
 
 namespace canvas_engine {
@@ -459,8 +460,11 @@ struct ScriptEngine::ContextObjectFinalizerData {
 struct ScriptEngine::CanvasHandle {
   CanvasHandle(std::uint64_t handle_id,
                std::shared_ptr<CanvasSurface> surface_value)
-      : id(handle_id), surface(std::move(surface_value)) {}
+      : header{static_cast<std::uint32_t>(kCanvasHandleTag), handle_id},
+        id(handle_id),
+        surface(std::move(surface_value)) {}
 
+  HandleRegistry::Header header;
   std::uint64_t id = 0;
   std::shared_ptr<CanvasSurface> surface;
   std::unique_ptr<ContextHandle> context_handle;
@@ -472,13 +476,16 @@ struct ScriptEngine::CanvasHandle {
 
 struct ScriptEngine::ImageHandle {
   ImageHandle(std::uint64_t handle_id, v8::Isolate* isolate_value)
-      : id(handle_id), isolate(isolate_value) {}
+      : header{static_cast<std::uint32_t>(kImageHandleTag), handle_id},
+        id(handle_id),
+        isolate(isolate_value) {}
 
   void ResetCallbacks() {
     onload.Reset();
     onerror.Reset();
   }
 
+  HandleRegistry::Header header;
   std::uint64_t id = 0;
   v8::Isolate* isolate = nullptr;
   std::string src;
@@ -493,8 +500,11 @@ struct ScriptEngine::ImageHandle {
 };
 
 struct ScriptEngine::PatternHandle {
-  explicit PatternHandle(std::uint64_t handle_id) : id(handle_id) {}
+  explicit PatternHandle(std::uint64_t handle_id)
+      : header{static_cast<std::uint32_t>(kPatternHandleTag), handle_id},
+        id(handle_id) {}
 
+  HandleRegistry::Header header;
   std::uint64_t id = 0;
   v8::Global<v8::Object> object;
   std::unique_ptr<HandleFinalizerData> finalizer_data;
@@ -504,8 +514,11 @@ struct ScriptEngine::PatternHandle {
 struct ScriptEngine::GradientHandle {
   GradientHandle(std::uint64_t handle_id,
                  std::shared_ptr<GradientSource> gradient_source)
-      : id(handle_id), source(std::move(gradient_source)) {}
+      : header{static_cast<std::uint32_t>(kGradientHandleTag), handle_id},
+        id(handle_id),
+        source(std::move(gradient_source)) {}
 
+  HandleRegistry::Header header;
   std::uint64_t id = 0;
   v8::Global<v8::Object> object;
   std::unique_ptr<HandleFinalizerData> finalizer_data;
@@ -530,6 +543,7 @@ ScriptEngine::ScriptEngine(Options options) : options_(options) {
                           std::chrono::system_clock::now().time_since_epoch())
                           .count();
   }
+  handle_registry_ = std::make_unique<HandleRegistry>();
   V8Platform::Initialize();
 
   allocator_.reset(v8::ArrayBuffer::Allocator::NewDefaultAllocator());
@@ -561,6 +575,7 @@ ScriptEngine::~ScriptEngine() {
     images_.clear();
     pending_tasks_.clear();
     patterns_.clear();
+    handle_registry_.reset();
   }
 
   isolate_->Dispose();
@@ -1271,60 +1286,16 @@ ScriptEngine* ScriptEngine::From(v8::Isolate* isolate) {
   return static_cast<ScriptEngine*>(isolate->GetData(0));
 }
 
-ScriptEngine::CanvasHandle* ScriptEngine::LiveCanvasHandle(
-    CanvasHandle* handle) const {
-  if (handle == nullptr) {
+void* ScriptEngine::LookupHandle(
+    v8::Isolate* isolate, v8::Local<v8::Object> object,
+    v8::EmbedderDataTypeTag tag) const {
+  if (object.IsEmpty() || object->InternalFieldCount() == 0 ||
+      !handle_registry_) {
     return nullptr;
   }
-  for (const auto& [id, candidate] : canvases_) {
-    (void)id;
-    if (candidate.get() == handle) {
-      return candidate.get();
-    }
-  }
-  return nullptr;
-}
-
-ScriptEngine::GradientHandle* ScriptEngine::LiveGradientHandle(
-    GradientHandle* handle) const {
-  if (handle == nullptr) {
-    return nullptr;
-  }
-  for (const auto& [id, candidate] : gradients_) {
-    (void)id;
-    if (candidate.get() == handle) {
-      return candidate.get();
-    }
-  }
-  return nullptr;
-}
-
-ScriptEngine::ImageHandle* ScriptEngine::LiveImageHandle(
-    ImageHandle* handle) const {
-  if (handle == nullptr) {
-    return nullptr;
-  }
-  for (const auto& [id, candidate] : images_) {
-    (void)id;
-    if (candidate.get() == handle) {
-      return candidate.get();
-    }
-  }
-  return nullptr;
-}
-
-ScriptEngine::PatternHandle* ScriptEngine::LivePatternHandle(
-    PatternHandle* handle) const {
-  if (handle == nullptr) {
-    return nullptr;
-  }
-  for (const auto& [id, candidate] : patterns_) {
-    (void)id;
-    if (candidate.get() == handle) {
-      return candidate.get();
-    }
-  }
-  return nullptr;
+  auto* header = static_cast<HandleRegistry::Header*>(
+      object->GetAlignedPointerFromInternalField(isolate, 0, tag));
+  return handle_registry_->Lookup(header, static_cast<std::uint32_t>(tag));
 }
 
 void ScriptEngine::HandleWeakFinalizer(
@@ -1337,6 +1308,7 @@ void ScriptEngine::HandleWeakFinalizer(
   auto* engine = finalizer_data->engine;
   switch (finalizer_data->kind) {
     case HandleFinalizerData::Kind::kCanvas:
+      engine->handle_registry_->Remove(finalizer_data->id, kCanvasHandleTag);
       if (auto it = engine->canvases_.find(finalizer_data->id);
           it != engine->canvases_.end()) {
         it->second->object.ClearWeak();
@@ -1346,6 +1318,7 @@ void ScriptEngine::HandleWeakFinalizer(
       }
       break;
     case HandleFinalizerData::Kind::kGradient:
+      engine->handle_registry_->Remove(finalizer_data->id, kGradientHandleTag);
       if (auto it = engine->gradients_.find(finalizer_data->id);
           it != engine->gradients_.end()) {
         it->second->object.ClearWeak();
@@ -1354,6 +1327,7 @@ void ScriptEngine::HandleWeakFinalizer(
       }
       break;
     case HandleFinalizerData::Kind::kImage:
+      engine->handle_registry_->Remove(finalizer_data->id, kImageHandleTag);
       if (auto it = engine->images_.find(finalizer_data->id);
           it != engine->images_.end()) {
         it->second->object.ClearWeak();
@@ -1362,6 +1336,7 @@ void ScriptEngine::HandleWeakFinalizer(
       }
       break;
     case HandleFinalizerData::Kind::kPattern:
+      engine->handle_registry_->Remove(finalizer_data->id, kPatternHandleTag);
       if (auto it = engine->patterns_.find(finalizer_data->id);
           it != engine->patterns_.end()) {
         it->second->object.ClearWeak();
@@ -1560,13 +1535,15 @@ void ScriptEngine::CanvasConstructor(
                          std::make_unique<CanvasHandle>(handle_id, surface))
                 .first;
   auto* handle = it->second.get();
+  engine->handle_registry_->Register(&handle->header, handle);
   handle->object.Reset(isolate, info.This());
   handle->finalizer_data = std::make_unique<HandleFinalizerData>(
       HandleFinalizerData{engine, HandleFinalizerData::Kind::kCanvas,
                           handle_id});
   handle->object.SetWeak(handle->finalizer_data.get(), HandleWeakFinalizer,
                          v8::WeakCallbackType::kParameter);
-  info.This()->SetAlignedPointerInInternalField(0, handle, kCanvasHandleTag);
+  info.This()->SetAlignedPointerInInternalField(0, &handle->header,
+                                                kCanvasHandleTag);
 
   auto context = isolate->GetCurrentContext();
   info.This()
@@ -1592,7 +1569,7 @@ void ScriptEngine::CanvasConstructor(
 void ScriptEngine::CanvasGetContext(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   v8::Isolate* isolate = info.GetIsolate();
-  auto* canvas = Unwrap<CanvasHandle>(isolate, info.This(), kCanvasHandleTag);
+  auto* canvas = UnwrapHandle<CanvasHandle>(isolate, info.This(), kCanvasHandleTag);
   if (!canvas) {
     ThrowTypeError(isolate, "invalid Canvas instance");
     return;
@@ -1646,7 +1623,7 @@ void ScriptEngine::CanvasGetContext(
 void ScriptEngine::CanvasSaveToPng(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   v8::Isolate* isolate = info.GetIsolate();
-  auto* canvas = Unwrap<CanvasHandle>(isolate, info.This(), kCanvasHandleTag);
+  auto* canvas = UnwrapHandle<CanvasHandle>(isolate, info.This(), kCanvasHandleTag);
   if (!canvas) {
     ThrowTypeError(isolate, "invalid Canvas instance");
     return;
@@ -1721,7 +1698,7 @@ void ScriptEngine::CanvasWidthGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* canvas =
-      Unwrap<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+      UnwrapHandle<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
   if (!canvas) {
     return;
   }
@@ -1732,7 +1709,7 @@ void ScriptEngine::CanvasWidthSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info) {
   auto* canvas =
-      Unwrap<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+      UnwrapHandle<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
   if (!canvas) {
     return;
   }
@@ -1756,7 +1733,7 @@ void ScriptEngine::CanvasHeightGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* canvas =
-      Unwrap<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+      UnwrapHandle<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
   if (!canvas) {
     return;
   }
@@ -1767,7 +1744,7 @@ void ScriptEngine::CanvasHeightSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info) {
   auto* canvas =
-      Unwrap<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+      UnwrapHandle<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
   if (!canvas) {
     return;
   }
@@ -1828,13 +1805,15 @@ void ScriptEngine::ImageConstructor(
                          std::make_unique<ImageHandle>(handle_id, isolate))
                 .first;
   auto* handle = it->second.get();
+  engine->handle_registry_->Register(&handle->header, handle);
   handle->object.Reset(isolate, info.This());
   handle->finalizer_data = std::make_unique<HandleFinalizerData>(
       HandleFinalizerData{engine, HandleFinalizerData::Kind::kImage,
                           handle_id});
   handle->object.SetWeak(handle->finalizer_data.get(), HandleWeakFinalizer,
                          v8::WeakCallbackType::kParameter);
-  info.This()->SetAlignedPointerInInternalField(0, handle, kImageHandleTag);
+  info.This()->SetAlignedPointerInInternalField(0, &handle->header,
+                                                kImageHandleTag);
   info.GetReturnValue().Set(info.This());
 }
 
@@ -1842,7 +1821,7 @@ void ScriptEngine::ImageWidthGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
   if (!handle || !handle->asset) {
     info.GetReturnValue().Set(0);
     return;
@@ -1854,7 +1833,7 @@ void ScriptEngine::ImageHeightGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
   if (!handle || !handle->asset) {
     info.GetReturnValue().Set(0);
     return;
@@ -1866,7 +1845,7 @@ void ScriptEngine::ImageSrcGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
   if (!handle) {
     return;
   }
@@ -1877,7 +1856,7 @@ void ScriptEngine::ImageSrcSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
   if (!handle || !value->IsString()) {
     ThrowTypeError(info.GetIsolate(), "Image.src must be a string");
     return;
@@ -1949,7 +1928,7 @@ void ScriptEngine::ImageCompleteGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
   if (!handle) {
     return;
   }
@@ -1960,7 +1939,7 @@ void ScriptEngine::ImageOnloadGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
   if (!handle || handle->onload.IsEmpty()) {
     return;
   }
@@ -1971,7 +1950,7 @@ void ScriptEngine::ImageOnloadSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
   if (!handle) {
     return;
   }
@@ -1988,7 +1967,7 @@ void ScriptEngine::ImageOnerrorGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
   if (!handle || handle->onerror.IsEmpty()) {
     return;
   }
@@ -1999,7 +1978,7 @@ void ScriptEngine::ImageOnerrorSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
     const v8::PropertyCallbackInfo<void>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      UnwrapHandle<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
   if (!handle) {
     return;
   }
@@ -2040,15 +2019,14 @@ void ScriptEngine::FillStyleSetter(
   }
 
   if (value->IsObject()) {
-    auto* engine = From(info.GetIsolate());
     auto object = value.As<v8::Object>();
-    if (auto* gradient = engine->LiveGradientHandle(Unwrap<GradientHandle>(
-            info.GetIsolate(), object, kGradientHandleTag))) {
+    if (auto* gradient = UnwrapHandle<GradientHandle>(
+            info.GetIsolate(), object, kGradientHandleTag)) {
       handle->context->SetFillSource(gradient->source);
       return;
     }
-    if (auto* pattern = engine->LivePatternHandle(Unwrap<PatternHandle>(
-            info.GetIsolate(), object, kPatternHandleTag))) {
+    if (auto* pattern = UnwrapHandle<PatternHandle>(
+            info.GetIsolate(), object, kPatternHandleTag)) {
       handle->context->SetFillSource(pattern->source);
       return;
     }
@@ -2086,15 +2064,14 @@ void ScriptEngine::StrokeStyleSetter(
   }
 
   if (value->IsObject()) {
-    auto* engine = From(info.GetIsolate());
     auto object = value.As<v8::Object>();
-    if (auto* gradient = engine->LiveGradientHandle(Unwrap<GradientHandle>(
-            info.GetIsolate(), object, kGradientHandleTag))) {
+    if (auto* gradient = UnwrapHandle<GradientHandle>(
+            info.GetIsolate(), object, kGradientHandleTag)) {
       handle->context->SetStrokeSource(gradient->source);
       return;
     }
-    if (auto* pattern = engine->LivePatternHandle(Unwrap<PatternHandle>(
-            info.GetIsolate(), object, kPatternHandleTag))) {
+    if (auto* pattern = UnwrapHandle<PatternHandle>(
+            info.GetIsolate(), object, kPatternHandleTag)) {
       handle->context->SetStrokeSource(pattern->source);
       return;
     }
@@ -2883,17 +2860,15 @@ void ScriptEngine::CtxDrawImage(
   float source_width = 0.0f;
   float source_height = 0.0f;
   float source_pixel_ratio = 1.0f;
-  auto* engine = From(info.GetIsolate());
-
-  if (auto* image_handle = engine->LiveImageHandle(Unwrap<ImageHandle>(
-          info.GetIsolate(), source, kImageHandleTag))) {
+  if (auto* image_handle = UnwrapHandle<ImageHandle>(
+          info.GetIsolate(), source, kImageHandleTag)) {
     if (image_handle->asset) {
       image = image_handle->asset->image();
       source_width = static_cast<float>(image_handle->asset->width());
       source_height = static_cast<float>(image_handle->asset->height());
     }
-  } else if (auto* canvas_handle = engine->LiveCanvasHandle(Unwrap<CanvasHandle>(
-                 info.GetIsolate(), source, kCanvasHandleTag))) {
+  } else if (auto* canvas_handle = UnwrapHandle<CanvasHandle>(
+                 info.GetIsolate(), source, kCanvasHandleTag)) {
     image = canvas_handle->surface->MakeImageSnapshot();
     source_width = static_cast<float>(canvas_handle->surface->width());
     source_height = static_cast<float>(canvas_handle->surface->height());
@@ -3031,13 +3006,15 @@ void ScriptEngine::CtxCreateLinearGradient(
                                  x1, y1, 0.0f)))
                 .first;
   auto* gradient = it->second.get();
+  engine->handle_registry_->Register(&gradient->header, gradient);
 
   auto context = info.GetIsolate()->GetCurrentContext();
   auto object = engine->GetGradientTemplate()
                     ->InstanceTemplate()
                     ->NewInstance(context)
                     .ToLocalChecked();
-  object->SetAlignedPointerInInternalField(0, gradient, kGradientHandleTag);
+  object->SetAlignedPointerInInternalField(0, &gradient->header,
+                                           kGradientHandleTag);
   gradient->object.Reset(info.GetIsolate(), object);
   gradient->finalizer_data = std::make_unique<HandleFinalizerData>(
       HandleFinalizerData{engine, HandleFinalizerData::Kind::kGradient,
@@ -3080,13 +3057,15 @@ void ScriptEngine::CtxCreateRadialGradient(
                                  y1, r1)))
                 .first;
   auto* gradient = it->second.get();
+  engine->handle_registry_->Register(&gradient->header, gradient);
 
   auto context = info.GetIsolate()->GetCurrentContext();
   auto object = engine->GetGradientTemplate()
                     ->InstanceTemplate()
                     ->NewInstance(context)
                     .ToLocalChecked();
-  object->SetAlignedPointerInInternalField(0, gradient, kGradientHandleTag);
+  object->SetAlignedPointerInInternalField(0, &gradient->header,
+                                           kGradientHandleTag);
   gradient->object.Reset(info.GetIsolate(), object);
   gradient->finalizer_data = std::make_unique<HandleFinalizerData>(
       HandleFinalizerData{engine, HandleFinalizerData::Kind::kGradient,
@@ -3125,13 +3104,13 @@ void ScriptEngine::CtxCreatePattern(
   sk_sp<SkImage> image;
   float source_pixel_ratio = 1.0f;
 
-  if (auto* image_handle = engine->LiveImageHandle(Unwrap<ImageHandle>(
-          info.GetIsolate(), source, kImageHandleTag))) {
+  if (auto* image_handle = UnwrapHandle<ImageHandle>(
+          info.GetIsolate(), source, kImageHandleTag)) {
     if (image_handle->asset) {
       image = image_handle->asset->image();
     }
-  } else if (auto* canvas_handle = engine->LiveCanvasHandle(Unwrap<CanvasHandle>(
-                 info.GetIsolate(), source, kCanvasHandleTag))) {
+  } else if (auto* canvas_handle = UnwrapHandle<CanvasHandle>(
+                 info.GetIsolate(), source, kCanvasHandleTag)) {
     image = canvas_handle->surface->MakeImageSnapshot();
     source_pixel_ratio = canvas_handle->surface->pixel_ratio();
   }
@@ -3162,13 +3141,15 @@ void ScriptEngine::CtxCreatePattern(
   }
   pattern->source = std::make_shared<FixedShaderSource>(
       std::move(shader), "[object CanvasPattern]");
+  engine->handle_registry_->Register(&pattern->header, pattern);
 
   auto context = info.GetIsolate()->GetCurrentContext();
   auto object = engine->GetPatternTemplate()
                     ->InstanceTemplate()
                     ->NewInstance(context)
                     .ToLocalChecked();
-  object->SetAlignedPointerInInternalField(0, pattern, kPatternHandleTag);
+  object->SetAlignedPointerInInternalField(0, &pattern->header,
+                                           kPatternHandleTag);
   pattern->object.Reset(info.GetIsolate(), object);
   pattern->finalizer_data = std::make_unique<HandleFinalizerData>(
       HandleFinalizerData{engine, HandleFinalizerData::Kind::kPattern,
@@ -3295,9 +3276,8 @@ void ScriptEngine::CtxPutImageData(
 
 void ScriptEngine::GradientAddColorStop(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  auto* engine = From(info.GetIsolate());
-  auto* gradient = engine->LiveGradientHandle(Unwrap<GradientHandle>(
-      info.GetIsolate(), info.This(), kGradientHandleTag));
+  auto* gradient = UnwrapHandle<GradientHandle>(
+      info.GetIsolate(), info.This(), kGradientHandleTag);
   if (!gradient || info.Length() < 2) {
     ThrowTypeError(info.GetIsolate(),
                    "addColorStop(offset, color) requires offset and color");

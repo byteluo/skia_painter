@@ -130,6 +130,7 @@ add_library(canvas_engine_core STATIC
   src/canvas/ColorParser.cc
   src/canvas/FontParser.cc
   src/canvas/ImageAsset.cc
+  src/runtime/HandleRegistry.cc
   src/runtime/ScriptEngine.cc
   src/runtime/V8Platform.cc
 )
@@ -194,6 +195,12 @@ target_link_libraries(font_parser_test PRIVATE canvas_engine_core)
 add_executable(multi_engine_test tests/multi_engine_test.cc)
 target_link_libraries(multi_engine_test PRIVATE canvas_engine_core)
 
+add_executable(handle_registry_test tests/handle_registry_test.cc)
+target_include_directories(handle_registry_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime
+)
+target_link_libraries(handle_registry_test PRIVATE canvas_engine_core)
+
 function(canvas_engine_apply_v8_rpath target)
   if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
     set_target_properties(${target} PROPERTIES
@@ -207,6 +214,7 @@ canvas_engine_apply_v8_rpath(canvas_engine)
 canvas_engine_apply_v8_rpath(color_parser_test)
 canvas_engine_apply_v8_rpath(font_parser_test)
 canvas_engine_apply_v8_rpath(multi_engine_test)
+canvas_engine_apply_v8_rpath(handle_registry_test)
 
 if(APPLE)
   target_link_libraries(canvas_engine_core
@@ -280,6 +288,11 @@ if(BUILD_TESTING)
   add_test(
     NAME color_parser
     COMMAND color_parser_test
+  )
+
+  add_test(
+    NAME handle_registry
+    COMMAND handle_registry_test
   )
 
   add_test(
