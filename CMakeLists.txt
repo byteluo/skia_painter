@@ -133,6 +133,17 @@ add_library(canvas_engine_core STATIC
   src/runtime/EventLoop.cc
   src/runtime/HandleRegistry.cc
   src/runtime/ScriptEngine.cc
+  src/runtime/ScriptEngineImpl.cc
+  src/runtime/ScriptLoader.cc
+  src/runtime/bindings/CanvasBinding.cc
+  src/runtime/bindings/Context2DBinding.cc
+  src/runtime/bindings/Context2DImages.cc
+  src/runtime/bindings/Context2DText.cc
+  src/runtime/bindings/GlobalBindings.cc
+  src/runtime/bindings/GradientBinding.cc
+  src/runtime/bindings/ImageBinding.cc
+  src/runtime/bindings/Path2DBinding.cc
+  src/runtime/bindings/PatternBinding.cc
   src/runtime/V8Platform.cc
 )
 
@@ -322,6 +333,14 @@ if(BUILD_TESTING)
   )
   set_tests_properties(canvas_semantics PROPERTIES
     PASS_REGULAR_EXPRESSION "canvas_semantics ok"
+  )
+  add_test(
+    NAME path2d
+    COMMAND $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/path2d.js
+  )
+  set_tests_properties(path2d PROPERTIES
+    PASS_REGULAR_EXPRESSION "path2d ok"
   )
 
   add_test(

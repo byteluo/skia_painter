@@ -609,21 +609,48 @@ void Canvas2DContext::ClosePath() {
 }
 
 void Canvas2DContext::Clip(SkPathFillType fill_type) {
-  SkPath path = current_path_.snapshot();
+  Clip(current_path_.snapshot(), fill_type);
+}
+
+void Canvas2DContext::Clip(const SkPath& source_path,
+                           SkPathFillType fill_type) {
+  SkPath path = source_path;
   path.setFillType(fill_type);
   surface_->canvas()->clipPath(path, true);
 }
 
 void Canvas2DContext::Fill(SkPathFillType fill_type) {
+  Fill(current_path_.snapshot(), fill_type);
+}
+
+void Canvas2DContext::Fill(const SkPath& source_path,
+                           SkPathFillType fill_type) {
   RecordDrawOp();
-  SkPath path = current_path_.snapshot();
+  SkPath path = source_path;
   path.setFillType(fill_type);
   surface_->canvas()->drawPath(path, MakeFillPaint());
 }
 
 void Canvas2DContext::Stroke() {
+  Stroke(current_path_.snapshot());
+}
+
+void Canvas2DContext::Stroke(const SkPath& path) {
   RecordDrawOp();
-  surface_->canvas()->drawPath(current_path_.snapshot(), MakeStrokePaint());
+  surface_->canvas()->drawPath(path, MakeStrokePaint());
+}
+
+bool Canvas2DContext::IsPointInPath(float x, float y,
+                                    SkPathFillType fill_type) const {
+  return IsPointInPath(current_path_.snapshot(), x, y, fill_type);
+}
+
+bool Canvas2DContext::IsPointInPath(const SkPath& source_path, float x,
+                                    float y,
+                                    SkPathFillType fill_type) const {
+  SkPath path = source_path;
+  path.setFillType(fill_type);
+  return path.contains(x, y);
 }
 
 void Canvas2DContext::DrawImage(const sk_sp<SkImage>& image, float sx, float sy,
