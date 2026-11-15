@@ -570,7 +570,7 @@ int RunBatchCommand(int argc, char** argv) {
                              std::chrono::steady_clock::now() - start)
                              .count();
     AddElapsedMilliseconds(&response, elapsed);
-    std::cout << response << '\n';
+    std::cout << response << std::endl;
   }
   if (std::cin.bad()) {
     std::cerr << "failed while reading batch requests" << std::endl;
