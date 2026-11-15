@@ -15,13 +15,23 @@ namespace canvas_engine {
 
 class ScriptEngine {
  public:
+  struct Options {
+    float device_pixel_ratio = 3.0f;
+    bool expose_gc = false;
+  };
+
   ScriptEngine();
+  explicit ScriptEngine(Options options);
   ~ScriptEngine();
 
   ScriptEngine(const ScriptEngine&) = delete;
   ScriptEngine& operator=(const ScriptEngine&) = delete;
 
   bool RunScriptFile(const std::string& script_path);
+  bool RunScriptSource(const std::string& source,
+                       const std::string& resource_name);
+  const std::string& last_error() const { return last_error_; }
+  std::string last_result_json() const;
 
  private:
   struct CanvasHandle;
@@ -48,6 +58,9 @@ class ScriptEngine {
   v8::Local<v8::FunctionTemplate> GetPatternTemplate();
   bool ExecuteScriptFile(const std::filesystem::path& script_path,
                          v8::Local<v8::Value>* out_result);
+  bool ExecuteScriptSource(const std::string& source,
+                           const std::filesystem::path& resource_path,
+                           v8::Local<v8::Value>* out_result);
   bool DrainPendingTasks();
   std::uint32_t EnqueueTask(v8::Local<v8::Function> callback,
                             bool animation_frame,
@@ -73,6 +86,7 @@ class ScriptEngine {
 
   static void PrintCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void ConsoleLogCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
+  static void GcCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void LoadScriptCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void SetTimeoutCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void ClearTimeoutCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
@@ -244,9 +258,11 @@ class ScriptEngine {
   static void GradientAddColorStop(
       const v8::FunctionCallbackInfo<v8::Value>& info);
 
+  Options options_;
   std::unique_ptr<v8::ArrayBuffer::Allocator> allocator_;
   v8::Isolate* isolate_ = nullptr;
   v8::Global<v8::Context> context_;
+  v8::Global<v8::Value> last_result_;
   v8::Global<v8::FunctionTemplate> canvas_template_;
   v8::Global<v8::FunctionTemplate> context_2d_template_;
   v8::Global<v8::FunctionTemplate> gradient_template_;

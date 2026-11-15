@@ -484,7 +484,14 @@ struct ScriptEngine::GradientHandle {
   std::shared_ptr<GradientSource> source;
 };
 
-ScriptEngine::ScriptEngine() {
+ScriptEngine::ScriptEngine()
+    : ScriptEngine(Options{GetDefaultDevicePixelRatio(), false}) {}
+
+ScriptEngine::ScriptEngine(Options options) : options_(options) {
+  if (!(options_.device_pixel_ratio > 0.0f) ||
+      !std::isfinite(options_.device_pixel_ratio)) {
+    throw std::invalid_argument("device_pixel_ratio must be positive");
+  }
   V8Platform::Initialize();
 
   allocator_.reset(v8::ArrayBuffer::Allocator::NewDefaultAllocator());
@@ -505,6 +512,7 @@ ScriptEngine::~ScriptEngine() {
     v8::Isolate::Scope isolate_scope(isolate_);
     v8::HandleScope handle_scope(isolate_);
     context_.Reset();
+    last_result_.Reset();
     canvas_template_.Reset();
     context_2d_template_.Reset();
     gradient_template_.Reset();
@@ -531,32 +539,67 @@ bool ScriptEngine::RunScriptFile(const std::string& script_path) {
   v8::Local<v8::Value> result;
   const auto resolved = ResolveScriptPath(script_path);
   if (!ExecuteScriptFile(resolved, &result)) {
-    std::cerr << last_error_ << std::endl;
     return false;
   }
 
   return true;
 }
 
+bool ScriptEngine::RunScriptSource(const std::string& source,
+                                   const std::string& resource_name) {
+  v8::Isolate::Scope isolate_scope(isolate_);
+  v8::HandleScope handle_scope(isolate_);
+  auto context = context_.Get(isolate_);
+  v8::Context::Scope context_scope(context);
+
+  const std::string effective_name =
+      resource_name.empty() ? "<source>" : resource_name;
+  return ExecuteScriptSource(source, ResolveScriptPath(effective_name),
+                             nullptr);
+}
+
+std::string ScriptEngine::last_result_json() const {
+  if (last_result_.IsEmpty()) {
+    return "null";
+  }
+
+  v8::Isolate::Scope isolate_scope(isolate_);
+  v8::HandleScope handle_scope(isolate_);
+  auto context = context_.Get(isolate_);
+  v8::Context::Scope context_scope(context);
+  v8::Local<v8::String> json;
+  if (!v8::JSON::Stringify(context, last_result_.Get(isolate_))
+           .ToLocal(&json)) {
+    return "null";
+  }
+  return ToStdString(isolate_, json);
+}
+
 bool ScriptEngine::ExecuteScriptFile(const std::filesystem::path& script_path,
                                      v8::Local<v8::Value>* out_result) {
-  last_error_.clear();
-
   std::string source;
   if (!ReadFile(script_path.string(), &source)) {
     last_error_ = "failed to read script: " + script_path.string();
     return false;
   }
 
+  return ExecuteScriptSource(source, script_path, out_result);
+}
+
+bool ScriptEngine::ExecuteScriptSource(
+    const std::string& source,
+    const std::filesystem::path& resource_path,
+    v8::Local<v8::Value>* out_result) {
+  last_error_.clear();
   auto context = context_.Get(isolate_);
   v8::Context::Scope context_scope(context);
   v8::TryCatch try_catch(isolate_);
 
-  script_stack_.push_back(script_path);
+  script_stack_.push_back(resource_path);
   const auto pop_path = [this]() { script_stack_.pop_back(); };
 
   auto source_string = ToV8String(isolate_, source);
-  auto resource_name = ToV8String(isolate_, script_path.string());
+  auto resource_name = ToV8String(isolate_, resource_path.string());
   v8::ScriptOrigin origin(resource_name);
 
   v8::Local<v8::Script> script;
@@ -577,6 +620,13 @@ bool ScriptEngine::ExecuteScriptFile(const std::filesystem::path& script_path,
   if (!DrainPendingTasks()) {
     return false;
   }
+  last_result_.Reset(isolate_, result);
+  context->Global()
+      ->Set(context,
+            v8::String::NewFromUtf8Literal(isolate_,
+                                           "__canvasEngineLastScriptResult"),
+            result)
+      .Check();
   if (out_result != nullptr) {
     *out_result = result;
   }
@@ -846,6 +896,12 @@ v8::Local<v8::Context> ScriptEngine::GetContext() {
   global->Set(context, v8::String::NewFromUtf8Literal(isolate_, "console"),
               console)
       .Check();
+  if (options_.expose_gc) {
+    global
+        ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "gc"),
+              v8::Function::New(context, GcCallback).ToLocalChecked())
+        .Check();
+  }
 
   global
       ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "loadScript"),
@@ -1309,6 +1365,11 @@ void ScriptEngine::ConsoleLogCallback(
   PrintArgs(info);
 }
 
+void ScriptEngine::GcCallback(
+    const v8::FunctionCallbackInfo<v8::Value>& info) {
+  info.GetIsolate()->LowMemoryNotification();
+}
+
 void ScriptEngine::LoadScriptCallback(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   v8::Isolate* isolate = info.GetIsolate();
@@ -1439,7 +1500,18 @@ void ScriptEngine::CanvasConstructor(
     return;
   }
 
-  const float pixel_ratio = GetDefaultDevicePixelRatio();
+  auto* engine = From(isolate);
+  float pixel_ratio = engine->options_.device_pixel_ratio;
+  if (info.Length() > 2 && !info[2]->IsUndefined()) {
+    double requested_pixel_ratio = 0.0;
+    if (!ExtractDouble(info, 2, &requested_pixel_ratio) ||
+        !(requested_pixel_ratio > 0.0) ||
+        !std::isfinite(requested_pixel_ratio)) {
+      ThrowTypeError(isolate, "Canvas device pixel ratio must be positive");
+      return;
+    }
+    pixel_ratio = static_cast<float>(requested_pixel_ratio);
+  }
   const float exposed_pixel_ratio = GetExposedDevicePixelRatio();
   auto surface = CanvasSurface::CreateRaster(static_cast<int>(width),
                                              static_cast<int>(height),
@@ -1449,7 +1521,6 @@ void ScriptEngine::CanvasConstructor(
     return;
   }
 
-  auto* engine = From(isolate);
   const std::uint64_t handle_id = engine->NextHandleId();
   auto it = engine->canvases_
                 .emplace(handle_id,
