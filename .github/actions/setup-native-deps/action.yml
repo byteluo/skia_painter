@@ -14,8 +14,9 @@ runs:
         sudo apt-get install -y -qq \
           cmake ninja-build pkg-config g++ clang \
           libpng-dev libfreetype-dev libfontconfig1-dev zlib1g-dev \
-          libglib2.0-dev python3 default-jdk \
+          libglib2.0-dev python3 python3-pil python3-numpy default-jdk \
           libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev zstd
+        python3 -c 'import PIL, numpy'
 
     - name: Download pinned native dependency package
       id: download-native-deps
@@ -117,6 +118,7 @@ runs:
         if sudo cp -a "${package_root}/v8/include/." /usr/local/include/ &&
            sudo cp -a "${package_root}/v8/lib/." /usr/local/lib/ &&
            sudo cp -a "${package_root}/v8/share/v8/." /usr/local/share/v8/ &&
+           rm -rf third_party/skia/bazel-bin &&
            mkdir -p third_party/skia/bazel-bin &&
            cp -a "${package_root}/skia/bazel-bin/." third_party/skia/bazel-bin/; then
           sudo ldconfig

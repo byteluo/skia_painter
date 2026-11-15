@@ -43,8 +43,29 @@ execute_process(
   ERROR_VARIABLE system_error
 )
 if(NOT system_result EQUAL 0)
+  if(APPLE_BUILD)
+    string(FIND "${system_error}"
+      "system-font fallback is unsupported on macOS in this build"
+      unsupported_index)
+    if(unsupported_index EQUAL -1)
+      message(FATAL_ERROR
+        "--system-fonts did not warn that fallback is unsupported: "
+        "${system_error}")
+    endif()
+    string(FIND "${system_error}"
+      "font directory does not exist: ${MISSING_FONT_DIR}" error_index)
+    if(error_index EQUAL -1)
+      message(FATAL_ERROR
+        "--system-fonts did not reject the missing explicit font directory: "
+        "${system_error}")
+    endif()
+  else()
+    message(FATAL_ERROR
+      "--system-fonts did not allow a missing bundle: ${system_error}")
+  endif()
+elseif(APPLE_BUILD)
   message(FATAL_ERROR
-    "--system-fonts did not allow a missing bundle: ${system_error}")
+    "--system-fonts unexpectedly allowed a missing explicit font directory")
 endif()
 
 message("font_dir_resolution ok")
