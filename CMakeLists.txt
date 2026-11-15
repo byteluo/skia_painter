@@ -90,6 +90,16 @@ set(SKIA_LOCAL_SKCMS_HSW
 set(SKIA_LOCAL_SKCMS_SKX
     "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o")
 
+# Bazel emits position-independent objects as .pic.o on Linux but plain .o on macOS.
+foreach(skcms_var SKIA_LOCAL_SKCMS SKIA_LOCAL_SKCMS_BASELINE SKIA_LOCAL_SKCMS_HSW SKIA_LOCAL_SKCMS_SKX)
+  if(NOT EXISTS "${${skcms_var}}")
+    string(REGEX REPLACE "\\.pic\\.o$" ".o" skcms_plain_object "${${skcms_var}}")
+    if(EXISTS "${skcms_plain_object}")
+      set(${skcms_var} "${skcms_plain_object}")
+    endif()
+  endif()
+endforeach()
+
 set(SKIA_LOCAL_CPU_OPT_LIBRARIES)
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
   list(APPEND SKIA_LOCAL_CPU_OPT_LIBRARIES
@@ -145,6 +155,19 @@ if("${SKIA_LIBRARIES}" STREQUAL "" AND
     "${SKIA_LOCAL_SKCMS_BASELINE}")
   list(APPEND SKIA_LOCAL_LIBRARIES ${SKIA_LOCAL_CPU_OPT_LIBRARIES})
   set(SKIA_LIBRARIES "${SKIA_LOCAL_LIBRARIES}")
+endif()
+
+if("${SKIA_LIBRARIES}" STREQUAL "")
+  foreach(skia_artifact
+      "${SKIA_LOCAL_CORE}" "${SKIA_LOCAL_BASE}" "${SKIA_LOCAL_PNG_ENCODE}"
+      "${SKIA_LOCAL_PNG_ENCODE_BASE}" "${SKIA_LOCAL_ENCODER_COMMON}" "${SKIA_LOCAL_ICC_SUPPORT}"
+      "${SKIA_LOCAL_ANY_DECODER}" "${SKIA_LOCAL_FREETYPE_SUPPORT}" "${SKIA_LOCAL_TYPEFACE_PROXY}"
+      "${SKIA_LOCAL_CHAR_TO_GLYPHCACHE}" "${SKIA_LOCAL_FREETYPE}" "${SKIA_LOCAL_SKCMS}"
+      "${SKIA_LOCAL_SKCMS_BASELINE}" ${SKIA_LOCAL_CPU_OPT_LIBRARIES})
+    if(NOT EXISTS "${skia_artifact}")
+      message(STATUS "Missing local Skia artifact: ${skia_artifact}")
+    endif()
+  endforeach()
 endif()
 
 foreach(required_var

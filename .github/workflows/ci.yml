@@ -127,14 +127,14 @@ jobs:
           fi
           cache_hit=true
           for artifact in "${required_artifacts[@]}"; do
-            if [[ ! -f "third_party/skia/bazel-bin/${artifact}" ]]; then
+            if [[ ! -f "third_party/skia/bazel-bin/${artifact}" && ! -f "third_party/skia/bazel-bin/${artifact%.pic.o}.o" ]]; then
               cache_hit=false
               break
             fi
           done
           if [[ "${cache_hit}" == true ]]; then
             for artifact in "${cpu_artifacts[@]}"; do
-              if [[ ! -f "third_party/skia/bazel-bin/${artifact}" ]]; then
+              if [[ ! -f "third_party/skia/bazel-bin/${artifact}" && ! -f "third_party/skia/bazel-bin/${artifact%.pic.o}.o" ]]; then
                 cache_hit=false
                 break
               fi
