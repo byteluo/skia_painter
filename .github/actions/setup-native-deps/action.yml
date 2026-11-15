@@ -47,8 +47,8 @@ runs:
         SKIA_COMMIT="31521f8508c712615b3d35e8e4554ccb5bf568e1"
         mkdir -p third_party/skia
         for attempt in 1 2 3 4; do
-          if curl -fsSL --retry 3 "https://skia.googlesource.com/skia/+archive/${SKIA_COMMIT}.tar.gz" \
-              | tar xz -C third_party/skia; then
+          if curl -fsSL --retry 3 "https://github.com/google/skia/archive/${SKIA_COMMIT}.tar.gz" \
+              | tar xz --strip-components=1 -C third_party/skia; then
             test -f third_party/skia/MODULE.bazel && exit 0
           fi
           echo "attempt $attempt failed, retrying..."

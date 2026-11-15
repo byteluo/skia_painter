@@ -38,8 +38,7 @@ jobs:
           cmake --preset release \
             -DV8_INCLUDE_DIRS="/usr/local/include" \
             -DV8_LINK_DIRECTORIES="/usr/local/lib" \
-            -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase" \
-            -DV8_COMPILE_DEFINITIONS="V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH"
+            -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase"
 
       - name: Build release engine
         run: cmake --build --preset release
