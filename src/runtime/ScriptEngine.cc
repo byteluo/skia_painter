@@ -1,4 +1,5 @@
 #include "canvas_engine/runtime/ScriptEngine.h"
+#include "canvas_engine/runtime/V8Compat.h"
 
 #include <chrono>
 #include <algorithm>
@@ -1721,7 +1722,8 @@ void ScriptEngine::CanvasWidthGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* canvas =
-      Unwrap<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+      Unwrap<CanvasHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kCanvasHandleTag);
   if (!canvas) {
     return;
   }
@@ -1730,9 +1732,11 @@ void ScriptEngine::CanvasWidthGetter(
 
 void ScriptEngine::CanvasWidthSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
   auto* canvas =
-      Unwrap<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+      Unwrap<CanvasHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kCanvasHandleTag);
   if (!canvas) {
     return;
   }
@@ -1756,7 +1760,8 @@ void ScriptEngine::CanvasHeightGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* canvas =
-      Unwrap<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+      Unwrap<CanvasHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kCanvasHandleTag);
   if (!canvas) {
     return;
   }
@@ -1765,9 +1770,11 @@ void ScriptEngine::CanvasHeightGetter(
 
 void ScriptEngine::CanvasHeightSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
   auto* canvas =
-      Unwrap<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+      Unwrap<CanvasHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kCanvasHandleTag);
   if (!canvas) {
     return;
   }
@@ -1842,7 +1849,8 @@ void ScriptEngine::ImageWidthGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle || !handle->asset) {
     info.GetReturnValue().Set(0);
     return;
@@ -1854,7 +1862,8 @@ void ScriptEngine::ImageHeightGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle || !handle->asset) {
     info.GetReturnValue().Set(0);
     return;
@@ -1866,7 +1875,8 @@ void ScriptEngine::ImageSrcGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle) {
     return;
   }
@@ -1875,9 +1885,11 @@ void ScriptEngine::ImageSrcGetter(
 
 void ScriptEngine::ImageSrcSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle || !value->IsString()) {
     ThrowTypeError(info.GetIsolate(), "Image.src must be a string");
     return;
@@ -1949,7 +1961,8 @@ void ScriptEngine::ImageCompleteGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle) {
     return;
   }
@@ -1960,7 +1973,8 @@ void ScriptEngine::ImageOnloadGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle || handle->onload.IsEmpty()) {
     return;
   }
@@ -1969,9 +1983,11 @@ void ScriptEngine::ImageOnloadGetter(
 
 void ScriptEngine::ImageOnloadSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle) {
     return;
   }
@@ -1988,7 +2004,8 @@ void ScriptEngine::ImageOnerrorGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle || handle->onerror.IsEmpty()) {
     return;
   }
@@ -1997,9 +2014,11 @@ void ScriptEngine::ImageOnerrorGetter(
 
 void ScriptEngine::ImageOnerrorSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle) {
     return;
   }
@@ -2015,7 +2034,8 @@ void ScriptEngine::ImageOnerrorSetter(
 void ScriptEngine::FillStyleGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2026,8 +2046,10 @@ void ScriptEngine::FillStyleGetter(
 
 void ScriptEngine::FillStyleSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2061,7 +2083,8 @@ void ScriptEngine::FillStyleSetter(
 void ScriptEngine::StrokeStyleGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2072,8 +2095,10 @@ void ScriptEngine::StrokeStyleGetter(
 
 void ScriptEngine::StrokeStyleSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2107,7 +2132,8 @@ void ScriptEngine::StrokeStyleSetter(
 void ScriptEngine::LineWidthGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2117,8 +2143,10 @@ void ScriptEngine::LineWidthGetter(
 
 void ScriptEngine::LineWidthSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2134,7 +2162,8 @@ void ScriptEngine::LineWidthSetter(
 void ScriptEngine::FontGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2144,8 +2173,10 @@ void ScriptEngine::FontGetter(
 
 void ScriptEngine::FontSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2158,7 +2189,8 @@ void ScriptEngine::FontSetter(
 void ScriptEngine::TextAlignGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2169,8 +2201,10 @@ void ScriptEngine::TextAlignGetter(
 
 void ScriptEngine::TextAlignSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2184,7 +2218,8 @@ void ScriptEngine::TextAlignSetter(
 void ScriptEngine::TextBaselineGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2195,8 +2230,10 @@ void ScriptEngine::TextBaselineGetter(
 
 void ScriptEngine::TextBaselineSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2211,7 +2248,8 @@ void ScriptEngine::TextBaselineSetter(
 void ScriptEngine::GlobalAlphaGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2221,8 +2259,10 @@ void ScriptEngine::GlobalAlphaGetter(
 
 void ScriptEngine::GlobalAlphaSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2237,7 +2277,8 @@ void ScriptEngine::GlobalAlphaSetter(
 void ScriptEngine::GlobalCompositeOperationGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2248,8 +2289,10 @@ void ScriptEngine::GlobalCompositeOperationGetter(
 
 void ScriptEngine::GlobalCompositeOperationSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2265,7 +2308,8 @@ void ScriptEngine::GlobalCompositeOperationSetter(
 void ScriptEngine::LineCapGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2276,8 +2320,10 @@ void ScriptEngine::LineCapGetter(
 
 void ScriptEngine::LineCapSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2291,7 +2337,8 @@ void ScriptEngine::LineCapSetter(
 void ScriptEngine::LineJoinGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2302,8 +2349,10 @@ void ScriptEngine::LineJoinGetter(
 
 void ScriptEngine::LineJoinSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2317,7 +2366,8 @@ void ScriptEngine::LineJoinSetter(
 void ScriptEngine::MiterLimitGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2327,8 +2377,10 @@ void ScriptEngine::MiterLimitGetter(
 
 void ScriptEngine::MiterLimitSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2343,7 +2395,8 @@ void ScriptEngine::MiterLimitSetter(
 void ScriptEngine::ShadowBlurGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2353,8 +2406,10 @@ void ScriptEngine::ShadowBlurGetter(
 
 void ScriptEngine::ShadowBlurSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2369,7 +2424,8 @@ void ScriptEngine::ShadowBlurSetter(
 void ScriptEngine::ShadowColorGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2380,8 +2436,10 @@ void ScriptEngine::ShadowColorGetter(
 
 void ScriptEngine::ShadowColorSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2395,7 +2453,8 @@ void ScriptEngine::ShadowColorSetter(
 void ScriptEngine::ShadowOffsetXGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2405,8 +2464,10 @@ void ScriptEngine::ShadowOffsetXGetter(
 
 void ScriptEngine::ShadowOffsetXSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2422,7 +2483,8 @@ void ScriptEngine::ShadowOffsetXSetter(
 void ScriptEngine::ShadowOffsetYGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2432,8 +2494,10 @@ void ScriptEngine::ShadowOffsetYGetter(
 
 void ScriptEngine::ShadowOffsetYSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2449,7 +2513,8 @@ void ScriptEngine::ShadowOffsetYSetter(
 void ScriptEngine::LineDashOffsetGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2459,8 +2524,10 @@ void ScriptEngine::LineDashOffsetGetter(
 
 void ScriptEngine::LineDashOffsetSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
