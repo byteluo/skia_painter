@@ -134,6 +134,19 @@ add_library(canvas_engine_core STATIC
   src/runtime/V8Platform.cc
 )
 
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/js/echarts_host.js"
+     ECHARTS_HOST_SOURCE)
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/echarts_host.cc.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/echarts_host.cc"
+  @ONLY
+)
+target_sources(canvas_engine_core PRIVATE
+  src/echarts/EChartsRenderer.cc
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/echarts_host.cc"
+)
+
 target_include_directories(canvas_engine_core
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
