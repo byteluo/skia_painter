@@ -2,8 +2,8 @@
 
 #include <cstdint>
 #include <functional>
-#include <optional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -17,6 +17,7 @@
 #include "include/core/SkShader.h"
 
 #include "canvas_engine/canvas/CanvasSurface.h"
+#include "canvas_engine/canvas/FontManager.h"
 #include "canvas_engine/canvas/FontParser.h"
 
 namespace canvas_engine {
@@ -38,12 +39,23 @@ class Canvas2DContext {
 
   struct TextMetrics {
     float width = 0.0f;
+    float actual_bounding_box_left = 0.0f;
+    float actual_bounding_box_right = 0.0f;
     float actual_bounding_box_ascent = 0.0f;
     float actual_bounding_box_descent = 0.0f;
+    float font_bounding_box_ascent = 0.0f;
+    float font_bounding_box_descent = 0.0f;
+    float em_height_ascent = 0.0f;
+    float em_height_descent = 0.0f;
+    float baseline_offset = 0.0f;
+    float alphabetic_baseline = 0.0f;
+    float hanging_baseline = 0.0f;
+    float ideographic_baseline = 0.0f;
   };
 
   explicit Canvas2DContext(std::shared_ptr<CanvasSurface> surface,
-                           std::function<void()> draw_op_callback = {});
+                           std::function<void()> draw_op_callback = {},
+                           std::shared_ptr<FontManager> font_manager = nullptr);
 
   bool SetFillStyle(std::string_view css_color);
   bool SetStrokeStyle(std::string_view css_color);
@@ -115,8 +127,18 @@ class Canvas2DContext {
                float start_angle, float end_angle, bool counter_clockwise);
   void ClosePath();
   void Clip(SkPathFillType fill_type = SkPathFillType::kWinding);
+  void Clip(const SkPath& path,
+            SkPathFillType fill_type = SkPathFillType::kWinding);
   void Fill(SkPathFillType fill_type = SkPathFillType::kWinding);
+  void Fill(const SkPath& path,
+            SkPathFillType fill_type = SkPathFillType::kWinding);
   void Stroke();
+  void Stroke(const SkPath& path);
+  bool IsPointInPath(float x, float y,
+                     SkPathFillType fill_type = SkPathFillType::kWinding) const;
+  bool IsPointInPath(
+      const SkPath& path, float x, float y,
+      SkPathFillType fill_type = SkPathFillType::kWinding) const;
   void DrawImage(const sk_sp<SkImage>& image, float sx, float sy, float sw,
                  float sh, float dx, float dy, float dw, float dh);
   std::optional<ImageData> GetImageData(int x, int y, int width, int height) const;
@@ -126,6 +148,11 @@ class Canvas2DContext {
   void StrokeText(std::string_view text, float x, float y);
 
  private:
+  struct TextRun {
+    SkFont font;
+    std::vector<SkGlyphID> glyphs;
+  };
+
   struct State {
     SkColor fill_style = SK_ColorBLACK;
     SkColor stroke_style = SK_ColorBLACK;
@@ -159,6 +186,9 @@ class Canvas2DContext {
 
   void ApplyDeviceScale();
   SkFont MakeFont() const;
+  SkFont MakeFontForTypeface(sk_sp<SkTypeface> typeface) const;
+  std::vector<TextRun> MakeTextRuns(std::string_view text) const;
+  TextMetrics MeasureTextRuns(const std::vector<TextRun>& runs) const;
   SkPaint MakeFillPaint() const;
   SkPaint MakeStrokePaint() const;
   SkPaint MakeTextPaint(bool stroke) const;
@@ -168,6 +198,7 @@ class Canvas2DContext {
 
   std::shared_ptr<CanvasSurface> surface_;
   std::function<void()> draw_op_callback_;
+  std::shared_ptr<FontManager> font_manager_;
   State state_ = MakeDefaultState();
   std::vector<State> state_stack_;
   SkPathBuilder current_path_;

@@ -1,34 +1,10 @@
-loadScript("../node_modules/echarts/dist/echarts.js");
+const { renderChart } = loadScript("./lib/echarts_setup.js");
 
 const width = 960;
 const height = 540;
 
-function createCanvas(targetWidth, targetHeight) {
-  const canvas = new Canvas(targetWidth, targetHeight);
-  canvas.style = {};
-  return canvas;
-}
 
-echarts.setPlatformAPI({
-  createCanvas() {
-    return createCanvas(width, height);
-  },
-  loadImage(src, onload) {
-    const image = new Image();
-    if (typeof onload === "function") {
-      image.onload = onload;
-    }
-    image.src = src;
-    return image;
-  }
-});
 
-const canvas = createCanvas(width, height);
-const chart = echarts.init(canvas, null, {
-  renderer: "canvas",
-  width,
-  height
-});
 
 const data = [
   ["2026-01-01", 24, "Search"],
@@ -51,58 +27,60 @@ const data = [
   ["2026-01-06", 16, "Social"]
 ];
 
-chart.setOption({
-  animation: false,
-  backgroundColor: "#fffaf0",
-  title: {
-    text: "ThemeRiver Compatibility",
-    subtext: "Smoothed stacked streams",
-    left: "center",
-    top: 18,
-    textStyle: {
-      color: "#1f2937",
-      fontSize: 24,
-      fontWeight: "bold"
-    },
-    subtextStyle: {
-      color: "#6b7280"
-    }
-  },
-  tooltip: {
-    trigger: "axis"
-  },
-  singleAxis: {
-    type: "time",
-    top: 100,
-    bottom: 50,
-    axisLine: {
-      lineStyle: {
-        color: "#94a3b8"
-      }
-    },
-    axisLabel: {
-      color: "#334155"
-    }
-  },
-  series: [
-    {
-      type: "themeRiver",
-      emphasis: {
-        itemStyle: {
-          shadowBlur: 16,
-          shadowColor: "rgba(15, 23, 42, 0.18)"
+renderChart({
+  option: {
+      animation: false,
+      backgroundColor: "#fffaf0",
+      title: {
+        text: "ThemeRiver Compatibility",
+        subtext: "Smoothed stacked streams",
+        left: "center",
+        top: 18,
+        textStyle: {
+          color: "#1f2937",
+          fontSize: 24,
+          fontWeight: "bold"
+        },
+        subtextStyle: {
+          color: "#6b7280"
         }
       },
-      label: {
-        show: true,
-        color: "#0f172a"
+      tooltip: {
+        trigger: "axis"
       },
-      data,
-      color: ["#2563eb", "#14b8a6", "#f97316"]
-    }
-  ]
+      singleAxis: {
+        type: "time",
+        top: 100,
+        bottom: 50,
+        axisLine: {
+          lineStyle: {
+            color: "#94a3b8"
+          }
+        },
+        axisLabel: {
+          color: "#334155"
+        }
+      },
+      series: [
+        {
+          type: "themeRiver",
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 16,
+              shadowColor: "rgba(15, 23, 42, 0.18)"
+            }
+          },
+          label: {
+            show: true,
+            color: "#0f172a"
+          },
+          data,
+          color: ["#2563eb", "#14b8a6", "#f97316"]
+        }
+      ]
+  },
+  width,
+  height,
+  output: "../output/echarts_theme_river.png",
 });
-
-chart.getZr().refreshImmediately();
-canvas.saveToPng("../output/echarts_theme_river.png");
 console.log("wrote ../output/echarts_theme_river.png");

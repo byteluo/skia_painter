@@ -1,5 +1,9 @@
 name: Setup native dependencies
-description: Install Linux build dependencies and build cached Skia and V8
+description: Install Linux build dependencies and pinned or source-built Skia and V8
+outputs:
+  prebuilt:
+    description: Whether the pinned native dependency package was installed
+    value: ${{ steps.prebuilt.outputs.prebuilt }}
 runs:
   using: composite
   steps:
@@ -11,7 +15,29 @@ runs:
           cmake ninja-build pkg-config g++ clang \
           libpng-dev libfreetype-dev libfontconfig1-dev zlib1g-dev \
           libglib2.0-dev python3 default-jdk \
-          libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+          libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev zstd
+
+    - name: Download pinned native dependency package
+      id: download-native-deps
+      shell: bash
+      env:
+        NATIVE_DEPS_URL: https://github.com/byteluo/skia_painter/releases/download/native-deps-v8-15.0.39-skia-31521f8/native-deps-linux-x86_64-v8-15.0.39-skia-31521f8.tar.zst
+        NATIVE_DEPS_SHA256: 757174a5b24fc839be75574f3a9f6fedd5fd2a5e9785ccae82efc97c4d1f258b
+      run: |
+        set -euo pipefail
+        package_dir="${RUNNER_TEMP}/native-deps-package"
+        archive="${package_dir}/native-deps.tar.zst"
+        mkdir -p "${package_dir}"
+        if curl -fsSL --retry 3 "${NATIVE_DEPS_URL}" -o "${archive}" &&
+           printf '%s  %s\n' "${NATIVE_DEPS_SHA256}" "${archive}" | sha256sum -c - &&
+           tar --zstd -xf "${archive}" -C "${package_dir}" &&
+           [[ -f "${package_dir}/native-deps/manifest.json" ]]; then
+          echo "ready=true" >> "${GITHUB_OUTPUT}"
+        else
+          echo "::warning::Pinned native dependency package is unavailable or failed checksum verification; falling back to source builds."
+          rm -rf "${package_dir}/native-deps"
+          echo "ready=false" >> "${GITHUB_OUTPUT}"
+        fi
 
     - name: Install Bazelisk
       shell: bash
@@ -32,6 +58,12 @@ runs:
         key: skia-linux-${{ hashFiles('.gitmodules') }}
         restore-keys: skia-linux-
 
+    - name: Cache bundled fonts
+      uses: actions/cache@v4
+      with:
+        path: build/dev/font-cache
+        key: fonts-noto-2.015-2.014-cjk-sans2.004-${{ runner.os }}
+
     - name: Download Skia source
       shell: bash
       run: |
@@ -41,8 +73,8 @@ runs:
         SKIA_COMMIT="31521f8508c712615b3d35e8e4554ccb5bf568e1"
         mkdir -p third_party/skia
         for attempt in 1 2 3 4; do
-          if curl -fsSL --retry 3 "https://skia.googlesource.com/skia/+archive/${SKIA_COMMIT}.tar.gz" \
-              | tar xz -C third_party/skia; then
+          if curl -fsSL --retry 3 "https://github.com/google/skia/archive/${SKIA_COMMIT}.tar.gz" \
+              | tar xz --strip-components=1 -C third_party/skia; then
             test -f third_party/skia/MODULE.bazel && exit 0
           fi
           echo "attempt $attempt failed, retrying..."
@@ -50,35 +82,98 @@ runs:
         done
         exit 1
 
+    - name: Install prebuilt native dependencies
+      id: prebuilt
+      shell: bash
+      env:
+        PREBUILT_READY: ${{ steps.download-native-deps.outputs.ready }}
+      run: |
+        set -euo pipefail
+        if [[ "${PREBUILT_READY:-false}" != "true" || "$(uname -m)" != "x86_64" ]]; then
+          if [[ "${PREBUILT_READY:-false}" == "true" ]]; then
+            echo "::warning::The pinned package is x86_64-only; falling back to source builds."
+          fi
+          echo "prebuilt=false" >> "${GITHUB_OUTPUT}"
+          exit 0
+        fi
+
+        package_root="${RUNNER_TEMP}/native-deps-package/native-deps"
+        for required_file in \
+            "${package_root}/v8/include/v8.h" \
+            "${package_root}/v8/lib/libv8.so" \
+            "${package_root}/v8/lib/libv8_libplatform.so" \
+            "${package_root}/v8/lib/libv8_libbase.so" \
+            "${package_root}/v8/share/v8/icudtl.dat" \
+            "${package_root}/v8/share/v8/snapshot_blob.bin" \
+            "${package_root}/skia/bazel-bin/src/core/libcore.a"; do
+          if [[ ! -f "${required_file}" ]]; then
+            echo "::warning::Prebuilt package is incomplete (${required_file}); falling back to source builds."
+            echo "prebuilt=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+        done
+
+        sudo mkdir -p /usr/local/include /usr/local/lib /usr/local/share/v8
+        if sudo cp -a "${package_root}/v8/include/." /usr/local/include/ &&
+           sudo cp -a "${package_root}/v8/lib/." /usr/local/lib/ &&
+           sudo cp -a "${package_root}/v8/share/v8/." /usr/local/share/v8/ &&
+           mkdir -p third_party/skia/bazel-bin &&
+           cp -a "${package_root}/skia/bazel-bin/." third_party/skia/bazel-bin/; then
+          sudo ldconfig
+        else
+          echo "::warning::Could not install prebuilt native dependencies; falling back to source builds."
+          echo "prebuilt=false" >> "${GITHUB_OUTPUT}"
+          exit 0
+        fi
+
+        required_artifacts=(
+          src/core/libcore.a src/base/libbase.a
+          src/encode/libpng_encode.a src/encode/libpng_encode_base.a
+          src/encode/libencoder_common.a src/encode/libicc_support.a
+          src/codec/libany_decoder.a
+          src/ports/libfontmgr_fontconfig.a src/ports/libfontmgr_custom.a
+          src/ports/libfontmgr_directory_freetype.a
+          src/ports/libfreetype_support.a src/ports/libtypeface_proxy.a
+          src/utils/libchar_to_glyphcache.a
+          external/+cpp_modules+freetype/libfreetype.a
+          src/opts/libml3.a
+          modules/skcms/_objs/skcms_public/skcms.pic.o
+          modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o
+          modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o
+          modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o
+        )
+        for artifact in "${required_artifacts[@]}"; do
+          artifact_path="third_party/skia/bazel-bin/${artifact}"
+          if [[ ! -f "${artifact_path}" && "${artifact}" == *.pic.o &&
+                ! -f "${artifact_path%.pic.o}.o" ]]; then
+            echo "::warning::Prebuilt package is missing ${artifact}; falling back to source builds."
+            echo "prebuilt=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+        done
+        echo "prebuilt=true" >> "${GITHUB_OUTPUT}"
+
     - name: Build Skia (minimal target set)
+      if: steps.prebuilt.outputs.prebuilt != 'true'
       shell: bash
       run: |
         skia_targets=(
-          //:core
-          //src/base:base
-          //src/codec:any_decoder
-          //src/encode:encoder_common
-          //src/encode:icc_support
-          //src/encode:png_encode
-          //src/encode:png_encode_base
-          //src/ports:fontmgr_fontconfig
-          //src/ports:freetype_support
-          //src/ports:typeface_proxy
-          //src/utils:char_to_glyphcache
-          //modules/skcms:skcms
-          @freetype//:freetype
+          //:core //src/base:base //src/codec:any_decoder
+          //src/encode:encoder_common //src/encode:icc_support
+          //src/encode:png_encode //src/encode:png_encode_base
+          //src/ports:fontmgr_fontconfig //src/ports:fontmgr_custom
+          //src/ports:fontmgr_directory_freetype //src/ports:freetype_support
+          //src/ports:typeface_proxy //src/utils:char_to_glyphcache
+          //modules/skcms:skcms @freetype//:freetype
         )
         required_artifacts=(
-          src/core/libcore.a
-          src/base/libbase.a
-          src/encode/libpng_encode.a
-          src/encode/libpng_encode_base.a
-          src/encode/libencoder_common.a
-          src/encode/libicc_support.a
-          src/codec/libany_decoder.a
-          src/ports/libfontmgr_fontconfig.a
-          src/ports/libfreetype_support.a
-          src/ports/libtypeface_proxy.a
+          src/core/libcore.a src/base/libbase.a
+          src/encode/libpng_encode.a src/encode/libpng_encode_base.a
+          src/encode/libencoder_common.a src/encode/libicc_support.a
+          src/codec/libany_decoder.a src/ports/libfontmgr_fontconfig.a
+          src/ports/libfontmgr_custom.a
+          src/ports/libfontmgr_directory_freetype.a
+          src/ports/libfreetype_support.a src/ports/libtypeface_proxy.a
           src/utils/libchar_to_glyphcache.a
           external/+cpp_modules+freetype/libfreetype.a
           modules/skcms/_objs/skcms_public/skcms.pic.o
@@ -94,20 +189,13 @@ runs:
           )
         fi
         cache_hit=true
-        for artifact in "${required_artifacts[@]}"; do
-          if [[ ! -f "third_party/skia/bazel-bin/${artifact}" ]]; then
+        for artifact in "${required_artifacts[@]}" "${cpu_artifacts[@]}"; do
+          artifact_path="third_party/skia/bazel-bin/${artifact}"
+          if [[ ! -f "${artifact_path}" &&
+                ! -f "${artifact_path%.pic.o}.o" ]]; then
             cache_hit=false
-            break
           fi
         done
-        if [[ "${cache_hit}" == true ]]; then
-          for artifact in "${cpu_artifacts[@]}"; do
-            if [[ ! -f "third_party/skia/bazel-bin/${artifact}" ]]; then
-              cache_hit=false
-              break
-            fi
-          done
-        fi
         if [[ "${cache_hit}" == true ]]; then
           echo "Skia artifacts found in cache"; exit 0
         fi
@@ -120,15 +208,8 @@ runs:
           --cxxopt=-Wno-error=ignored-attributes \
           "${skia_targets[@]}"
 
-    - name: Cache V8 build
-      id: cache-v8
-      uses: actions/cache@v4
-      with:
-        path: build/v8-build
-        key: v8-linux-x64-15.0.39
-
     - name: Build V8 from source
-      if: steps.cache-v8.outputs.cache-hit != 'true'
+      if: steps.prebuilt.outputs.prebuilt != 'true'
       shell: bash
       run: |
         mkdir -p build/v8-build && cd build/v8-build
@@ -151,6 +232,7 @@ runs:
         ninja -C out.gn/x64.release v8 v8_libplatform
 
     - name: Install V8
+      if: steps.prebuilt.outputs.prebuilt != 'true'
       shell: bash
       run: |
         V8="build/v8-build/v8"

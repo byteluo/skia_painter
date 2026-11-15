@@ -1,0 +1,8 @@
+const canvas = new Canvas(320, 80);
+const context = canvas.getContext("2d");
+context.fillStyle = "#ffffff";
+context.fillRect(0, 0, canvas.width, canvas.height);
+context.fillStyle = "#000000";
+context.font = '20px "Noto Sans"';
+context.fillText("Sales 销售额 2026", 10, 40);
+canvas.saveToPng("@TEXT_CJK_VISUAL_OUTPUT@");

@@ -9,7 +9,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(V8_INCLUDE_DIRS "" CACHE STRING "Semicolon-separated V8 include directories")
 set(V8_LINK_DIRECTORIES "" CACHE STRING "Semicolon-separated V8 library directories")
 set(V8_LIBRARIES "" CACHE STRING "Semicolon-separated V8 libraries or targets")
-set(V8_COMPILE_DEFINITIONS "" CACHE STRING "Semicolon-separated V8 compile definitions")
+set(V8_COMPILE_DEFINITIONS "" CACHE STRING "Override V8 compile definitions")
+set(V8_GN_BUILD_DIR "" CACHE PATH "V8 GN output directory used to detect ABI definitions")
 
 set(SKIA_INCLUDE_DIRS "" CACHE STRING "Semicolon-separated Skia include directories")
 set(SKIA_LINK_DIRECTORIES "" CACHE STRING "Semicolon-separated Skia library directories")
@@ -24,10 +25,6 @@ if(APPLE)
   endif()
   if("${V8_LIBRARIES}" STREQUAL "" AND EXISTS "/opt/homebrew/opt/v8/lib/libv8.dylib")
     set(V8_LIBRARIES "v8;v8_libplatform;v8_libbase")
-  endif()
-  if("${V8_COMPILE_DEFINITIONS}" STREQUAL "" AND EXISTS "/opt/homebrew/opt/v8/include")
-    set(V8_COMPILE_DEFINITIONS
-      "V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH;V8_ENABLE_SANDBOX;CPPGC_POINTER_COMPRESSION")
   endif()
 elseif(UNIX)
   # Auto-detect V8 from environment variable or common Linux paths
@@ -52,129 +49,15 @@ elseif(UNIX)
       set(V8_LIBRARIES "v8;v8_libplatform;v8_libbase")
     endif()
   endif()
-  if("${V8_COMPILE_DEFINITIONS}" STREQUAL "" AND NOT "${V8_INCLUDE_DIRS}" STREQUAL "")
-    set(V8_COMPILE_DEFINITIONS
-      "V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH")
-  endif()
 endif()
 
-set(SKIA_LOCAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/skia")
-set(SKIA_LOCAL_CORE "${SKIA_LOCAL_ROOT}/bazel-bin/src/core/libcore.a")
-set(SKIA_LOCAL_BASE "${SKIA_LOCAL_ROOT}/bazel-bin/src/base/libbase.a")
-set(SKIA_LOCAL_PNG_ENCODE "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libpng_encode.a")
-set(SKIA_LOCAL_PNG_ENCODE_BASE "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libpng_encode_base.a")
-set(SKIA_LOCAL_ENCODER_COMMON "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libencoder_common.a")
-set(SKIA_LOCAL_ICC_SUPPORT "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libicc_support.a")
-set(SKIA_LOCAL_ANY_DECODER "${SKIA_LOCAL_ROOT}/bazel-bin/src/codec/libany_decoder.a")
-if(APPLE)
-  set(SKIA_LOCAL_PLATFORM_FONTMGR_AVAILABLE TRUE)
-else()
-  set(SKIA_LOCAL_PLATFORM_FONTMGR
-      "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_fontconfig.a")
-  if(EXISTS "${SKIA_LOCAL_PLATFORM_FONTMGR}")
-    set(SKIA_LOCAL_PLATFORM_FONTMGR_AVAILABLE TRUE)
-  else()
-    set(SKIA_LOCAL_PLATFORM_FONTMGR_AVAILABLE FALSE)
-  endif()
-endif()
-set(SKIA_LOCAL_FREETYPE_SUPPORT "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfreetype_support.a")
-set(SKIA_LOCAL_TYPEFACE_PROXY "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libtypeface_proxy.a")
-set(SKIA_LOCAL_CHAR_TO_GLYPHCACHE "${SKIA_LOCAL_ROOT}/bazel-bin/src/utils/libchar_to_glyphcache.a")
-set(SKIA_LOCAL_FREETYPE "${SKIA_LOCAL_ROOT}/bazel-bin/external/+cpp_modules+freetype/libfreetype.a")
-set(SKIA_LOCAL_OPTS_ML3 "${SKIA_LOCAL_ROOT}/bazel-bin/src/opts/libml3.a")
-set(SKIA_LOCAL_SKCMS "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.pic.o")
-set(SKIA_LOCAL_SKCMS_BASELINE
-    "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o")
-set(SKIA_LOCAL_SKCMS_HSW
-    "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o")
-set(SKIA_LOCAL_SKCMS_SKX
-    "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o")
-
-# Bazel emits position-independent objects as .pic.o on Linux but plain .o on macOS.
-foreach(skcms_var SKIA_LOCAL_SKCMS SKIA_LOCAL_SKCMS_BASELINE SKIA_LOCAL_SKCMS_HSW SKIA_LOCAL_SKCMS_SKX)
-  if(NOT EXISTS "${${skcms_var}}")
-    string(REGEX REPLACE "\\.pic\\.o$" ".o" skcms_plain_object "${${skcms_var}}")
-    if(EXISTS "${skcms_plain_object}")
-      set(${skcms_var} "${skcms_plain_object}")
-    endif()
-  endif()
-endforeach()
-
-set(SKIA_LOCAL_CPU_OPT_LIBRARIES)
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
-  list(APPEND SKIA_LOCAL_CPU_OPT_LIBRARIES
-    "${SKIA_LOCAL_OPTS_ML3}"
-    "${SKIA_LOCAL_SKCMS_HSW}"
-    "${SKIA_LOCAL_SKCMS_SKX}")
-endif()
-
-set(SKIA_LOCAL_CPU_OPT_AVAILABLE TRUE)
-foreach(cpu_opt_library IN LISTS SKIA_LOCAL_CPU_OPT_LIBRARIES)
-  if(NOT EXISTS "${cpu_opt_library}")
-    set(SKIA_LOCAL_CPU_OPT_AVAILABLE FALSE)
-  endif()
-endforeach()
-
-if("${SKIA_INCLUDE_DIRS}" STREQUAL "" AND EXISTS "${SKIA_LOCAL_ROOT}/include/core/SkCanvas.h")
-  set(SKIA_INCLUDE_DIRS "${SKIA_LOCAL_ROOT}")
-endif()
-
-if("${SKIA_LIBRARIES}" STREQUAL "" AND
-   EXISTS "${SKIA_LOCAL_CORE}" AND
-   EXISTS "${SKIA_LOCAL_BASE}" AND
-   EXISTS "${SKIA_LOCAL_PNG_ENCODE}" AND
-   EXISTS "${SKIA_LOCAL_PNG_ENCODE_BASE}" AND
-   EXISTS "${SKIA_LOCAL_ENCODER_COMMON}" AND
-   EXISTS "${SKIA_LOCAL_ICC_SUPPORT}" AND
-   EXISTS "${SKIA_LOCAL_ANY_DECODER}" AND
-   SKIA_LOCAL_PLATFORM_FONTMGR_AVAILABLE AND
-   EXISTS "${SKIA_LOCAL_FREETYPE_SUPPORT}" AND
-   EXISTS "${SKIA_LOCAL_TYPEFACE_PROXY}" AND
-   EXISTS "${SKIA_LOCAL_CHAR_TO_GLYPHCACHE}" AND
-   EXISTS "${SKIA_LOCAL_FREETYPE}" AND
-   EXISTS "${SKIA_LOCAL_SKCMS}" AND
-   EXISTS "${SKIA_LOCAL_SKCMS_BASELINE}" AND
-   SKIA_LOCAL_CPU_OPT_AVAILABLE)
-  set(SKIA_LOCAL_LIBRARIES
-    "${SKIA_LOCAL_PNG_ENCODE}"
-    "${SKIA_LOCAL_PNG_ENCODE_BASE}"
-    "${SKIA_LOCAL_ENCODER_COMMON}"
-    "${SKIA_LOCAL_ANY_DECODER}"
-    "${SKIA_LOCAL_ICC_SUPPORT}")
-  if(NOT APPLE)
-    list(APPEND SKIA_LOCAL_LIBRARIES "${SKIA_LOCAL_PLATFORM_FONTMGR}")
-  endif()
-  list(APPEND SKIA_LOCAL_LIBRARIES
-    "${SKIA_LOCAL_TYPEFACE_PROXY}"
-    "${SKIA_LOCAL_FREETYPE_SUPPORT}"
-    "${SKIA_LOCAL_CHAR_TO_GLYPHCACHE}"
-    "${SKIA_LOCAL_FREETYPE}"
-    "${SKIA_LOCAL_CORE}"
-    "${SKIA_LOCAL_BASE}"
-    "${SKIA_LOCAL_SKCMS}"
-    "${SKIA_LOCAL_SKCMS_BASELINE}")
-  list(APPEND SKIA_LOCAL_LIBRARIES ${SKIA_LOCAL_CPU_OPT_LIBRARIES})
-  set(SKIA_LIBRARIES "${SKIA_LOCAL_LIBRARIES}")
-endif()
-
-if("${SKIA_LIBRARIES}" STREQUAL "")
-  foreach(skia_artifact
-      "${SKIA_LOCAL_CORE}" "${SKIA_LOCAL_BASE}" "${SKIA_LOCAL_PNG_ENCODE}"
-      "${SKIA_LOCAL_PNG_ENCODE_BASE}" "${SKIA_LOCAL_ENCODER_COMMON}" "${SKIA_LOCAL_ICC_SUPPORT}"
-      "${SKIA_LOCAL_ANY_DECODER}" "${SKIA_LOCAL_FREETYPE_SUPPORT}" "${SKIA_LOCAL_TYPEFACE_PROXY}"
-      "${SKIA_LOCAL_CHAR_TO_GLYPHCACHE}" "${SKIA_LOCAL_FREETYPE}" "${SKIA_LOCAL_SKCMS}"
-      "${SKIA_LOCAL_SKCMS_BASELINE}" ${SKIA_LOCAL_CPU_OPT_LIBRARIES})
-    if(NOT EXISTS "${skia_artifact}")
-      message(STATUS "Missing local Skia artifact: ${skia_artifact}")
-    endif()
-  endforeach()
-endif()
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+find_package(Skia REQUIRED)
 
 foreach(required_var
     V8_INCLUDE_DIRS
     V8_LIBRARIES
-    SKIA_INCLUDE_DIRS
-    SKIA_LIBRARIES)
+    SKIA_INCLUDE_DIRS)
   if("${${required_var}}" STREQUAL "")
     message(FATAL_ERROR
       "${required_var} is empty. Configure this project with explicit V8/Skia include paths and libraries.")
@@ -185,106 +68,153 @@ find_package(Threads REQUIRED)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 find_package(PNG REQUIRED)
 find_package(ZLIB REQUIRED)
+include(cmake/DetectV8.cmake)
 include(CTest)
 include(GNUInstallDirs)
+include(cmake/fonts.cmake)
 
-add_executable(canvas_engine
-  src/main.cc
+add_library(canvas_engine_core STATIC
   src/canvas/CanvasSurface.cc
   src/canvas/Canvas2DContext.cc
+  src/canvas/FontManager.cc
   src/canvas/ColorParser.cc
   src/canvas/FontParser.cc
   src/canvas/ImageAsset.cc
+  src/runtime/EventLoop.cc
+  src/runtime/HandleRegistry.cc
   src/runtime/ScriptEngine.cc
+  src/runtime/ScriptEngineImpl.cc
+  src/runtime/ScriptLoader.cc
+  src/runtime/bindings/CanvasBinding.cc
+  src/runtime/bindings/Context2DBinding.cc
+  src/runtime/bindings/Context2DImages.cc
+  src/runtime/bindings/Context2DText.cc
+  src/runtime/bindings/GlobalBindings.cc
+  src/runtime/bindings/GradientBinding.cc
+  src/runtime/bindings/ImageBinding.cc
+  src/runtime/bindings/Path2DBinding.cc
+  src/runtime/bindings/PatternBinding.cc
+  src/runtime/V8Platform.cc
 )
 
-add_executable(color_parser_test
-  tests/color_parser_test.cc
-  src/canvas/ColorParser.cc
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/js/echarts_host.js"
+     ECHARTS_HOST_SOURCE)
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/echarts_host.cc.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/echarts_host.cc"
+  @ONLY
+)
+target_sources(canvas_engine_core PRIVATE
+  src/echarts/EChartsRenderer.cc
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/echarts_host.cc"
 )
 
-target_include_directories(color_parser_test
-  PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${SKIA_INCLUDE_DIRS}
-)
-
-target_link_libraries(color_parser_test
-  PRIVATE
-    ${SKIA_LIBRARIES}
-    Threads::Threads
-    PNG::PNG
-    ZLIB::ZLIB
-)
-if(UNIX AND NOT APPLE)
-  target_link_libraries(color_parser_test PRIVATE fontconfig)
-endif()
-
-add_executable(font_parser_test
-  tests/font_parser_test.cc
-  src/canvas/FontParser.cc
-)
-
-target_include_directories(font_parser_test
-  PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${SKIA_INCLUDE_DIRS}
-)
-
-target_include_directories(canvas_engine
-  PRIVATE
+target_include_directories(canvas_engine_core
+  PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${V8_INCLUDE_DIRS}
     ${SKIA_INCLUDE_DIRS}
 )
 
 if(NOT "${V8_COMPILE_DEFINITIONS}" STREQUAL "")
-  target_compile_definitions(canvas_engine PRIVATE ${V8_COMPILE_DEFINITIONS})
+  target_compile_definitions(canvas_engine_core
+    PUBLIC ${V8_COMPILE_DEFINITIONS})
 endif()
 
 if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
-  target_link_directories(canvas_engine PRIVATE ${V8_LINK_DIRECTORIES})
+  target_link_directories(canvas_engine_core
+    PUBLIC ${V8_LINK_DIRECTORIES})
 endif()
 
 if(NOT "${SKIA_LINK_DIRECTORIES}" STREQUAL "")
-  target_link_directories(canvas_engine PRIVATE ${SKIA_LINK_DIRECTORIES})
+  target_link_directories(canvas_engine_core
+    PUBLIC ${SKIA_LINK_DIRECTORIES})
 endif()
 
-target_link_libraries(canvas_engine
-  PRIVATE
+target_compile_definitions(canvas_engine_core PRIVATE
+  "CANVAS_ENGINE_DEFAULT_FONT_DIR=\"${CANVAS_ENGINE_FONTS_DIR}\"")
+if(CANVAS_ENGINE_BUNDLED_FONTS)
+  target_compile_definitions(canvas_engine_core PRIVATE
+    CANVAS_ENGINE_BUNDLED_FONTS=1)
+else()
+  target_compile_definitions(canvas_engine_core PRIVATE
+    CANVAS_ENGINE_BUNDLED_FONTS=0)
+endif()
+
+target_link_libraries(canvas_engine_core
+  PUBLIC
     ${V8_LIBRARIES}
-    ${SKIA_LIBRARIES}
+    Skia::Skia
     Threads::Threads
+  PRIVATE
     ZLIB::ZLIB
+    PNG::PNG
 )
 if(UNIX AND NOT APPLE)
-  target_link_libraries(canvas_engine PRIVATE fontconfig)
+  target_link_libraries(canvas_engine_core PRIVATE fontconfig)
 endif()
 
-if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
-  set_target_properties(canvas_engine PROPERTIES
-    BUILD_RPATH "${V8_LINK_DIRECTORIES}"
-    INSTALL_RPATH "${V8_LINK_DIRECTORIES}"
-  )
+add_executable(canvas_engine src/main.cc src/cli/Cli.cc)
+target_link_libraries(canvas_engine PRIVATE canvas_engine_core)
+if(CANVAS_ENGINE_BUNDLED_FONTS)
+  target_compile_definitions(canvas_engine PRIVATE
+    CANVAS_ENGINE_BUNDLED_FONTS=1)
+else()
+  target_compile_definitions(canvas_engine PRIVATE
+    CANVAS_ENGINE_BUNDLED_FONTS=0)
 endif()
+
+add_executable(color_parser_test tests/color_parser_test.cc)
+target_link_libraries(color_parser_test PRIVATE canvas_engine_core)
+
+add_executable(font_parser_test tests/font_parser_test.cc)
+target_link_libraries(font_parser_test PRIVATE canvas_engine_core)
+
+add_executable(multi_engine_test tests/multi_engine_test.cc)
+target_link_libraries(multi_engine_test PRIVATE canvas_engine_core)
+
+add_executable(handle_registry_test tests/handle_registry_test.cc)
+target_include_directories(handle_registry_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime
+)
+target_link_libraries(handle_registry_test PRIVATE canvas_engine_core)
+
+function(canvas_engine_apply_v8_rpath target)
+  if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
+    set_target_properties(${target} PROPERTIES
+      BUILD_RPATH "${V8_LINK_DIRECTORIES}"
+      INSTALL_RPATH "${V8_LINK_DIRECTORIES}"
+    )
+  endif()
+endfunction()
+
+canvas_engine_apply_v8_rpath(canvas_engine)
+canvas_engine_apply_v8_rpath(color_parser_test)
+canvas_engine_apply_v8_rpath(font_parser_test)
+canvas_engine_apply_v8_rpath(multi_engine_test)
+canvas_engine_apply_v8_rpath(handle_registry_test)
 
 if(APPLE)
-  target_link_libraries(canvas_engine
+  target_link_libraries(canvas_engine_core
     PRIVATE
       "-framework CoreFoundation"
       "-framework CoreGraphics"
       "-framework ImageIO"
-      "-framework CoreText"
       "-framework CoreServices"
   )
 elseif(UNIX)
-  target_include_directories(canvas_engine PRIVATE ${PNG_INCLUDE_DIRS})
-  target_link_libraries(canvas_engine PRIVATE dl m PNG::PNG)
+  target_include_directories(canvas_engine_core PRIVATE ${PNG_INCLUDE_DIRS})
+  target_link_libraries(canvas_engine_core PRIVATE dl m)
 endif()
 
 install(TARGETS canvas_engine
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+if(CANVAS_ENGINE_BUNDLED_FONTS)
+  install(DIRECTORY "${CANVAS_ENGINE_FONTS_DIR}/"
+    DESTINATION "${CMAKE_INSTALL_BINDIR}/fonts")
+endif()
 
 if(BUILD_TESTING)
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test_output")
@@ -304,6 +234,13 @@ if(BUILD_TESTING)
     ${CMAKE_CURRENT_BINARY_DIR}/text_rotate_regression.js
     @ONLY
   )
+  set(TEXT_CJK_VISUAL_OUTPUT
+      "${CMAKE_CURRENT_BINARY_DIR}/test_output/text_cjk_visual.png")
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/text_cjk_visual.js.in
+    ${CMAKE_CURRENT_BINARY_DIR}/text_cjk_visual.js
+    @ONLY
+  )
 
   add_test(
     NAME smoke
@@ -311,6 +248,20 @@ if(BUILD_TESTING)
   )
   set_tests_properties(smoke PROPERTIES
     PASS_REGULAR_EXPRESSION "smoke"
+  )
+
+  set(V8_ICU_DATA_MISSING_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/test_output/missing-v8-data")
+  add_test(
+    NAME v8_data_dir_fallback
+    COMMAND ${CMAKE_COMMAND} -E env
+            "V8_ICU_DATA_DIR=${V8_ICU_DATA_MISSING_DIR}"
+            $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/smoke.js
+  )
+  set_tests_properties(v8_data_dir_fallback PROPERTIES
+    PASS_REGULAR_EXPRESSION
+      "V8_ICU_DATA_DIR='${V8_ICU_DATA_MISSING_DIR}'.*icudtl.dat"
   )
 
   add_test(
@@ -329,6 +280,16 @@ if(BUILD_TESTING)
   )
 
   add_test(
+    NAME handle_registry
+    COMMAND handle_registry_test
+  )
+
+  add_test(
+    NAME multi_engine
+    COMMAND multi_engine_test
+  )
+
+  add_test(
     NAME font_parser
     COMMAND font_parser_test
   )
@@ -342,6 +303,39 @@ if(BUILD_TESTING)
     PASS_REGULAR_EXPRESSION "font_weight_regression ok"
   )
 
+  if(CANVAS_ENGINE_BUNDLED_FONTS)
+    add_test(
+      NAME text_metrics
+      COMMAND $<TARGET_FILE:canvas_engine>
+              ${CMAKE_CURRENT_SOURCE_DIR}/tests/text_metrics.js
+    )
+    set_tests_properties(text_metrics PROPERTIES
+      PASS_REGULAR_EXPRESSION "text_metrics ok"
+    )
+
+    add_test(
+      NAME text_cjk
+      COMMAND $<TARGET_FILE:canvas_engine>
+              ${CMAKE_CURRENT_SOURCE_DIR}/tests/text_cjk.js
+    )
+    set_tests_properties(text_cjk PROPERTIES
+      PASS_REGULAR_EXPRESSION "text_cjk ok"
+    )
+
+    add_test(
+      NAME font_dir_resolution
+      COMMAND ${CMAKE_COMMAND}
+              -DENGINE=$<TARGET_FILE:canvas_engine>
+              -DSOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+              -DTEST_OUTPUT=${CMAKE_CURRENT_BINARY_DIR}/test_output
+              -DVALID_FONT_DIR=${CANVAS_ENGINE_FONTS_DIR}
+              -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/font_dir_resolution.cmake
+    )
+    set_tests_properties(font_dir_resolution PROPERTIES
+      PASS_REGULAR_EXPRESSION "font_dir_resolution ok"
+    )
+  endif()
+
   add_test(
     NAME canvas_semantics
     COMMAND $<TARGET_FILE:canvas_engine>
@@ -349,6 +343,14 @@ if(BUILD_TESTING)
   )
   set_tests_properties(canvas_semantics PROPERTIES
     PASS_REGULAR_EXPRESSION "canvas_semantics ok"
+  )
+  add_test(
+    NAME path2d
+    COMMAND $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/path2d.js
+  )
+  set_tests_properties(path2d PROPERTIES
+    PASS_REGULAR_EXPRESSION "path2d ok"
   )
 
   add_test(
@@ -380,6 +382,42 @@ if(BUILD_TESTING)
   )
 
   add_test(
+    NAME deterministic_render
+    COMMAND ${CMAKE_COMMAND}
+            -DENGINE=$<TARGET_FILE:canvas_engine>
+            -DSOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DTEST_OUTPUT=${CMAKE_CURRENT_BINARY_DIR}/test_output
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/deterministic_render.cmake
+  )
+  set_tests_properties(deterministic_render PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    RUN_SERIAL TRUE
+    PASS_REGULAR_EXPRESSION "deterministic_render ok"
+  )
+
+  add_test(
+    NAME clock_epoch
+    COMMAND ${CMAKE_COMMAND} -E env
+            CANVAS_ENGINE_EPOCH_MS=1700000000000
+            $<TARGET_FILE:canvas_engine>
+            run ${CMAKE_CURRENT_SOURCE_DIR}/tests/clock_epoch.js
+  )
+  set_tests_properties(clock_epoch PROPERTIES
+    PASS_REGULAR_EXPRESSION "clock_epoch ok"
+  )
+
+  add_test(
+    NAME realtime_clock
+    COMMAND $<TARGET_FILE:canvas_engine>
+            run --realtime-clock --epoch-ms 1700000000000
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/realtime_clock.js
+  )
+  set_tests_properties(realtime_clock PROPERTIES
+    PASS_REGULAR_EXPRESSION "realtime_clock ok"
+    TIMEOUT 5
+  )
+
+  add_test(
     NAME render_regression_render
     COMMAND $<TARGET_FILE:canvas_engine>
             ${CMAKE_CURRENT_BINARY_DIR}/render_regression.js
@@ -392,8 +430,15 @@ if(BUILD_TESTING)
   add_test(
     NAME render_regression_verify
     COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_render_regression.py
-            ${CMAKE_CURRENT_BINARY_DIR}/test_output/render_regression.png
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/golden_test.py
+            --actual
+            "${CMAKE_CURRENT_BINARY_DIR}/test_output/render_regression.png"
+            --golden
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/render_regression.png"
+            --config
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/tolerances.json"
+            --diff
+            "${CMAKE_CURRENT_BINARY_DIR}/golden-diffs/render_regression.png"
   )
   set_tests_properties(render_regression_verify PROPERTIES
     DEPENDS render_regression_render
@@ -413,8 +458,15 @@ if(BUILD_TESTING)
   add_test(
     NAME text_rotate_regression_verify
     COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_text_rotate_regression.py
-            ${CMAKE_CURRENT_BINARY_DIR}/test_output/text_rotate_regression.png
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/golden_test.py
+            --actual
+            "${CMAKE_CURRENT_BINARY_DIR}/test_output/text_rotate_regression.png"
+            --golden
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/text_rotate_regression.png"
+            --config
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/tolerances.json"
+            --diff
+            "${CMAKE_CURRENT_BINARY_DIR}/golden-diffs/text_rotate_regression.png"
   )
   set_tests_properties(text_rotate_regression_verify PROPERTIES
     DEPENDS text_rotate_regression_render
@@ -432,6 +484,52 @@ if(BUILD_TESTING)
   set(ECHARTS_DIST_PATH
       "${CMAKE_CURRENT_SOURCE_DIR}/node_modules/echarts/dist/echarts.js")
   if(EXISTS "${ECHARTS_DIST_PATH}")
+    file(GLOB ECHARTS_EXAMPLE_SCRIPTS CONFIGURE_DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/examples/echarts_*.js")
+    foreach(example_script IN LISTS ECHARTS_EXAMPLE_SCRIPTS)
+      get_filename_component(example_name "${example_script}" NAME_WE)
+      add_test(
+        NAME "golden_${example_name}"
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/golden_test.py
+                --engine "$<TARGET_FILE:canvas_engine>"
+                --script "${example_script}"
+                --run-dir
+                "${CMAKE_CURRENT_BINARY_DIR}/golden-runs/${example_name}"
+                --output-name "${example_name}.png"
+                --golden
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/${example_name}.png"
+                --config
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/tolerances.json"
+                --diff
+                "${CMAKE_CURRENT_BINARY_DIR}/golden-diffs/${example_name}.png"
+      )
+    endforeach()
+
+    add_test(
+      NAME cli_render
+      COMMAND ${CMAKE_COMMAND}
+              -DENGINE=$<TARGET_FILE:canvas_engine>
+              -DSOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+              -DTEST_OUTPUT=${CMAKE_CURRENT_BINARY_DIR}/test_output
+              -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cli_render.cmake
+    )
+    set_tests_properties(cli_render PROPERTIES
+      PASS_REGULAR_EXPRESSION "cli_render ok"
+    )
+
+    add_test(
+      NAME cli_batch
+      COMMAND ${CMAKE_COMMAND}
+              -DENGINE=$<TARGET_FILE:canvas_engine>
+              -DSOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+              -DTEST_OUTPUT=${CMAKE_CURRENT_BINARY_DIR}/test_output
+              -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cli_batch.cmake
+    )
+    set_tests_properties(cli_batch PROPERTIES
+      PASS_REGULAR_EXPRESSION "cli_batch ok"
+    )
+
     set(ECHARTS_SUNBURST_REGRESSION_OUTPUT_PNG
         "${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_sunburst_regression.png")
     set(ECHARTS_TIMELINE_REGRESSION_OUTPUT_PNG
@@ -463,19 +561,31 @@ if(BUILD_TESTING)
         "wrote ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_image_scatter_regression\\.png"
     )
 
-    add_test(
-      NAME echarts_regression_verify
-      COMMAND ${Python3_EXECUTABLE}
-              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_echarts_regression.py
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_sunburst_regression.png
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_timeline_regression.png
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_custom_series_regression.png
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_pictorial_bar_regression.png
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_gauge_regression.png
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_image_scatter_regression.png
-    )
-    set_tests_properties(echarts_regression_verify PROPERTIES
-      DEPENDS echarts_regression_render
-    )
+    foreach(regression_name IN ITEMS
+        sunburst
+        timeline
+        custom_series
+        pictorial_bar
+        gauge
+        image_scatter)
+      set(regression_image "echarts_${regression_name}_regression.png")
+      add_test(
+        NAME "golden_${regression_image}"
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/golden_test.py
+                --actual
+                "${CMAKE_CURRENT_BINARY_DIR}/test_output/${regression_image}"
+                --golden
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/${regression_image}"
+                --config
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/tolerances.json"
+                --diff
+                "${CMAKE_CURRENT_BINARY_DIR}/golden-diffs/${regression_image}"
+      )
+      set_tests_properties("golden_${regression_image}" PROPERTIES
+        DEPENDS echarts_regression_render
+      )
+    endforeach()
+
   endif()
 endif()
