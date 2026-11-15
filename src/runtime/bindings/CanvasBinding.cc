@@ -256,7 +256,8 @@ void ScriptEngineImpl::CanvasWidthGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* canvas =
-      UnwrapHandle<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+      UnwrapHandle<CanvasHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kCanvasHandleTag);
   if (!canvas) {
     return;
   }
@@ -265,9 +266,11 @@ void ScriptEngineImpl::CanvasWidthGetter(
 
 void ScriptEngineImpl::CanvasWidthSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
   auto* canvas =
-      UnwrapHandle<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+      UnwrapHandle<CanvasHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kCanvasHandleTag);
   if (!canvas) {
     return;
   }
@@ -291,7 +294,8 @@ void ScriptEngineImpl::CanvasHeightGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* canvas =
-      UnwrapHandle<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+      UnwrapHandle<CanvasHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kCanvasHandleTag);
   if (!canvas) {
     return;
   }
@@ -300,9 +304,11 @@ void ScriptEngineImpl::CanvasHeightGetter(
 
 void ScriptEngineImpl::CanvasHeightSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
   auto* canvas =
-      UnwrapHandle<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+      UnwrapHandle<CanvasHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kCanvasHandleTag);
   if (!canvas) {
     return;
   }

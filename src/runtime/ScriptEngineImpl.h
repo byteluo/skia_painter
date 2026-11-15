@@ -12,6 +12,8 @@
 
 #include "v8.h"
 
+#include "canvas_engine/runtime/V8Compat.h"
+
 namespace canvas_engine {
 
 class HandleRegistry;
@@ -48,7 +50,7 @@ class ScriptEngineImpl {
   template <auto Getter, auto Setter>
   static void AccessorSetter(
       v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-      const v8::PropertyCallbackInfo<void>& info);
+      const V8Compat::SetterInfo& info);
 
  private:
   struct CanvasHandle;
@@ -119,12 +121,12 @@ class ScriptEngineImpl {
                                 const v8::PropertyCallbackInfo<v8::Value>& info);
   static void CanvasWidthSetter(v8::Local<v8::Name> property,
                                 v8::Local<v8::Value> value,
-                                const v8::PropertyCallbackInfo<void>& info);
+                                const V8Compat::SetterInfo& info);
   static void CanvasHeightGetter(v8::Local<v8::Name> property,
                                  const v8::PropertyCallbackInfo<v8::Value>& info);
   static void CanvasHeightSetter(v8::Local<v8::Name> property,
                                  v8::Local<v8::Value> value,
-                                 const v8::PropertyCallbackInfo<void>& info);
+                                 const V8Compat::SetterInfo& info);
   static void CanvasSetAttribute(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CanvasAddEventListener(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CanvasRemoveEventListener(const v8::FunctionCallbackInfo<v8::Value>& info);
@@ -137,19 +139,19 @@ class ScriptEngineImpl {
                              const v8::PropertyCallbackInfo<v8::Value>& info);
   static void ImageSrcSetter(v8::Local<v8::Name> property,
                              v8::Local<v8::Value> value,
-                             const v8::PropertyCallbackInfo<void>& info);
+                             const V8Compat::SetterInfo& info);
   static void ImageCompleteGetter(v8::Local<v8::Name> property,
                                   const v8::PropertyCallbackInfo<v8::Value>& info);
   static void ImageOnloadGetter(v8::Local<v8::Name> property,
                                 const v8::PropertyCallbackInfo<v8::Value>& info);
   static void ImageOnloadSetter(v8::Local<v8::Name> property,
                                 v8::Local<v8::Value> value,
-                                const v8::PropertyCallbackInfo<void>& info);
+                                const V8Compat::SetterInfo& info);
   static void ImageOnerrorGetter(v8::Local<v8::Name> property,
                                  const v8::PropertyCallbackInfo<v8::Value>& info);
   static void ImageOnerrorSetter(v8::Local<v8::Name> property,
                                  v8::Local<v8::Value> value,
-                                 const v8::PropertyCallbackInfo<void>& info);
+                                 const V8Compat::SetterInfo& info);
   static void Path2DConstructor(
       const v8::FunctionCallbackInfo<v8::Value>& info);
   static void Path2DMoveTo(const v8::FunctionCallbackInfo<v8::Value>& info);
