@@ -65,7 +65,7 @@ globalThis.__renderChart = function(option, renderOptions, outPath) {
   chart.on("finished", finish);
   try {
     chart.setOption(renderOption);
-    chart.getZr().refreshImmediately();
+    if (!finished) chart.getZr().refreshImmediately();
     if (!finished) {
       settleTimer = setTimeout(finish, renderOptions.settleMs);
     }
