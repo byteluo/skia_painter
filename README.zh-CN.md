@@ -101,6 +101,34 @@ mkdir -p output
 ./scripts/run_demo.sh
 ```
 
+## render 与 batch 命令
+
+原有的 `canvas_engine [--expose-gc] script.js` 用法仍然可用。显式的
+`run` 命令接受同样的脚本和运行时选项：
+
+```bash
+./build/dev/canvas_engine run examples/smoke.js
+./build/dev/canvas_engine render -o output/chart.png path/to/option.json
+```
+
+`render` 可读取 ECharts option JSON 文件，或返回 option 对象的 JavaScript
+文件。`batch` 会让一个引擎进程保持运行，并逐行读取 JSON 请求（包含
+`option` 或 `optionFile`，以及 `out`）：
+
+```bash
+printf '%s\n' \
+  '{"option":{"series":[{"type":"bar","data":[1,2,3]}]},"out":"output/chart.png"}' \
+  | ./build/dev/canvas_engine batch
+```
+
+`run`、`render` 和 `batch` 均支持 `--epoch-ms <毫秒>` 与
+`--realtime-clock`。也可用 `CANVAS_ENGINE_EPOCH_MS` 设置 epoch；显式的
+`--epoch-ms` 优先级更高。未设置时，引擎会在启动时捕获一次当前墙上时钟
+epoch。默认情况下，`performance.now()`、`Date.now()` 和无参 `Date`
+构造函数使用确定性的虚拟时间轴。`--realtime-clock` 会将真实流逝时间
+纳入时间轴，以支持依赖 `performance.now()` 忙等的脚本。默认虚拟时钟下，
+这类忙等不会结束；请改用定时器 / 动画帧，或显式启用实时钟。
+
 ## 与浏览器对比
 
 启动一个本地 dev 服务，上半部分是**浏览器原生 ECharts canvas 渲染**，下半部分是**当前后端导出的 PNG**，方便上下对比视觉效果：

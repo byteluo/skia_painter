@@ -191,6 +191,9 @@ target_link_libraries(color_parser_test PRIVATE canvas_engine_core)
 add_executable(font_parser_test tests/font_parser_test.cc)
 target_link_libraries(font_parser_test PRIVATE canvas_engine_core)
 
+add_executable(multi_engine_test tests/multi_engine_test.cc)
+target_link_libraries(multi_engine_test PRIVATE canvas_engine_core)
+
 function(canvas_engine_apply_v8_rpath target)
   if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
     set_target_properties(${target} PROPERTIES
@@ -203,6 +206,7 @@ endfunction()
 canvas_engine_apply_v8_rpath(canvas_engine)
 canvas_engine_apply_v8_rpath(color_parser_test)
 canvas_engine_apply_v8_rpath(font_parser_test)
+canvas_engine_apply_v8_rpath(multi_engine_test)
 
 if(APPLE)
   target_link_libraries(canvas_engine_core
@@ -262,6 +266,11 @@ if(BUILD_TESTING)
   add_test(
     NAME color_parser
     COMMAND color_parser_test
+  )
+
+  add_test(
+    NAME multi_engine
+    COMMAND multi_engine_test
   )
 
   add_test(
@@ -404,6 +413,30 @@ if(BUILD_TESTING)
   set(ECHARTS_DIST_PATH
       "${CMAKE_CURRENT_SOURCE_DIR}/node_modules/echarts/dist/echarts.js")
   if(EXISTS "${ECHARTS_DIST_PATH}")
+    add_test(
+      NAME cli_render
+      COMMAND ${CMAKE_COMMAND}
+              -DENGINE=$<TARGET_FILE:canvas_engine>
+              -DSOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+              -DTEST_OUTPUT=${CMAKE_CURRENT_BINARY_DIR}/test_output
+              -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cli_render.cmake
+    )
+    set_tests_properties(cli_render PROPERTIES
+      PASS_REGULAR_EXPRESSION "cli_render ok"
+    )
+
+    add_test(
+      NAME cli_batch
+      COMMAND ${CMAKE_COMMAND}
+              -DENGINE=$<TARGET_FILE:canvas_engine>
+              -DSOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+              -DTEST_OUTPUT=${CMAKE_CURRENT_BINARY_DIR}/test_output
+              -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cli_batch.cmake
+    )
+    set_tests_properties(cli_batch PROPERTIES
+      PASS_REGULAR_EXPRESSION "cli_batch ok"
+    )
+
     set(ECHARTS_SUNBURST_REGRESSION_OUTPUT_PNG
         "${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_sunburst_regression.png")
     set(ECHARTS_TIMELINE_REGRESSION_OUTPUT_PNG

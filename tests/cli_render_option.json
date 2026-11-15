@@ -1,0 +1,15 @@
+{
+  "xAxis": {
+    "type": "category",
+    "data": ["A", "B", "C"]
+  },
+  "yAxis": {
+    "type": "value"
+  },
+  "series": [
+    {
+      "type": "bar",
+      "data": [2, 4, 3]
+    }
+  ]
+}
