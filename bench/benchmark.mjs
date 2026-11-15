@@ -142,7 +142,9 @@ const skiaPainterBatch = {
     return "canvas_engine binary not built (./scripts/bootstrap.sh)";
   },
   async setup() {
-    this.child = spawn(this.bin, ["batch", "--png-compression", "fast"], {
+    this.child = spawn(this.bin, [
+      "batch", "--settle-ms", "0", "--png-compression", "fast",
+    ], {
       cwd: ROOT,
       stdio: ["pipe", "pipe", "pipe"],
     });
