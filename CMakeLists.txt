@@ -124,8 +124,7 @@ find_package(ZLIB REQUIRED)
 include(CTest)
 include(GNUInstallDirs)
 
-add_executable(canvas_engine
-  src/main.cc
+add_library(canvas_engine_core STATIC
   src/canvas/CanvasSurface.cc
   src/canvas/Canvas2DContext.cc
   src/canvas/ColorParser.cc
@@ -134,78 +133,65 @@ add_executable(canvas_engine
   src/runtime/ScriptEngine.cc
 )
 
-add_executable(color_parser_test
-  tests/color_parser_test.cc
-  src/canvas/ColorParser.cc
-)
-
-target_include_directories(color_parser_test
-  PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${SKIA_INCLUDE_DIRS}
-)
-
-target_link_libraries(color_parser_test
-  PRIVATE
-    ${SKIA_LIBRARIES}
-    Threads::Threads
-    PNG::PNG
-    ZLIB::ZLIB
-)
-if(UNIX AND NOT APPLE)
-  target_link_libraries(color_parser_test PRIVATE fontconfig)
-endif()
-
-add_executable(font_parser_test
-  tests/font_parser_test.cc
-  src/canvas/FontParser.cc
-)
-
-target_include_directories(font_parser_test
-  PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${SKIA_INCLUDE_DIRS}
-)
-
-target_include_directories(canvas_engine
-  PRIVATE
+target_include_directories(canvas_engine_core
+  PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${V8_INCLUDE_DIRS}
     ${SKIA_INCLUDE_DIRS}
 )
 
 if(NOT "${V8_COMPILE_DEFINITIONS}" STREQUAL "")
-  target_compile_definitions(canvas_engine PRIVATE ${V8_COMPILE_DEFINITIONS})
+  target_compile_definitions(canvas_engine_core
+    PUBLIC ${V8_COMPILE_DEFINITIONS})
 endif()
 
 if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
-  target_link_directories(canvas_engine PRIVATE ${V8_LINK_DIRECTORIES})
+  target_link_directories(canvas_engine_core
+    PUBLIC ${V8_LINK_DIRECTORIES})
 endif()
 
 if(NOT "${SKIA_LINK_DIRECTORIES}" STREQUAL "")
-  target_link_directories(canvas_engine PRIVATE ${SKIA_LINK_DIRECTORIES})
+  target_link_directories(canvas_engine_core
+    PUBLIC ${SKIA_LINK_DIRECTORIES})
 endif()
 
-target_link_libraries(canvas_engine
-  PRIVATE
+target_link_libraries(canvas_engine_core
+  PUBLIC
     ${V8_LIBRARIES}
     ${SKIA_LIBRARIES}
     Threads::Threads
+  PRIVATE
     ZLIB::ZLIB
+    PNG::PNG
 )
 if(UNIX AND NOT APPLE)
-  target_link_libraries(canvas_engine PRIVATE fontconfig)
+  target_link_libraries(canvas_engine_core PRIVATE fontconfig)
 endif()
 
-if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
-  set_target_properties(canvas_engine PROPERTIES
-    BUILD_RPATH "${V8_LINK_DIRECTORIES}"
-    INSTALL_RPATH "${V8_LINK_DIRECTORIES}"
-  )
-endif()
+add_executable(canvas_engine src/main.cc)
+target_link_libraries(canvas_engine PRIVATE canvas_engine_core)
+
+add_executable(color_parser_test tests/color_parser_test.cc)
+target_link_libraries(color_parser_test PRIVATE canvas_engine_core)
+
+add_executable(font_parser_test tests/font_parser_test.cc)
+target_link_libraries(font_parser_test PRIVATE canvas_engine_core)
+
+function(canvas_engine_apply_v8_rpath target)
+  if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
+    set_target_properties(${target} PROPERTIES
+      BUILD_RPATH "${V8_LINK_DIRECTORIES}"
+      INSTALL_RPATH "${V8_LINK_DIRECTORIES}"
+    )
+  endif()
+endfunction()
+
+canvas_engine_apply_v8_rpath(canvas_engine)
+canvas_engine_apply_v8_rpath(color_parser_test)
+canvas_engine_apply_v8_rpath(font_parser_test)
 
 if(APPLE)
-  target_link_libraries(canvas_engine
+  target_link_libraries(canvas_engine_core
     PRIVATE
       "-framework CoreFoundation"
       "-framework CoreGraphics"
@@ -214,8 +200,8 @@ if(APPLE)
       "-framework CoreServices"
   )
 elseif(UNIX)
-  target_include_directories(canvas_engine PRIVATE ${PNG_INCLUDE_DIRS})
-  target_link_libraries(canvas_engine PRIVATE dl m PNG::PNG)
+  target_include_directories(canvas_engine_core PRIVATE ${PNG_INCLUDE_DIRS})
+  target_link_libraries(canvas_engine_core PRIVATE dl m)
 endif()
 
 install(TARGETS canvas_engine
