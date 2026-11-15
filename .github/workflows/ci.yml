@@ -34,13 +34,14 @@ jobs:
           cmake --preset release \
             -DV8_INCLUDE_DIRS="/usr/local/include" \
             -DV8_LINK_DIRECTORIES="/usr/local/lib" \
-            -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase"
+            -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase" \
+            -DPython3_EXECUTABLE="$(command -v python3)"
 
       - name: Build release
         run: cmake --build --preset release
 
       - name: Run tests
-        run: ctest --preset release --output-on-failure
+        run: ctest --preset release --output-on-failure -j "$(nproc)"
 
       - name: Upload test output on failure
         if: failure()
@@ -57,7 +58,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install native dependencies
-        run: brew install v8 cmake ninja bazelisk fontconfig freetype libpng zlib pkgconf openjdk
+        run: brew install v8 cmake ninja bazelisk fontconfig freetype libpng zlib pkgconf openjdk python
+
+      - name: Install Python image dependencies
+        run: |
+          PYTHON3="$(brew --prefix python)/bin/python3"
+          "${PYTHON3}" -m pip install --break-system-packages pillow numpy
+          "${PYTHON3}" -c 'import PIL, numpy'
 
       - uses: actions/cache@v4
         with:
@@ -151,11 +158,13 @@ jobs:
       - name: Configure, build, and test
         run: |
           V8_PREFIX="$(brew --prefix v8)"
+          PYTHON3="$(brew --prefix python)/bin/python3"
           export V8_ICU_DATA_DIR="${V8_PREFIX}/libexec"
           export DYLD_LIBRARY_PATH="${V8_PREFIX}/lib${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
           cmake --preset dev \
             -DV8_INCLUDE_DIRS="${V8_PREFIX}/include" \
             -DV8_LINK_DIRECTORIES="${V8_PREFIX}/lib;${V8_PREFIX}/libexec" \
-            -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase"
+            -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase" \
+            -DPython3_EXECUTABLE="${PYTHON3}"
           cmake --build --preset dev
-          ctest --preset dev --output-on-failure
+          ctest --preset dev --output-on-failure -j "$(sysctl -n hw.ncpu)"

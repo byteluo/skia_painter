@@ -4,6 +4,13 @@ import struct
 import zlib
 from pathlib import Path
 
+try:
+    from PIL import Image
+    import numpy as np
+except ImportError:
+    Image = None
+    np = None
+
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
@@ -114,7 +121,9 @@ def write_rgba_png(path, width, height, rows):
     output.write_bytes(data)
 
 
-def compare_rgba_pngs(actual_path, golden_path, per_channel_delta, diff_path):
+def _compare_rgba_pngs_python(
+    actual_path, golden_path, per_channel_delta, diff_path
+):
     actual_width, actual_height, actual_rows = read_rgba_png(actual_path)
     golden_width, golden_height, golden_rows = read_rgba_png(golden_path)
     width = max(actual_width, golden_width)
@@ -168,3 +177,72 @@ def compare_rgba_pngs(actual_path, golden_path, per_channel_delta, diff_path):
         "total_pixels": max(actual_width * actual_height, golden_width * golden_height),
         "diff_path": str(diff_path),
     }
+
+
+def _compare_rgba_pngs_numpy(
+    actual_path, golden_path, per_channel_delta, diff_path
+):
+    with Image.open(actual_path) as actual_image:
+        actual = np.array(actual_image.convert("RGBA"), dtype=np.uint8, copy=True)
+    with Image.open(golden_path) as golden_image:
+        golden = np.array(golden_image.convert("RGBA"), dtype=np.uint8, copy=True)
+
+    actual_height, actual_width = actual.shape[:2]
+    golden_height, golden_width = golden.shape[:2]
+    width = max(actual_width, golden_width)
+    height = max(actual_height, golden_height)
+    same_size = actual_width == golden_width and actual_height == golden_height
+    overlap_height = min(actual_height, golden_height)
+    overlap_width = min(actual_width, golden_width)
+    diff_image = np.zeros((height, width, 4), dtype=np.uint8)
+    differing_pixels = 0
+    largest_delta = 0
+
+    if overlap_height and overlap_width:
+        actual_overlap = actual[:overlap_height, :overlap_width].astype(np.int16)
+        golden_overlap = golden[:overlap_height, :overlap_width].astype(np.int16)
+        deltas = np.abs(actual_overlap - golden_overlap)
+        largest_delta = int(deltas.max())
+        differs = np.any(deltas > per_channel_delta, axis=2)
+        differing_pixels = int(np.count_nonzero(differs))
+        diff_image[:overlap_height, :overlap_width][differs, :3] = np.minimum(
+            deltas[:, :, :3] * 8, 255
+        ).astype(np.uint8)[differs]
+        diff_image[:overlap_height, :overlap_width, 3][differs] = 255
+
+    missing_pixels = width * height - overlap_height * overlap_width
+    if missing_pixels:
+        missing_pixel = np.array((255, 0, 0, 255), dtype=np.uint8)
+        diff_image[overlap_height:, :] = missing_pixel
+        diff_image[:overlap_height, overlap_width:] = missing_pixel
+        differing_pixels += missing_pixels
+
+    if differing_pixels:
+        write_rgba_png(
+            diff_path,
+            width,
+            height,
+            [diff_image[row].tobytes() for row in range(height)],
+        )
+    else:
+        Path(diff_path).unlink(missing_ok=True)
+
+    return {
+        "same_size": same_size,
+        "actual_size": (actual_width, actual_height),
+        "golden_size": (golden_width, golden_height),
+        "differing_pixels": differing_pixels,
+        "largest_channel_delta": largest_delta,
+        "total_pixels": max(actual_width * actual_height, golden_width * golden_height),
+        "diff_path": str(diff_path),
+    }
+
+
+def compare_rgba_pngs(actual_path, golden_path, per_channel_delta, diff_path):
+    if Image is not None and np is not None:
+        return _compare_rgba_pngs_numpy(
+            actual_path, golden_path, per_channel_delta, diff_path
+        )
+    return _compare_rgba_pngs_python(
+        actual_path, golden_path, per_channel_delta, diff_path
+    )
