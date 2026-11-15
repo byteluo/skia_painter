@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "v8.h"
+#include "canvas_engine/canvas/FontManager.h"
 
 #include "canvas_engine/runtime/V8Compat.h"
 
@@ -29,6 +30,8 @@ class ScriptEngineImpl {
     bool expose_gc = false;
     bool realtime_clock = false;
     std::optional<double> clock_epoch_ms;
+    std::filesystem::path font_dir;
+    bool allow_system_fonts = false;
   };
 
   ScriptEngineImpl();
@@ -210,6 +213,7 @@ class ScriptEngineImpl {
       const v8::FunctionCallbackInfo<v8::Value>& info);
 
   Options options_;
+  std::shared_ptr<FontManager> font_manager_;
   std::unique_ptr<v8::ArrayBuffer::Allocator> allocator_;
   v8::Isolate* isolate_ = nullptr;
   v8::Global<v8::Context> context_;

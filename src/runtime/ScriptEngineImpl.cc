@@ -51,6 +51,22 @@ ScriptEngineImpl::ScriptEngineImpl(Options options) : options_(options) {
                           std::chrono::system_clock::now().time_since_epoch())
                           .count();
   }
+  std::filesystem::path font_dir = options_.font_dir;
+  if (font_dir.empty()) {
+    if (const char* environment_font_dir =
+            std::getenv("CANVAS_ENGINE_FONT_DIR");
+        environment_font_dir != nullptr && *environment_font_dir != '\0') {
+      font_dir = environment_font_dir;
+    }
+  }
+  if (font_dir.empty() && CANVAS_ENGINE_DEFAULT_FONT_DIR[0] != '\0') {
+    font_dir = CANVAS_ENGINE_DEFAULT_FONT_DIR;
+  }
+  bool allow_system_fonts = options_.allow_system_fonts;
+#if !CANVAS_ENGINE_BUNDLED_FONTS
+  allow_system_fonts = true;
+#endif
+  font_manager_ = std::make_shared<FontManager>(font_dir, allow_system_fonts);
   handle_registry_ = std::make_unique<HandleRegistry>();
   V8Platform::Initialize();
 

@@ -140,6 +140,29 @@ ECharts 动画；渲染会等待 `finished` 事件，或等待 3000 毫秒虚拟
 脚本可通过 `canvas.saveToPng(path, "fast")` 设置预设，或通过
 `canvas.saveToPng(path, false, "fast")` 在 drain 标志之后设置预设。
 
+## 字体
+
+CMake 会下载固定版本的官方 Noto 字体：Noto Sans 2.015、Noto Serif 2.015、
+Noto Sans Mono 2.014，以及来自 CJK Sans 2.004 的 Noto Sans SC。解压前会
+校验归档文件的 SHA-256。所需静态字体文件和许可证文本会复制到
+`build/<preset>/fonts`，并随安装放在二进制旁的 `bin/fonts` 目录中；字体
+二进制文件不会提交到 Git，许可证会随字体一起安装。设置
+`CANVAS_ENGINE_FONT_CACHE` 可在多个构建之间共享下载归档；默认缓存目录为
+`build/<preset>/font-cache`。
+
+默认使用内置字体以保证确定性文本渲染。字体目录优先级为
+`--font-dir`、`CANVAS_ENGINE_FONT_DIR`、`<可执行文件目录>/fonts`，最后是
+构建时字体目录。Linux 上的 `--system-fonts` 允许在缺少字体或字形时回退到
+系统字体管理器；使用系统字体的输出会受到主机已安装字体影响。macOS
+构建不支持系统字体回退；请求 `--system-fonts` 时会打印一次警告，并继续
+仅使用内置字体。
+`-DCANVAS_ENGINE_BUNDLED_FONTS=OFF` 会跳过下载；Linux 上仍可使用系统字体
+回退，但 macOS 不支持此功能。
+
+确定性保证适用于固定的 Skia 版本、上述固定字体版本和相同渲染选项。
+Skia 版本变化可能改变栅格化结果。文本回退按 Unicode 码点进行；此构建
+不会执行复杂文字脚本的字形整形。
+
 ## 与浏览器对比
 
 启动一个本地 dev 服务，上半部分是**浏览器原生 ECharts canvas 渲染**，下半部分是**当前后端导出的 PNG**，方便上下对比视觉效果：
@@ -161,6 +184,19 @@ cmake --preset dev      && cmake --build --preset dev      && ctest --preset dev
 cmake --preset release  && cmake --build --preset release  && ctest --preset release
 # 输出目录：build/dev、build/release
 ```
+
+Linux CI 使用固定的 V8 15.0.39 和 Skia `31521f8` 原生依赖 Release
+归档，以避免每次运行都重新构建这些依赖。若归档无法下载或校验和不匹配，
+CI 会回退到从源码构建 V8 和 Skia。
+
+如需从本地已有构建重新生成 Linux x86_64 归档：
+
+```bash
+scripts/package_native_deps.sh --out dist/native-deps
+```
+
+将生成的归档及 `.sha256` 文件上传到新的 GitHub Release，然后更新
+`.github/actions/setup-native-deps/action.yml` 中的 Release URL 和固定 SHA-256。
 
 ## 集成 ECharts
 
@@ -251,9 +287,10 @@ canvas.saveToPng("../output/chart.png");
 ctest --test-dir build --output-on-failure   # 全部测试
 ctest --preset dev                            # 通过 preset
 python3 scripts/verify_compare_coverage.py    # 只跑 compare 覆盖校验
+python3 scripts/update_goldens.py --update-goldens  # 有意更新图像基线
 ```
 
-三类测试：**冒烟测试**（V8 宿主 + 脚本执行链路）、**渲染回归**（高清导出、图片绘制、曲线、椭圆、`arcTo`、`ImageData`、任务队列冲刷语义）、**compare 覆盖**（每个 `examples/echarts_*.js` 都已接入 `web/compare/cases.json`）。
+CTest 使用带容差的 PNG 对比，覆盖原生渲染用例和每个 `examples/echarts_*.js` 图表。失败时可检查 `build/dev/golden-diffs/` 下的差异图。仅在有意更新基线时运行 `update_goldens.py`；提交前请审查 `tests/golden/` 的改动。
 
 ## 性能对比
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
@@ -13,6 +14,8 @@ class ScriptEngine {
     bool expose_gc = false;
     bool realtime_clock = false;
     std::optional<double> clock_epoch_ms;
+    std::filesystem::path font_dir;
+    bool allow_system_fonts = false;
   };
 
   ScriptEngine();

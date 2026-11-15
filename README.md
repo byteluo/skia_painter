@@ -144,6 +144,32 @@ a preset as the second argument to
 `canvas.saveToPng(path, "fast")`, or after the drain flag as
 `canvas.saveToPng(path, false, "fast")`.
 
+## Fonts
+
+CMake downloads pinned official Noto releases for Sans 2.015, Serif 2.015,
+Sans Mono 2.014, and Noto Sans SC from CJK Sans 2.004. Archive SHA-256 values
+are checked before extraction. The selected static font files and their
+license texts are copied to `build/<preset>/fonts` and installed beside the
+binary under `bin/fonts`; font binaries are not tracked in Git. The licenses
+are included with the installed fonts. Set `CANVAS_ENGINE_FONT_CACHE` to share
+downloaded archives across builds; by default, the cache is
+`build/<preset>/font-cache`.
+
+Bundled fonts are used by default for deterministic text rendering. Font
+directory resolution is `--font-dir`, `CANVAS_ENGINE_FONT_DIR`,
+`<executable directory>/fonts`, then the build-time font directory.
+`--system-fonts` permits system-manager fallback for missing families or
+glyphs on Linux; output using that fallback depends on the host's installed
+fonts. On macOS, this build does not include system-font fallback; requesting
+`--system-fonts` prints a one-time warning and continues with bundled fonts.
+`-DCANVAS_ENGINE_BUNDLED_FONTS=OFF` skips the downloads; system-font fallback
+remains available on Linux but is unsupported on macOS.
+
+The deterministic guarantee is for a fixed Skia version, these pinned font
+versions, and the same rendering options. Skia version changes can alter
+rasterization. Text fallback is per Unicode codepoint; this build does not
+perform complex-script shaping.
+
 ## Compare against the browser
 
 Spin up a local dev server that renders the **native browser ECharts canvas** on top and the **PNG exported by this backend** below, so you can compare them visually:
@@ -165,6 +191,21 @@ cmake --preset dev      && cmake --build --preset dev      && ctest --preset dev
 cmake --preset release  && cmake --build --preset release  && ctest --preset release
 # output dirs: build/dev, build/release
 ```
+
+Linux CI uses the pinned V8 15.0.39 and Skia `31521f8` native-dependency
+release asset to avoid rebuilding those dependencies on every run. If the
+asset cannot be downloaded or its checksum does not match, CI falls back to
+building V8 and Skia from source.
+
+To regenerate the Linux x86_64 package from existing local builds:
+
+```bash
+scripts/package_native_deps.sh --out dist/native-deps
+```
+
+Upload the generated archive and `.sha256` file to a new GitHub release, then
+update the release URL and pinned SHA-256 in
+`.github/actions/setup-native-deps/action.yml`.
 
 ## Integrating ECharts
 
@@ -255,9 +296,10 @@ The full example index lives in [`examples/`](examples/).
 ctest --test-dir build --output-on-failure   # all tests
 ctest --preset dev                            # via preset
 python3 scripts/verify_compare_coverage.py    # compare-coverage check only
+python3 scripts/update_goldens.py --update-goldens  # intentionally refresh image baselines
 ```
 
-Three test classes: **smoke** (V8 host + script execution), **rendering regression** (HiDPI export, image draw, curves, ellipse, `arcTo`, `ImageData`, task-queue flush), and **compare coverage** (every `examples/echarts_*.js` wired into `web/compare/cases.json`).
+CTest includes tolerance-based PNG comparisons for the native rendering fixtures and every `examples/echarts_*.js` chart. On failure, inspect the diff PNGs under `build/dev/golden-diffs/`. Refresh baselines only intentionally with `update_goldens.py`; review the resulting `tests/golden/` changes before committing.
 
 ## Benchmarks
 

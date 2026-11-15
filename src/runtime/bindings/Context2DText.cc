@@ -38,24 +38,25 @@ void ScriptEngineImpl::CtxMeasureText(
       handle->context->MeasureText(ToStdString(info.GetIsolate(), info[0]));
   auto context = info.GetIsolate()->GetCurrentContext();
   auto object = v8::Object::New(info.GetIsolate());
-  object
-      ->Set(context, v8::String::NewFromUtf8Literal(info.GetIsolate(), "width"),
-            v8::Number::New(info.GetIsolate(), metrics.width))
-      .Check();
-  object
-      ->Set(context,
-            v8::String::NewFromUtf8Literal(info.GetIsolate(),
-                                          "actualBoundingBoxAscent"),
-            v8::Number::New(info.GetIsolate(),
-                            metrics.actual_bounding_box_ascent))
-      .Check();
-  object
-      ->Set(context,
-            v8::String::NewFromUtf8Literal(info.GetIsolate(),
-                                          "actualBoundingBoxDescent"),
-            v8::Number::New(info.GetIsolate(),
-                            metrics.actual_bounding_box_descent))
-      .Check();
+  const auto set_metric = [&](const char* name, float value) {
+    object
+        ->Set(context,
+              v8::String::NewFromUtf8(info.GetIsolate(), name).ToLocalChecked(),
+              v8::Number::New(info.GetIsolate(), value))
+        .Check();
+  };
+  set_metric("width", metrics.width);
+  set_metric("actualBoundingBoxLeft", metrics.actual_bounding_box_left);
+  set_metric("actualBoundingBoxRight", metrics.actual_bounding_box_right);
+  set_metric("actualBoundingBoxAscent", metrics.actual_bounding_box_ascent);
+  set_metric("actualBoundingBoxDescent", metrics.actual_bounding_box_descent);
+  set_metric("fontBoundingBoxAscent", metrics.font_bounding_box_ascent);
+  set_metric("fontBoundingBoxDescent", metrics.font_bounding_box_descent);
+  set_metric("emHeightAscent", metrics.em_height_ascent);
+  set_metric("emHeightDescent", metrics.em_height_descent);
+  set_metric("alphabeticBaseline", metrics.alphabetic_baseline);
+  set_metric("hangingBaseline", metrics.hanging_baseline);
+  set_metric("ideographicBaseline", metrics.ideographic_baseline);
   info.GetReturnValue().Set(object);
 }
 
