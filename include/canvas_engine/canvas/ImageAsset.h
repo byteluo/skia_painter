@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
+#include <span>
 #include <string>
 
 #include "include/core/SkImage.h"
@@ -10,6 +12,8 @@ namespace canvas_engine {
 class ImageAsset {
  public:
   static std::shared_ptr<ImageAsset> LoadFromFile(const std::string& path);
+  static std::shared_ptr<ImageAsset> LoadFromEncodedBytes(
+      std::span<const std::uint8_t> bytes, std::string source_label);
 
   int width() const { return width_; }
   int height() const { return height_; }

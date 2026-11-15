@@ -66,7 +66,17 @@ set(SKIA_LOCAL_PNG_ENCODE_BASE "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libpng_e
 set(SKIA_LOCAL_ENCODER_COMMON "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libencoder_common.a")
 set(SKIA_LOCAL_ICC_SUPPORT "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libicc_support.a")
 set(SKIA_LOCAL_ANY_DECODER "${SKIA_LOCAL_ROOT}/bazel-bin/src/codec/libany_decoder.a")
-set(SKIA_LOCAL_FONTMGR_FONTCONFIG "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_fontconfig.a")
+if(APPLE)
+  set(SKIA_LOCAL_PLATFORM_FONTMGR_AVAILABLE TRUE)
+else()
+  set(SKIA_LOCAL_PLATFORM_FONTMGR
+      "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_fontconfig.a")
+  if(EXISTS "${SKIA_LOCAL_PLATFORM_FONTMGR}")
+    set(SKIA_LOCAL_PLATFORM_FONTMGR_AVAILABLE TRUE)
+  else()
+    set(SKIA_LOCAL_PLATFORM_FONTMGR_AVAILABLE FALSE)
+  endif()
+endif()
 set(SKIA_LOCAL_FREETYPE_SUPPORT "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfreetype_support.a")
 set(SKIA_LOCAL_TYPEFACE_PROXY "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libtypeface_proxy.a")
 set(SKIA_LOCAL_CHAR_TO_GLYPHCACHE "${SKIA_LOCAL_ROOT}/bazel-bin/src/utils/libchar_to_glyphcache.a")
@@ -80,6 +90,31 @@ set(SKIA_LOCAL_SKCMS_HSW
 set(SKIA_LOCAL_SKCMS_SKX
     "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o")
 
+# Bazel emits position-independent objects as .pic.o on Linux but plain .o on macOS.
+foreach(skcms_var SKIA_LOCAL_SKCMS SKIA_LOCAL_SKCMS_BASELINE SKIA_LOCAL_SKCMS_HSW SKIA_LOCAL_SKCMS_SKX)
+  if(NOT EXISTS "${${skcms_var}}")
+    string(REGEX REPLACE "\\.pic\\.o$" ".o" skcms_plain_object "${${skcms_var}}")
+    if(EXISTS "${skcms_plain_object}")
+      set(${skcms_var} "${skcms_plain_object}")
+    endif()
+  endif()
+endforeach()
+
+set(SKIA_LOCAL_CPU_OPT_LIBRARIES)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
+  list(APPEND SKIA_LOCAL_CPU_OPT_LIBRARIES
+    "${SKIA_LOCAL_OPTS_ML3}"
+    "${SKIA_LOCAL_SKCMS_HSW}"
+    "${SKIA_LOCAL_SKCMS_SKX}")
+endif()
+
+set(SKIA_LOCAL_CPU_OPT_AVAILABLE TRUE)
+foreach(cpu_opt_library IN LISTS SKIA_LOCAL_CPU_OPT_LIBRARIES)
+  if(NOT EXISTS "${cpu_opt_library}")
+    set(SKIA_LOCAL_CPU_OPT_AVAILABLE FALSE)
+  endif()
+endforeach()
+
 if("${SKIA_INCLUDE_DIRS}" STREQUAL "" AND EXISTS "${SKIA_LOCAL_ROOT}/include/core/SkCanvas.h")
   set(SKIA_INCLUDE_DIRS "${SKIA_LOCAL_ROOT}")
 endif()
@@ -92,18 +127,47 @@ if("${SKIA_LIBRARIES}" STREQUAL "" AND
    EXISTS "${SKIA_LOCAL_ENCODER_COMMON}" AND
    EXISTS "${SKIA_LOCAL_ICC_SUPPORT}" AND
    EXISTS "${SKIA_LOCAL_ANY_DECODER}" AND
-   EXISTS "${SKIA_LOCAL_FONTMGR_FONTCONFIG}" AND
+   SKIA_LOCAL_PLATFORM_FONTMGR_AVAILABLE AND
    EXISTS "${SKIA_LOCAL_FREETYPE_SUPPORT}" AND
    EXISTS "${SKIA_LOCAL_TYPEFACE_PROXY}" AND
    EXISTS "${SKIA_LOCAL_CHAR_TO_GLYPHCACHE}" AND
    EXISTS "${SKIA_LOCAL_FREETYPE}" AND
-   EXISTS "${SKIA_LOCAL_OPTS_ML3}" AND
    EXISTS "${SKIA_LOCAL_SKCMS}" AND
    EXISTS "${SKIA_LOCAL_SKCMS_BASELINE}" AND
-   EXISTS "${SKIA_LOCAL_SKCMS_HSW}" AND
-   EXISTS "${SKIA_LOCAL_SKCMS_SKX}")
-  set(SKIA_LIBRARIES
-    "${SKIA_LOCAL_PNG_ENCODE};${SKIA_LOCAL_PNG_ENCODE_BASE};${SKIA_LOCAL_ENCODER_COMMON};${SKIA_LOCAL_ANY_DECODER};${SKIA_LOCAL_ICC_SUPPORT};${SKIA_LOCAL_FONTMGR_FONTCONFIG};${SKIA_LOCAL_TYPEFACE_PROXY};${SKIA_LOCAL_FREETYPE_SUPPORT};${SKIA_LOCAL_CHAR_TO_GLYPHCACHE};${SKIA_LOCAL_FREETYPE};${SKIA_LOCAL_CORE};${SKIA_LOCAL_BASE};${SKIA_LOCAL_OPTS_ML3};${SKIA_LOCAL_SKCMS};${SKIA_LOCAL_SKCMS_BASELINE};${SKIA_LOCAL_SKCMS_HSW};${SKIA_LOCAL_SKCMS_SKX}")
+   SKIA_LOCAL_CPU_OPT_AVAILABLE)
+  set(SKIA_LOCAL_LIBRARIES
+    "${SKIA_LOCAL_PNG_ENCODE}"
+    "${SKIA_LOCAL_PNG_ENCODE_BASE}"
+    "${SKIA_LOCAL_ENCODER_COMMON}"
+    "${SKIA_LOCAL_ANY_DECODER}"
+    "${SKIA_LOCAL_ICC_SUPPORT}")
+  if(NOT APPLE)
+    list(APPEND SKIA_LOCAL_LIBRARIES "${SKIA_LOCAL_PLATFORM_FONTMGR}")
+  endif()
+  list(APPEND SKIA_LOCAL_LIBRARIES
+    "${SKIA_LOCAL_TYPEFACE_PROXY}"
+    "${SKIA_LOCAL_FREETYPE_SUPPORT}"
+    "${SKIA_LOCAL_CHAR_TO_GLYPHCACHE}"
+    "${SKIA_LOCAL_FREETYPE}"
+    "${SKIA_LOCAL_CORE}"
+    "${SKIA_LOCAL_BASE}"
+    "${SKIA_LOCAL_SKCMS}"
+    "${SKIA_LOCAL_SKCMS_BASELINE}")
+  list(APPEND SKIA_LOCAL_LIBRARIES ${SKIA_LOCAL_CPU_OPT_LIBRARIES})
+  set(SKIA_LIBRARIES "${SKIA_LOCAL_LIBRARIES}")
+endif()
+
+if("${SKIA_LIBRARIES}" STREQUAL "")
+  foreach(skia_artifact
+      "${SKIA_LOCAL_CORE}" "${SKIA_LOCAL_BASE}" "${SKIA_LOCAL_PNG_ENCODE}"
+      "${SKIA_LOCAL_PNG_ENCODE_BASE}" "${SKIA_LOCAL_ENCODER_COMMON}" "${SKIA_LOCAL_ICC_SUPPORT}"
+      "${SKIA_LOCAL_ANY_DECODER}" "${SKIA_LOCAL_FREETYPE_SUPPORT}" "${SKIA_LOCAL_TYPEFACE_PROXY}"
+      "${SKIA_LOCAL_CHAR_TO_GLYPHCACHE}" "${SKIA_LOCAL_FREETYPE}" "${SKIA_LOCAL_SKCMS}"
+      "${SKIA_LOCAL_SKCMS_BASELINE}" ${SKIA_LOCAL_CPU_OPT_LIBRARIES})
+    if(NOT EXISTS "${skia_artifact}")
+      message(STATUS "Missing local Skia artifact: ${skia_artifact}")
+    endif()
+  endforeach()
 endif()
 
 foreach(required_var
@@ -129,6 +193,7 @@ add_executable(canvas_engine
   src/canvas/CanvasSurface.cc
   src/canvas/Canvas2DContext.cc
   src/canvas/ColorParser.cc
+  src/canvas/FontParser.cc
   src/canvas/ImageAsset.cc
   src/runtime/ScriptEngine.cc
 )
@@ -151,7 +216,20 @@ target_link_libraries(color_parser_test
     PNG::PNG
     ZLIB::ZLIB
 )
-target_link_libraries(color_parser_test PRIVATE fontconfig)
+if(UNIX AND NOT APPLE)
+  target_link_libraries(color_parser_test PRIVATE fontconfig)
+endif()
+
+add_executable(font_parser_test
+  tests/font_parser_test.cc
+  src/canvas/FontParser.cc
+)
+
+target_include_directories(font_parser_test
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${SKIA_INCLUDE_DIRS}
+)
 
 target_include_directories(canvas_engine
   PRIVATE
@@ -179,7 +257,9 @@ target_link_libraries(canvas_engine
     Threads::Threads
     ZLIB::ZLIB
 )
-target_link_libraries(canvas_engine PRIVATE fontconfig)
+if(UNIX AND NOT APPLE)
+  target_link_libraries(canvas_engine PRIVATE fontconfig)
+endif()
 
 if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
   set_target_properties(canvas_engine PROPERTIES
@@ -249,12 +329,54 @@ if(BUILD_TESTING)
   )
 
   add_test(
+    NAME font_parser
+    COMMAND font_parser_test
+  )
+
+  add_test(
+    NAME font_weight_regression
+    COMMAND $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/font_weight_regression.js
+  )
+  set_tests_properties(font_weight_regression PROPERTIES
+    PASS_REGULAR_EXPRESSION "font_weight_regression ok"
+  )
+
+  add_test(
+    NAME canvas_semantics
+    COMMAND $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/canvas_semantics.js
+  )
+  set_tests_properties(canvas_semantics PROPERTIES
+    PASS_REGULAR_EXPRESSION "canvas_semantics ok"
+  )
+
+  add_test(
+    NAME image_loading
+    COMMAND $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/image_loading.js
+  )
+  set_tests_properties(image_loading PROPERTIES
+    PASS_REGULAR_EXPRESSION "image_loading ok"
+  )
+
+  add_test(
     NAME task_queue
     COMMAND $<TARGET_FILE:canvas_engine>
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/task_queue.js
   )
   set_tests_properties(task_queue PROPERTIES
-    PASS_REGULAR_EXPRESSION "deferred"
+    PASS_REGULAR_EXPRESSION "task_queue ok"
+    FAIL_REGULAR_EXPRESSION "DrainPendingTasks hit the 10000ms virtual advance cap"
+  )
+
+  add_test(
+    NAME drawing_animation_frame
+    COMMAND $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/drawing_animation_frame.js
+  )
+  set_tests_properties(drawing_animation_frame PROPERTIES
+    PASS_REGULAR_EXPRESSION "DrainPendingTasks hit the 10000ms virtual advance cap"
   )
 
   add_test(

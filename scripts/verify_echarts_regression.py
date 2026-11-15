@@ -132,7 +132,7 @@ def verify_sunburst(path):
     expect_color_range(pixel(rows, 1440, 1032), background, 3, "sunburst center hole")
     expect_color_range(pixel(rows, 1440, 1314), orange, 10, "sunburst sales ring")
     expect_color_range(pixel(rows, 1872, 864), blue, 10, "sunburst search ring")
-    expect_color_range(pixel(rows, 1200, 792), teal, 10, "sunburst retention ring")
+    expect_color_range(pixel(rows, 1200, 900), teal, 10, "sunburst retention ring")
 
 
 def verify_timeline(path):

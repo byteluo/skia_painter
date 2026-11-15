@@ -1,0 +1,174 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      V8_ROOT: /usr/local
+      V8_ICU_DATA_DIR: /usr/local/share/v8
+      LD_LIBRARY_PATH: /usr/local/lib
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-native-deps
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Configure release build
+        run: |
+          cmake --preset release \
+            -DV8_INCLUDE_DIRS="/usr/local/include" \
+            -DV8_LINK_DIRECTORIES="/usr/local/lib" \
+            -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase" \
+            -DV8_COMPILE_DEFINITIONS="V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH"
+
+      - name: Build release
+        run: cmake --build --preset release
+
+      - name: Run tests
+        run: ctest --preset release --output-on-failure
+
+      - name: Upload test output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-test-output
+          path: build/release/test_output
+          if-no-files-found: ignore
+
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install native dependencies
+        run: brew install v8 cmake ninja bazelisk fontconfig freetype libpng zlib pkgconf openjdk
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            third_party/skia
+            build/bazel-root
+          key: skia-macos-${{ hashFiles('.gitmodules') }}
+          restore-keys: skia-macos-
+
+      - name: Download Skia source
+        run: |
+          if [[ -f "third_party/skia/MODULE.bazel" ]]; then
+            echo "Skia already present (from cache)"; exit 0
+          fi
+          SKIA_COMMIT="31521f8508c712615b3d35e8e4554ccb5bf568e1"
+          mkdir -p third_party/skia
+          for attempt in 1 2 3 4; do
+            if curl -fsSL --retry 3 "https://skia.googlesource.com/skia/+archive/${SKIA_COMMIT}.tar.gz" \
+                | tar xz -C third_party/skia; then
+              test -f third_party/skia/MODULE.bazel && exit 0
+            fi
+            echo "attempt $attempt failed, retrying..."
+            sleep $((attempt * 10))
+          done
+          exit 1
+
+      - name: Build Skia (minimal target set)
+        run: |
+          skia_targets=(
+            //:core
+            //src/base:base
+            //src/codec:any_decoder
+            //src/encode:encoder_common
+            //src/encode:icc_support
+            //src/encode:png_encode
+            //src/encode:png_encode_base
+            //src/ports:freetype_support
+            //src/ports:typeface_proxy
+            //src/utils:char_to_glyphcache
+            //modules/skcms:skcms
+            @freetype//:freetype
+          )
+          required_artifacts=(
+            src/core/libcore.a
+            src/base/libbase.a
+            src/encode/libpng_encode.a
+            src/encode/libpng_encode_base.a
+            src/encode/libencoder_common.a
+            src/encode/libicc_support.a
+            src/codec/libany_decoder.a
+            src/ports/libfreetype_support.a
+            src/ports/libtypeface_proxy.a
+            src/utils/libchar_to_glyphcache.a
+            external/+cpp_modules+freetype/libfreetype.a
+            modules/skcms/_objs/skcms_public/skcms.pic.o
+            modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o
+          )
+          cpu_artifacts=()
+          if [[ "$(uname -m)" == "x86_64" ]]; then
+            skia_targets+=(//src/opts:ml3)
+            cpu_artifacts+=(
+              src/opts/libml3.a
+              modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o
+              modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o
+            )
+          fi
+          cache_hit=true
+          for artifact in "${required_artifacts[@]}"; do
+            if [[ ! -f "third_party/skia/bazel-bin/${artifact}" && ! -f "third_party/skia/bazel-bin/${artifact%.pic.o}.o" ]]; then
+              cache_hit=false
+              break
+            fi
+          done
+          if [[ "${cache_hit}" == true ]]; then
+            for artifact in "${cpu_artifacts[@]}"; do
+              if [[ ! -f "third_party/skia/bazel-bin/${artifact}" && ! -f "third_party/skia/bazel-bin/${artifact%.pic.o}.o" ]]; then
+                cache_hit=false
+                break
+              fi
+            done
+          fi
+          if [[ "${cache_hit}" == true ]]; then
+            echo "Skia artifacts found in cache"; exit 0
+          fi
+          cd third_party/skia
+          CC=clang CXX=clang++ bazel \
+            --batch --noworkspace_rc \
+            --output_user_root="${GITHUB_WORKSPACE}/build/bazel-root" \
+            build \
+            --cxxopt=-std=c++20 \
+            --cxxopt=-Wno-error=ignored-attributes \
+            --copt=-Wno-poison-system-directories \
+            "${skia_targets[@]}"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Configure, build, and test
+        run: |
+          V8_PREFIX="$(brew --prefix v8)"
+          export V8_ICU_DATA_DIR="${V8_PREFIX}/libexec"
+          export DYLD_LIBRARY_PATH="${V8_PREFIX}/lib${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
+          cmake --preset dev \
+            -DV8_INCLUDE_DIRS="${V8_PREFIX}/include" \
+            -DV8_LINK_DIRECTORIES="${V8_PREFIX}/lib;${V8_PREFIX}/libexec" \
+            -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase" \
+            -DV8_COMPILE_DEFINITIONS="V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH;V8_ENABLE_SANDBOX;CPPGC_POINTER_COMPRESSION"
+          cmake --build --preset dev
+          ctest --preset dev --output-on-failure

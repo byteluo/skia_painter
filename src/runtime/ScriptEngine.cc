@@ -1,7 +1,9 @@
 #include "canvas_engine/runtime/ScriptEngine.h"
+#include "canvas_engine/runtime/V8Compat.h"
 
 #include <chrono>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
@@ -38,8 +40,6 @@ constexpr v8::EmbedderDataTypeTag kContextHandleTag = 2;
 constexpr v8::EmbedderDataTypeTag kGradientHandleTag = 3;
 constexpr v8::EmbedderDataTypeTag kImageHandleTag = 4;
 constexpr v8::EmbedderDataTypeTag kPatternHandleTag = 5;
-
-using Clock = std::chrono::steady_clock;
 
 template <typename T>
 T* Unwrap(v8::Isolate* isolate, v8::Local<v8::Object> object,
@@ -107,6 +107,126 @@ bool ReadFile(const std::string& path, std::string* out_source) {
   std::ostringstream buffer;
   buffer << input.rdbuf();
   *out_source = buffer.str();
+  return true;
+}
+
+bool StartsWithCaseInsensitive(std::string_view value,
+                               std::string_view prefix) {
+  if (value.size() < prefix.size()) {
+    return false;
+  }
+  for (std::size_t i = 0; i < prefix.size(); ++i) {
+    if (std::tolower(static_cast<unsigned char>(value[i])) !=
+        std::tolower(static_cast<unsigned char>(prefix[i]))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+int Base64Digit(unsigned char value) {
+  if (value >= 'A' && value <= 'Z') {
+    return value - 'A';
+  }
+  if (value >= 'a' && value <= 'z') {
+    return value - 'a' + 26;
+  }
+  if (value >= '0' && value <= '9') {
+    return value - '0' + 52;
+  }
+  if (value == '+') {
+    return 62;
+  }
+  if (value == '/') {
+    return 63;
+  }
+  return -1;
+}
+
+int HexDigit(unsigned char value) {
+  if (value >= '0' && value <= '9') {
+    return value - '0';
+  }
+  if (value >= 'a' && value <= 'f') {
+    return value - 'a' + 10;
+  }
+  if (value >= 'A' && value <= 'F') {
+    return value - 'A' + 10;
+  }
+  return -1;
+}
+
+bool DecodeDataUrl(std::string_view url, std::vector<std::uint8_t>* bytes) {
+  if (!StartsWithCaseInsensitive(url, "data:")) {
+    return false;
+  }
+  const std::size_t comma = url.find(',');
+  if (comma == std::string_view::npos) {
+    return false;
+  }
+
+  std::string_view metadata = url.substr(5, comma - 5);
+  const bool base64 =
+      metadata.size() >= 7 &&
+      StartsWithCaseInsensitive(metadata.substr(metadata.size() - 7),
+                                ";base64");
+  if (base64) {
+    metadata.remove_suffix(7);
+  }
+
+  const std::string_view payload = url.substr(comma + 1);
+  bytes->clear();
+  bytes->reserve(payload.size());
+  if (base64) {
+    if (payload.size() % 4 != 0) {
+      return false;
+    }
+    for (std::size_t i = 0; i < payload.size(); i += 4) {
+      const bool last_group = i + 4 == payload.size();
+      const int first = Base64Digit(static_cast<unsigned char>(payload[i]));
+      const int second =
+          Base64Digit(static_cast<unsigned char>(payload[i + 1]));
+      const char third_char = payload[i + 2];
+      const char fourth_char = payload[i + 3];
+      const int third = third_char == '='
+                            ? 0
+                            : Base64Digit(static_cast<unsigned char>(third_char));
+      const int fourth =
+          fourth_char == '='
+              ? 0
+              : Base64Digit(static_cast<unsigned char>(fourth_char));
+      if (first < 0 || second < 0 || third < 0 || fourth < 0 ||
+          (third_char == '=' && fourth_char != '=') ||
+          ((!last_group) && (third_char == '=' || fourth_char == '='))) {
+        return false;
+      }
+      bytes->push_back(static_cast<std::uint8_t>((first << 2) | (second >> 4)));
+      if (third_char != '=') {
+        bytes->push_back(static_cast<std::uint8_t>((second << 4) | (third >> 2)));
+      }
+      if (fourth_char != '=') {
+        bytes->push_back(static_cast<std::uint8_t>((third << 6) | fourth));
+      }
+    }
+    return true;
+  }
+
+  for (std::size_t i = 0; i < payload.size(); ++i) {
+    if (payload[i] == '%') {
+      if (i + 2 >= payload.size()) {
+        return false;
+      }
+      const int high = HexDigit(static_cast<unsigned char>(payload[i + 1]));
+      const int low = HexDigit(static_cast<unsigned char>(payload[i + 2]));
+      if (high < 0 || low < 0) {
+        return false;
+      }
+      bytes->push_back(static_cast<std::uint8_t>((high << 4) | low));
+      i += 2;
+    } else {
+      bytes->push_back(static_cast<std::uint8_t>(payload[i]));
+    }
+  }
   return true;
 }
 
@@ -184,11 +304,6 @@ void PrintArgs(const v8::FunctionCallbackInfo<v8::Value>& info) {
   std::fflush(stdout);
 }
 
-double NowMilliseconds() {
-  const auto now = Clock::now().time_since_epoch();
-  return std::chrono::duration<double, std::milli>(now).count();
-}
-
 float GetDefaultDevicePixelRatio() {
   if (const char* env = std::getenv("CANVAS_ENGINE_DPR")) {
     try {
@@ -218,6 +333,103 @@ SkTileMode RepeatModeToTileMode(const std::string& repeat, bool for_x_axis) {
   }
   return SkTileMode::kRepeat;
 }
+
+class GradientSource final : public PaintSource {
+ public:
+  enum class Kind {
+    kLinear,
+    kRadial,
+  };
+
+  struct ColorStop {
+    float offset = 0.0f;
+    SkColor color = SK_ColorBLACK;
+  };
+
+  GradientSource(Kind kind, float x0, float y0, float r0, float x1, float y1,
+                 float r1)
+      : kind_(kind),
+        x0_(x0),
+        y0_(y0),
+        r0_(r0),
+        x1_(x1),
+        y1_(y1),
+        r1_(r1) {}
+
+  sk_sp<SkShader> shader() const override {
+    if (cache_valid_) {
+      return cached_shader_;
+    }
+    cache_valid_ = true;
+    if (stops_.empty()) {
+      cached_shader_.reset();
+      return cached_shader_;
+    }
+
+    std::vector<ColorStop> sorted = stops_;
+    std::sort(sorted.begin(), sorted.end(),
+              [](const ColorStop& lhs, const ColorStop& rhs) {
+                return lhs.offset < rhs.offset;
+              });
+
+    std::vector<SkScalar> positions;
+    std::vector<SkColor4f> colors4f;
+    positions.reserve(sorted.size());
+    colors4f.reserve(sorted.size());
+    for (const auto& stop : sorted) {
+      colors4f.push_back(SkColor4f::FromColor(stop.color));
+      positions.push_back(stop.offset);
+    }
+
+    SkGradient gradient(
+        SkGradient::Colors(colors4f, positions, SkTileMode::kClamp),
+        SkGradient::Interpolation());
+    if (kind_ == Kind::kLinear) {
+      const SkPoint points[2] = {SkPoint::Make(x0_, y0_),
+                                 SkPoint::Make(x1_, y1_)};
+      cached_shader_ = SkShaders::LinearGradient(points, gradient);
+    } else {
+      cached_shader_ = SkShaders::TwoPointConicalGradient(
+          SkPoint::Make(x0_, y0_), r0_, SkPoint::Make(x1_, y1_), r1_,
+          gradient);
+    }
+    return cached_shader_;
+  }
+
+  const std::string& description() const override { return description_; }
+
+  void AddColorStop(float offset, SkColor color) {
+    stops_.push_back({offset, color});
+    cache_valid_ = false;
+    cached_shader_.reset();
+  }
+
+ private:
+  Kind kind_;
+  float x0_ = 0.0f;
+  float y0_ = 0.0f;
+  float r0_ = 0.0f;
+  float x1_ = 0.0f;
+  float y1_ = 0.0f;
+  float r1_ = 0.0f;
+  std::vector<ColorStop> stops_;
+  mutable bool cache_valid_ = false;
+  mutable sk_sp<SkShader> cached_shader_;
+  const std::string description_ = "[object CanvasGradient]";
+};
+
+class FixedShaderSource final : public PaintSource {
+ public:
+  FixedShaderSource(sk_sp<SkShader> shader, std::string description)
+      : shader_(std::move(shader)), description_(std::move(description)) {}
+
+  sk_sp<SkShader> shader() const override { return shader_; }
+  const std::string& description() const override { return description_; }
+
+ private:
+  sk_sp<SkShader> shader_;
+  std::string description_;
+};
 
 bool ExtractSixNumbers(const v8::FunctionCallbackInfo<v8::Value>& info,
                        float* a, float* b, float* c, float* d, float* e,
@@ -286,6 +498,7 @@ struct ScriptEngine::ImageHandle {
   std::shared_ptr<ImageAsset> asset;
   bool complete = false;
   bool failed = false;
+  std::uint64_t source_generation = 0;
   v8::Global<v8::Object> object;
   v8::Global<v8::Function> onload;
   v8::Global<v8::Function> onerror;
@@ -298,69 +511,18 @@ struct ScriptEngine::PatternHandle {
   std::uint64_t id = 0;
   v8::Global<v8::Object> object;
   std::unique_ptr<HandleFinalizerData> finalizer_data;
-  sk_sp<SkShader> shader;
-  std::string description = "[object CanvasPattern]";
+  std::shared_ptr<const PaintSource> source;
 };
 
 struct ScriptEngine::GradientHandle {
-  enum class Kind {
-    kLinear,
-    kRadial,
-  };
-
-  struct ColorStop {
-    float offset = 0.0f;
-    SkColor color = SK_ColorBLACK;
-  };
-
-  GradientHandle(std::uint64_t handle_id, Kind gradient_kind)
-      : id(handle_id), kind(gradient_kind) {}
-
-  sk_sp<SkShader> BuildShader() const {
-    if (stops.empty()) {
-      return nullptr;
-    }
-
-    std::vector<ColorStop> sorted = stops;
-    std::sort(sorted.begin(), sorted.end(),
-              [](const ColorStop& lhs, const ColorStop& rhs) {
-                return lhs.offset < rhs.offset;
-              });
-
-    std::vector<SkScalar> positions;
-    std::vector<SkColor4f> colors4f;
-    positions.reserve(sorted.size());
-    colors4f.reserve(sorted.size());
-    for (const auto& stop : sorted) {
-      colors4f.push_back(SkColor4f::FromColor(stop.color));
-      positions.push_back(stop.offset);
-    }
-
-    SkGradient gradient(
-        SkGradient::Colors(colors4f, positions, SkTileMode::kClamp),
-        SkGradient::Interpolation());
-
-    if (kind == Kind::kLinear) {
-      const SkPoint points[2] = {SkPoint::Make(x0, y0), SkPoint::Make(x1, y1)};
-      return SkShaders::LinearGradient(points, gradient);
-    }
-
-    return SkShaders::TwoPointConicalGradient(SkPoint::Make(x0, y0), r0,
-                                              SkPoint::Make(x1, y1), r1,
-                                              gradient);
-  }
+  GradientHandle(std::uint64_t handle_id,
+                 std::shared_ptr<GradientSource> gradient_source)
+      : id(handle_id), source(std::move(gradient_source)) {}
 
   std::uint64_t id = 0;
   v8::Global<v8::Object> object;
   std::unique_ptr<HandleFinalizerData> finalizer_data;
-  Kind kind;
-  float x0 = 0.0f;
-  float y0 = 0.0f;
-  float r0 = 0.0f;
-  float x1 = 0.0f;
-  float y1 = 0.0f;
-  float r1 = 0.0f;
-  std::vector<ColorStop> stops;
+  std::shared_ptr<GradientSource> source;
 };
 
 ScriptEngine::ScriptEngine() {
@@ -492,43 +654,134 @@ bool ScriptEngine::DrainPendingTasks() {
   v8::Context::Scope context_scope(context);
   draining_tasks_ = true;
 
-  constexpr int kMaxDrainRounds = 64;
-  for (int round = 0; round < kMaxDrainRounds; ++round) {
+  constexpr std::size_t kMaxExecutedTasks = 100000;
+  constexpr double kMaxVirtualAdvanceMs = 10000.0;
+  constexpr double kFrameDurationMs = 1000.0 / 60.0;
+  double virtual_advance_ms = 0.0;
+  std::size_t executed_tasks = 0;
+  consecutive_idle_frame_batches_ = 0;
+
+  while (true) {
+    pending_tasks_.erase(
+        std::remove_if(pending_tasks_.begin(), pending_tasks_.end(),
+                       [](const PendingTask& task) { return task.cancelled; }),
+        pending_tasks_.end());
     if (pending_tasks_.empty()) {
       draining_tasks_ = false;
       return true;
     }
 
+    const auto earliest_task =
+        std::min_element(pending_tasks_.begin(), pending_tasks_.end(),
+                         [](const PendingTask& lhs, const PendingTask& rhs) {
+                           if (lhs.ready_at_ms != rhs.ready_at_ms) {
+                             return lhs.ready_at_ms < rhs.ready_at_ms;
+                           }
+                           return lhs.id < rhs.id;
+                         });
+    const double now = NowMs();
+    if (earliest_task->ready_at_ms > now) {
+      const double advance_ms = earliest_task->ready_at_ms - now;
+      const double remaining_advance_ms =
+          kMaxVirtualAdvanceMs - virtual_advance_ms;
+      if (advance_ms > remaining_advance_ms) {
+        const std::size_t dropped_tasks = pending_tasks_.size();
+        pending_tasks_.clear();
+        std::cerr << "[canvas_engine] DrainPendingTasks hit the "
+                  << kMaxVirtualAdvanceMs << "ms virtual advance cap, "
+                  << dropped_tasks << " task(s) dropped" << std::endl;
+        draining_tasks_ = false;
+        return true;
+      }
+      clock_offset_ms_ += advance_ms;
+      virtual_advance_ms += advance_ms;
+    }
+
     std::vector<PendingTask> ready_tasks;
     std::vector<PendingTask> deferred_tasks;
-    const auto now = Clock::now();
+    const double batch_time_ms = NowMs();
     for (auto& task : pending_tasks_) {
-      if (task.ready_at <= now) {
+      if (task.ready_at_ms <= batch_time_ms) {
         ready_tasks.push_back(std::move(task));
       } else {
         deferred_tasks.push_back(std::move(task));
       }
     }
     pending_tasks_ = std::move(deferred_tasks);
-    if (ready_tasks.empty()) {
-      draining_tasks_ = false;
-      return true;
+    std::sort(ready_tasks.begin(), ready_tasks.end(),
+              [](const PendingTask& lhs, const PendingTask& rhs) {
+                if (lhs.ready_at_ms != rhs.ready_at_ms) {
+                  return lhs.ready_at_ms < rhs.ready_at_ms;
+                }
+                return lhs.id < rhs.id;
+              });
+
+    const bool advances_frame =
+        std::any_of(ready_tasks.begin(), ready_tasks.end(),
+                    [](const PendingTask& task) {
+                      return task.animation_frame && !task.cancelled;
+                    });
+    const std::uint64_t draw_ops_before_batch = draw_op_count_;
+    if (advances_frame) {
+      const double remaining_advance_ms =
+          kMaxVirtualAdvanceMs - virtual_advance_ms;
+      if (kFrameDurationMs > remaining_advance_ms) {
+        const std::size_t dropped_tasks =
+            ready_tasks.size() + pending_tasks_.size();
+        pending_tasks_.clear();
+        std::cerr << "[canvas_engine] DrainPendingTasks hit the "
+                  << kMaxVirtualAdvanceMs << "ms virtual advance cap, "
+                  << dropped_tasks << " task(s) dropped" << std::endl;
+        draining_tasks_ = false;
+        return true;
+      }
+      next_frame_ms_ = batch_time_ms + kFrameDurationMs;
     }
 
-    for (auto& task : ready_tasks) {
-      if (task.cancelled || task.callback.IsEmpty()) {
+    for (std::size_t index = 0; index < ready_tasks.size(); ++index) {
+      auto& task = ready_tasks[index];
+      if (task.cancelled ||
+          (task.callback.IsEmpty() && !task.native)) {
+        continue;
+      }
+      if (executed_tasks >= kMaxExecutedTasks) {
+        const std::size_t dropped_tasks =
+            ready_tasks.size() - index + pending_tasks_.size();
+        pending_tasks_.clear();
+        std::cerr << "[canvas_engine] DrainPendingTasks hit the "
+                  << kMaxExecutedTasks << " executed-task cap, "
+                  << dropped_tasks << " task(s) dropped" << std::endl;
+        draining_tasks_ = false;
+        return true;
+      }
+
+      ++executed_tasks;
+      if (task.native) {
+        task.native();
+        if (!last_error_.empty()) {
+          draining_tasks_ = false;
+          pending_tasks_.clear();
+          return false;
+        }
         continue;
       }
 
       v8::TryCatch try_catch(isolate_);
       v8::Local<v8::Function> callback = task.callback.Get(isolate_);
-      v8::Local<v8::Value> argv[] = {
-          v8::Number::New(isolate_, NowMilliseconds())};
+      std::vector<v8::Local<v8::Value>> argv;
+      if (task.animation_frame) {
+        argv.push_back(v8::Number::New(isolate_, batch_time_ms));
+      } else {
+        argv.reserve(task.arguments.size());
+        for (const auto& argument : task.arguments) {
+          argv.push_back(argument.Get(isolate_));
+        }
+      }
       v8::Local<v8::Value> result;
-      const int argc = task.animation_frame ? 1 : 0;
       if (!callback
-               ->Call(context, context->Global(), argc,
-                      task.animation_frame ? argv : nullptr)
+               ->Call(context, context->Global(),
+                      static_cast<int>(argv.size()),
+                      argv.empty() ? nullptr : argv.data())
                .ToLocal(&result)) {
         last_error_ = FormatException(isolate_, &try_catch);
         draining_tasks_ = false;
@@ -536,25 +789,65 @@ bool ScriptEngine::DrainPendingTasks() {
         return false;
       }
     }
-  }
 
-  std::cerr << "[canvas_engine] DrainPendingTasks reached " << kMaxDrainRounds
-            << " rounds, " << pending_tasks_.size()
-            << " task(s) deferred" << std::endl;
-  draining_tasks_ = false;
-  return true;
+    if (advances_frame) {
+      clock_offset_ms_ += kFrameDurationMs;
+      virtual_advance_ms += kFrameDurationMs;
+    }
+
+    const auto is_frame_task = [](const PendingTask& task) {
+      return task.cancelled || task.animation_frame;
+    };
+    const bool only_frame_tasks_pending =
+        std::all_of(ready_tasks.begin(), ready_tasks.end(), is_frame_task) &&
+        std::all_of(pending_tasks_.begin(), pending_tasks_.end(),
+                    is_frame_task);
+    if (advances_frame && only_frame_tasks_pending &&
+        draw_op_count_ == draw_ops_before_batch) {
+      if (++consecutive_idle_frame_batches_ >= 60) {
+        pending_tasks_.clear();
+        draining_tasks_ = false;
+        return true;
+      }
+    } else {
+      consecutive_idle_frame_batches_ = 0;
+    }
+  }
 }
 
 std::uint32_t ScriptEngine::EnqueueTask(v8::Local<v8::Function> callback,
                                         bool animation_frame,
-                                        Clock::time_point ready_at) {
+                                        double ready_at_ms,
+                                        const std::vector<v8::Local<v8::Value>>&
+                                            arguments) {
   PendingTask task;
   task.id = next_timer_id_++;
   task.animation_frame = animation_frame;
-  task.ready_at = ready_at;
+  task.ready_at_ms = ready_at_ms;
   task.callback.Reset(isolate_, callback);
+  task.arguments.reserve(arguments.size());
+  for (auto argument : arguments) {
+    task.arguments.emplace_back(isolate_, argument);
+  }
   pending_tasks_.push_back(std::move(task));
   return pending_tasks_.back().id;
+}
+
+std::uint32_t ScriptEngine::EnqueueNativeTask(std::function<void()> callback,
+                                              double ready_at_ms) {
+  PendingTask task;
+  task.id = next_timer_id_++;
+  task.ready_at_ms = ready_at_ms;
+  task.native = std::move(callback);
+  pending_tasks_.push_back(std::move(task));
+  return pending_tasks_.back().id;
+}
+
+double ScriptEngine::NowMs() const {
+  const auto elapsed =
+      std::chrono::steady_clock::now() - engine_start_time_;
+  return std::chrono::duration<double, std::milli>(elapsed).count() +
+         clock_offset_ms_;
 }
 
 void ScriptEngine::CancelTask(std::uint32_t task_id) {
@@ -562,6 +855,8 @@ void ScriptEngine::CancelTask(std::uint32_t task_id) {
     if (task.id == task_id) {
       task.cancelled = true;
       task.callback.Reset();
+      task.arguments.clear();
+      task.native = {};
       return;
     }
   }
@@ -1109,12 +1404,13 @@ void ScriptEngine::SetTimeoutCallback(
     ExtractDouble(info, 1, &delay_ms);
   }
   delay_ms = std::max(0.0, delay_ms);
-  const auto ready_at =
-      Clock::now() +
-      std::chrono::duration_cast<Clock::duration>(
-          std::chrono::duration<double, std::milli>(delay_ms));
-  const std::uint32_t timer_id =
-      engine->EnqueueTask(info[0].As<v8::Function>(), false, ready_at);
+  std::vector<v8::Local<v8::Value>> arguments;
+  for (int i = 2; i < info.Length(); ++i) {
+    arguments.push_back(info[i]);
+  }
+  const std::uint32_t timer_id = engine->EnqueueTask(
+      info[0].As<v8::Function>(), false, engine->NowMs() + delay_ms,
+      arguments);
   info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(isolate, timer_id));
 }
 
@@ -1138,8 +1434,9 @@ void ScriptEngine::RequestAnimationFrameCallback(
   }
 
   auto* engine = From(isolate);
-  const std::uint32_t timer_id =
-      engine->EnqueueTask(info[0].As<v8::Function>(), true, Clock::now());
+  const std::uint32_t timer_id = engine->EnqueueTask(
+      info[0].As<v8::Function>(), true,
+      std::max(engine->NowMs(), engine->next_frame_ms_));
   info.GetReturnValue().Set(v8::Integer::NewFromUnsigned(isolate, timer_id));
 }
 
@@ -1155,7 +1452,9 @@ void ScriptEngine::CancelAnimationFrameCallback(
 
 void ScriptEngine::PerformanceNowCallback(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  info.GetReturnValue().Set(v8::Number::New(info.GetIsolate(), NowMilliseconds()));
+  auto* engine = From(info.GetIsolate());
+  info.GetReturnValue().Set(
+      v8::Number::New(info.GetIsolate(), engine->NowMs()));
 }
 
 void ScriptEngine::HandleCountsCallback(
@@ -1271,7 +1570,11 @@ void ScriptEngine::CanvasGetContext(
   auto context = isolate->GetCurrentContext();
   if (!canvas->context_handle) {
     canvas->context_handle = std::make_unique<ContextHandle>(
-        std::make_unique<Canvas2DContext>(canvas->surface));
+        std::make_unique<Canvas2DContext>(canvas->surface, [engine]() {
+          if (engine) {
+            engine->RecordDrawOp();
+          }
+        }));
   }
 
   if (canvas->context_object.IsEmpty()) {
@@ -1328,7 +1631,8 @@ void ScriptEngine::CanvasWidthGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* canvas =
-      Unwrap<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+      Unwrap<CanvasHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kCanvasHandleTag);
   if (!canvas) {
     return;
   }
@@ -1337,9 +1641,11 @@ void ScriptEngine::CanvasWidthGetter(
 
 void ScriptEngine::CanvasWidthSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
   auto* canvas =
-      Unwrap<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+      Unwrap<CanvasHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kCanvasHandleTag);
   if (!canvas) {
     return;
   }
@@ -1351,6 +1657,9 @@ void ScriptEngine::CanvasWidthSetter(
     return;
   }
 
+  if (auto* engine = From(info.GetIsolate())) {
+    engine->RecordDrawOp();
+  }
   if (canvas->context_handle) {
     canvas->context_handle->context->ResetState();
   }
@@ -1360,7 +1669,8 @@ void ScriptEngine::CanvasHeightGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* canvas =
-      Unwrap<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+      Unwrap<CanvasHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kCanvasHandleTag);
   if (!canvas) {
     return;
   }
@@ -1369,9 +1679,11 @@ void ScriptEngine::CanvasHeightGetter(
 
 void ScriptEngine::CanvasHeightSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
   auto* canvas =
-      Unwrap<CanvasHandle>(info.GetIsolate(), info.HolderV2(), kCanvasHandleTag);
+      Unwrap<CanvasHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kCanvasHandleTag);
   if (!canvas) {
     return;
   }
@@ -1383,6 +1695,9 @@ void ScriptEngine::CanvasHeightSetter(
     return;
   }
 
+  if (auto* engine = From(info.GetIsolate())) {
+    engine->RecordDrawOp();
+  }
   if (canvas->context_handle) {
     canvas->context_handle->context->ResetState();
   }
@@ -1443,7 +1758,8 @@ void ScriptEngine::ImageWidthGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle || !handle->asset) {
     info.GetReturnValue().Set(0);
     return;
@@ -1455,7 +1771,8 @@ void ScriptEngine::ImageHeightGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle || !handle->asset) {
     info.GetReturnValue().Set(0);
     return;
@@ -1467,7 +1784,8 @@ void ScriptEngine::ImageSrcGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle) {
     return;
   }
@@ -1476,9 +1794,11 @@ void ScriptEngine::ImageSrcGetter(
 
 void ScriptEngine::ImageSrcSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle || !value->IsString()) {
     ThrowTypeError(info.GetIsolate(), "Image.src must be a string");
     return;
@@ -1486,40 +1806,72 @@ void ScriptEngine::ImageSrcSetter(
 
   auto* engine = From(info.GetIsolate());
   handle->src = ToStdString(info.GetIsolate(), value);
+  const std::uint64_t generation = ++handle->source_generation;
   handle->asset.reset();
   handle->complete = false;
   handle->failed = false;
 
-  const auto resolved = engine->ResolveScriptPath(handle->src);
-  handle->asset = ImageAsset::LoadFromFile(resolved.string());
+  if (StartsWithCaseInsensitive(handle->src, "data:")) {
+    std::vector<std::uint8_t> encoded;
+    if (DecodeDataUrl(handle->src, &encoded)) {
+      handle->asset = ImageAsset::LoadFromEncodedBytes(
+          std::span<const std::uint8_t>(encoded.data(), encoded.size()),
+          handle->src);
+    }
+  } else if (StartsWithCaseInsensitive(handle->src, "http://") ||
+             StartsWithCaseInsensitive(handle->src, "https://")) {
+    static bool http_warning_printed = false;
+    if (!http_warning_printed) {
+      std::cerr << "[canvas_engine] HTTP(S) image loading is unsupported "
+                   "without network access"
+                << std::endl;
+      http_warning_printed = true;
+    }
+  } else {
+    const auto resolved = engine->ResolveScriptPath(handle->src);
+    handle->asset = ImageAsset::LoadFromFile(resolved.string());
+  }
   handle->complete = true;
   handle->failed = !handle->asset;
 
-  auto context = info.GetIsolate()->GetCurrentContext();
-  auto self = handle->object.Get(info.GetIsolate());
-  v8::TryCatch try_catch(info.GetIsolate());
-  v8::Local<v8::Value> unused;
-  if (handle->asset && !handle->onload.IsEmpty()) {
-    auto callback = handle->onload.Get(info.GetIsolate());
-    if (!callback->Call(context, self, 0, nullptr).ToLocal(&unused)) {
-      ThrowError(info.GetIsolate(), FormatException(info.GetIsolate(), &try_catch));
-    }
-    return;
-  }
+  const std::uint64_t image_id = handle->id;
+  engine->EnqueueNativeTask(
+      [engine, image_id, generation]() {
+        const auto it = engine->images_.find(image_id);
+        if (it == engine->images_.end()) {
+          return;
+        }
+        auto* current = it->second.get();
+        if (current->source_generation != generation) {
+          return;
+        }
 
-  if (!handle->asset && !handle->onerror.IsEmpty()) {
-    auto callback = handle->onerror.Get(info.GetIsolate());
-    if (!callback->Call(context, self, 0, nullptr).ToLocal(&unused)) {
-      ThrowError(info.GetIsolate(), FormatException(info.GetIsolate(), &try_catch));
-    }
-  }
+        auto& callback_handle =
+            current->failed ? current->onerror : current->onload;
+        if (callback_handle.IsEmpty()) {
+          return;
+        }
+        v8::Local<v8::Function> callback =
+            callback_handle.Get(engine->isolate_);
+        v8::Local<v8::Object> self = current->object.Get(engine->isolate_);
+        v8::TryCatch try_catch(engine->isolate_);
+        v8::Local<v8::Value> unused;
+        if (!callback
+                 ->Call(engine->context_.Get(engine->isolate_), self, 0, nullptr)
+                 .ToLocal(&unused)) {
+          engine->last_error_ =
+              FormatException(engine->isolate_, &try_catch);
+        }
+      },
+      engine->NowMs());
 }
 
 void ScriptEngine::ImageCompleteGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle) {
     return;
   }
@@ -1530,7 +1882,8 @@ void ScriptEngine::ImageOnloadGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle || handle->onload.IsEmpty()) {
     return;
   }
@@ -1539,9 +1892,11 @@ void ScriptEngine::ImageOnloadGetter(
 
 void ScriptEngine::ImageOnloadSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle) {
     return;
   }
@@ -1552,23 +1907,14 @@ void ScriptEngine::ImageOnloadSetter(
   }
 
   handle->onload.Reset(info.GetIsolate(), value.As<v8::Function>());
-  if (handle->complete && !handle->failed && handle->asset) {
-    auto context = info.GetIsolate()->GetCurrentContext();
-    auto self = handle->object.Get(info.GetIsolate());
-    auto callback = handle->onload.Get(info.GetIsolate());
-    v8::TryCatch try_catch(info.GetIsolate());
-    v8::Local<v8::Value> unused;
-    if (!callback->Call(context, self, 0, nullptr).ToLocal(&unused)) {
-      ThrowError(info.GetIsolate(), FormatException(info.GetIsolate(), &try_catch));
-    }
-  }
 }
 
 void ScriptEngine::ImageOnerrorGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle || handle->onerror.IsEmpty()) {
     return;
   }
@@ -1577,9 +1923,11 @@ void ScriptEngine::ImageOnerrorGetter(
 
 void ScriptEngine::ImageOnerrorSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
   auto* handle =
-      Unwrap<ImageHandle>(info.GetIsolate(), info.HolderV2(), kImageHandleTag);
+      Unwrap<ImageHandle>(info.GetIsolate(),
+          V8Compat::Holder(info), kImageHandleTag);
   if (!handle) {
     return;
   }
@@ -1590,22 +1938,13 @@ void ScriptEngine::ImageOnerrorSetter(
   }
 
   handle->onerror.Reset(info.GetIsolate(), value.As<v8::Function>());
-  if (handle->complete && handle->failed) {
-    auto context = info.GetIsolate()->GetCurrentContext();
-    auto self = handle->object.Get(info.GetIsolate());
-    auto callback = handle->onerror.Get(info.GetIsolate());
-    v8::TryCatch try_catch(info.GetIsolate());
-    v8::Local<v8::Value> unused;
-    if (!callback->Call(context, self, 0, nullptr).ToLocal(&unused)) {
-      ThrowError(info.GetIsolate(), FormatException(info.GetIsolate(), &try_catch));
-    }
-  }
 }
 
 void ScriptEngine::FillStyleGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1616,8 +1955,10 @@ void ScriptEngine::FillStyleGetter(
 
 void ScriptEngine::FillStyleSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1634,12 +1975,12 @@ void ScriptEngine::FillStyleSetter(
     auto object = value.As<v8::Object>();
     if (auto* gradient = engine->LiveGradientHandle(Unwrap<GradientHandle>(
             info.GetIsolate(), object, kGradientHandleTag))) {
-      handle->context->SetFillShader(gradient->BuildShader(), "[object CanvasGradient]");
+      handle->context->SetFillSource(gradient->source);
       return;
     }
     if (auto* pattern = engine->LivePatternHandle(Unwrap<PatternHandle>(
             info.GetIsolate(), object, kPatternHandleTag))) {
-      handle->context->SetFillShader(pattern->shader, pattern->description);
+      handle->context->SetFillSource(pattern->source);
       return;
     }
   }
@@ -1651,7 +1992,8 @@ void ScriptEngine::FillStyleSetter(
 void ScriptEngine::StrokeStyleGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1662,8 +2004,10 @@ void ScriptEngine::StrokeStyleGetter(
 
 void ScriptEngine::StrokeStyleSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1680,13 +2024,12 @@ void ScriptEngine::StrokeStyleSetter(
     auto object = value.As<v8::Object>();
     if (auto* gradient = engine->LiveGradientHandle(Unwrap<GradientHandle>(
             info.GetIsolate(), object, kGradientHandleTag))) {
-      handle->context->SetStrokeShader(gradient->BuildShader(),
-                                       "[object CanvasGradient]");
+      handle->context->SetStrokeSource(gradient->source);
       return;
     }
     if (auto* pattern = engine->LivePatternHandle(Unwrap<PatternHandle>(
             info.GetIsolate(), object, kPatternHandleTag))) {
-      handle->context->SetStrokeShader(pattern->shader, pattern->description);
+      handle->context->SetStrokeSource(pattern->source);
       return;
     }
   }
@@ -1698,7 +2041,8 @@ void ScriptEngine::StrokeStyleSetter(
 void ScriptEngine::LineWidthGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1708,8 +2052,10 @@ void ScriptEngine::LineWidthGetter(
 
 void ScriptEngine::LineWidthSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1725,7 +2071,8 @@ void ScriptEngine::LineWidthSetter(
 void ScriptEngine::FontGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1735,22 +2082,24 @@ void ScriptEngine::FontGetter(
 
 void ScriptEngine::FontSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
   }
-  if (!value->IsString() ||
-      !handle->context->SetFont(ToStdString(info.GetIsolate(), value))) {
-    ThrowTypeError(info.GetIsolate(), "font must contain a valid px size");
+  if (value->IsString()) {
+    handle->context->SetFont(ToStdString(info.GetIsolate(), value));
   }
 }
 
 void ScriptEngine::TextAlignGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1761,8 +2110,10 @@ void ScriptEngine::TextAlignGetter(
 
 void ScriptEngine::TextAlignSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1776,7 +2127,8 @@ void ScriptEngine::TextAlignSetter(
 void ScriptEngine::TextBaselineGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1787,8 +2139,10 @@ void ScriptEngine::TextBaselineGetter(
 
 void ScriptEngine::TextBaselineSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1803,7 +2157,8 @@ void ScriptEngine::TextBaselineSetter(
 void ScriptEngine::GlobalAlphaGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1813,8 +2168,10 @@ void ScriptEngine::GlobalAlphaGetter(
 
 void ScriptEngine::GlobalAlphaSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1829,7 +2186,8 @@ void ScriptEngine::GlobalAlphaSetter(
 void ScriptEngine::GlobalCompositeOperationGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1840,8 +2198,10 @@ void ScriptEngine::GlobalCompositeOperationGetter(
 
 void ScriptEngine::GlobalCompositeOperationSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1857,7 +2217,8 @@ void ScriptEngine::GlobalCompositeOperationSetter(
 void ScriptEngine::LineCapGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1868,8 +2229,10 @@ void ScriptEngine::LineCapGetter(
 
 void ScriptEngine::LineCapSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1883,7 +2246,8 @@ void ScriptEngine::LineCapSetter(
 void ScriptEngine::LineJoinGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1894,8 +2258,10 @@ void ScriptEngine::LineJoinGetter(
 
 void ScriptEngine::LineJoinSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1909,7 +2275,8 @@ void ScriptEngine::LineJoinSetter(
 void ScriptEngine::MiterLimitGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1919,8 +2286,10 @@ void ScriptEngine::MiterLimitGetter(
 
 void ScriptEngine::MiterLimitSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1935,7 +2304,8 @@ void ScriptEngine::MiterLimitSetter(
 void ScriptEngine::ShadowBlurGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1945,8 +2315,10 @@ void ScriptEngine::ShadowBlurGetter(
 
 void ScriptEngine::ShadowBlurSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1961,7 +2333,8 @@ void ScriptEngine::ShadowBlurSetter(
 void ScriptEngine::ShadowColorGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1972,8 +2345,10 @@ void ScriptEngine::ShadowColorGetter(
 
 void ScriptEngine::ShadowColorSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1987,7 +2362,8 @@ void ScriptEngine::ShadowColorSetter(
 void ScriptEngine::ShadowOffsetXGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -1997,8 +2373,10 @@ void ScriptEngine::ShadowOffsetXGetter(
 
 void ScriptEngine::ShadowOffsetXSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2014,7 +2392,8 @@ void ScriptEngine::ShadowOffsetXSetter(
 void ScriptEngine::ShadowOffsetYGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2024,8 +2403,10 @@ void ScriptEngine::ShadowOffsetYGetter(
 
 void ScriptEngine::ShadowOffsetYSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2041,7 +2422,8 @@ void ScriptEngine::ShadowOffsetYSetter(
 void ScriptEngine::LineDashOffsetGetter(
     v8::Local<v8::Name> property,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2051,8 +2433,10 @@ void ScriptEngine::LineDashOffsetGetter(
 
 void ScriptEngine::LineDashOffsetSetter(
     v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-    const v8::PropertyCallbackInfo<void>& info) {
-  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(), info.HolderV2(),
+    const V8Compat::SetterInfo& info) {
+  V8Compat::SetSetterSuccess(info);
+  auto* handle = Unwrap<ContextHandle>(info.GetIsolate(),
+      V8Compat::Holder(info),
                                        kContextHandleTag);
   if (!handle) {
     return;
@@ -2406,17 +2790,51 @@ void ScriptEngine::CtxClosePath(
 }
 
 void ScriptEngine::CtxClip(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  if (auto* handle =
-          Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag)) {
-    handle->context->Clip();
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  if (!handle) {
+    return;
   }
+
+  SkPathFillType fill_type = SkPathFillType::kWinding;
+  if (info.Length() > 0 && !info[0]->IsUndefined()) {
+    if (!info[0]->IsString()) {
+      ThrowTypeError(info.GetIsolate(), "clip fillRule must be nonzero or evenodd");
+      return;
+    }
+    const std::string fill_rule = ToStdString(info.GetIsolate(), info[0]);
+    if (fill_rule == "evenodd") {
+      fill_type = SkPathFillType::kEvenOdd;
+    } else if (fill_rule != "nonzero") {
+      ThrowTypeError(info.GetIsolate(), "clip fillRule must be nonzero or evenodd");
+      return;
+    }
+  }
+  handle->context->Clip(fill_type);
 }
 
 void ScriptEngine::CtxFill(const v8::FunctionCallbackInfo<v8::Value>& info) {
-  if (auto* handle =
-          Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag)) {
-    handle->context->Fill();
+  auto* handle =
+      Unwrap<ContextHandle>(info.GetIsolate(), info.This(), kContextHandleTag);
+  if (!handle) {
+    return;
   }
+
+  SkPathFillType fill_type = SkPathFillType::kWinding;
+  if (info.Length() > 0 && !info[0]->IsUndefined()) {
+    if (!info[0]->IsString()) {
+      ThrowTypeError(info.GetIsolate(), "fill fillRule must be nonzero or evenodd");
+      return;
+    }
+    const std::string fill_rule = ToStdString(info.GetIsolate(), info[0]);
+    if (fill_rule == "evenodd") {
+      fill_type = SkPathFillType::kEvenOdd;
+    } else if (fill_rule != "nonzero") {
+      ThrowTypeError(info.GetIsolate(), "fill fillRule must be nonzero or evenodd");
+      return;
+    }
+  }
+  handle->context->Fill(fill_type);
 }
 
 void ScriptEngine::CtxStroke(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -2583,13 +3001,12 @@ void ScriptEngine::CtxCreateLinearGradient(
   auto it = engine->gradients_
                 .emplace(handle_id,
                          std::make_unique<GradientHandle>(
-                             handle_id, GradientHandle::Kind::kLinear))
+                             handle_id,
+                             std::make_shared<GradientSource>(
+                                 GradientSource::Kind::kLinear, x0, y0, 0.0f,
+                                 x1, y1, 0.0f)))
                 .first;
   auto* gradient = it->second.get();
-  gradient->x0 = x0;
-  gradient->y0 = y0;
-  gradient->x1 = x1;
-  gradient->y1 = y1;
 
   auto context = info.GetIsolate()->GetCurrentContext();
   auto object = engine->GetGradientTemplate()
@@ -2633,15 +3050,12 @@ void ScriptEngine::CtxCreateRadialGradient(
   auto it = engine->gradients_
                 .emplace(handle_id,
                          std::make_unique<GradientHandle>(
-                             handle_id, GradientHandle::Kind::kRadial))
+                             handle_id,
+                             std::make_shared<GradientSource>(
+                                 GradientSource::Kind::kRadial, x0, y0, r0, x1,
+                                 y1, r1)))
                 .first;
   auto* gradient = it->second.get();
-  gradient->x0 = x0;
-  gradient->y0 = y0;
-  gradient->r0 = r0;
-  gradient->x1 = x1;
-  gradient->y1 = y1;
-  gradient->r1 = r1;
 
   auto context = info.GetIsolate()->GetCurrentContext();
   auto object = engine->GetGradientTemplate()
@@ -2714,14 +3128,16 @@ void ScriptEngine::CtxCreatePattern(
     local_matrix.setScale(1.0f / source_pixel_ratio, 1.0f / source_pixel_ratio);
   }
 
-  pattern->shader = image->makeShader(
+  auto shader = image->makeShader(
       RepeatModeToTileMode(repeat, true), RepeatModeToTileMode(repeat, false),
       SkSamplingOptions(SkFilterMode::kLinear), &local_matrix);
-  if (!pattern->shader) {
+  if (!shader) {
     engine->patterns_.erase(handle_id);
     info.GetReturnValue().Set(v8::Null(info.GetIsolate()));
     return;
   }
+  pattern->source = std::make_shared<FixedShaderSource>(
+      std::move(shader), "[object CanvasPattern]");
 
   auto context = info.GetIsolate()->GetCurrentContext();
   auto object = engine->GetPatternTemplate()
@@ -2877,7 +3293,8 @@ void ScriptEngine::GradientAddColorStop(
     return;
   }
 
-  gradient->stops.push_back({std::clamp(offset, 0.0f, 1.0f), parsed.value()});
+  gradient->source->AddColorStop(std::clamp(offset, 0.0f, 1.0f),
+                                 parsed.value());
 }
 
 void ScriptEngine::CtxMeasureText(
