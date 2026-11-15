@@ -140,6 +140,27 @@ ECharts 动画；渲染会等待 `finished` 事件，或等待 3000 毫秒虚拟
 脚本可通过 `canvas.saveToPng(path, "fast")` 设置预设，或通过
 `canvas.saveToPng(path, false, "fast")` 在 drain 标志之后设置预设。
 
+## 字体
+
+CMake 会下载固定版本的官方 Noto 字体：Noto Sans 2.015、Noto Serif 2.015、
+Noto Sans Mono 2.014，以及来自 CJK Sans 2.004 的 Noto Sans SC。解压前会
+校验归档文件的 SHA-256。所需静态字体文件和许可证文本会复制到
+`build/<preset>/fonts`，并随安装放在二进制旁的 `bin/fonts` 目录中；字体
+二进制文件不会提交到 Git，许可证会随字体一起安装。设置
+`CANVAS_ENGINE_FONT_CACHE` 可在多个构建之间共享下载归档；默认缓存目录为
+`build/<preset>/font-cache`。
+
+默认使用内置字体以保证确定性文本渲染。字体目录优先级为
+`--font-dir`、`CANVAS_ENGINE_FONT_DIR`、`<可执行文件目录>/fonts`，最后是
+构建时字体目录。`--system-fonts` 允许在缺少字体或字形时回退到系统字体
+管理器；使用系统字体的输出会受到主机已安装字体影响。
+`-DCANVAS_ENGINE_BUNDLED_FONTS=OFF` 会跳过下载，并警告系统字体渲染不具
+确定性。
+
+确定性保证适用于固定的 Skia 版本、上述固定字体版本和相同渲染选项。
+Skia 版本变化可能改变栅格化结果。文本回退按 Unicode 码点进行；此构建
+不会执行复杂文字脚本的字形整形。
+
 ## 与浏览器对比
 
 启动一个本地 dev 服务，上半部分是**浏览器原生 ECharts canvas 渲染**，下半部分是**当前后端导出的 PNG**，方便上下对比视觉效果：

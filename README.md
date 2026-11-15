@@ -144,6 +144,30 @@ a preset as the second argument to
 `canvas.saveToPng(path, "fast")`, or after the drain flag as
 `canvas.saveToPng(path, false, "fast")`.
 
+## Fonts
+
+CMake downloads pinned official Noto releases for Sans 2.015, Serif 2.015,
+Sans Mono 2.014, and Noto Sans SC from CJK Sans 2.004. Archive SHA-256 values
+are checked before extraction. The selected static font files and their
+license texts are copied to `build/<preset>/fonts` and installed beside the
+binary under `bin/fonts`; font binaries are not tracked in Git. The licenses
+are included with the installed fonts. Set `CANVAS_ENGINE_FONT_CACHE` to share
+downloaded archives across builds; by default, the cache is
+`build/<preset>/font-cache`.
+
+Bundled fonts are used by default for deterministic text rendering. Font
+directory resolution is `--font-dir`, `CANVAS_ENGINE_FONT_DIR`,
+`<executable directory>/fonts`, then the build-time font directory.
+`--system-fonts` permits system-manager fallback for missing families or
+glyphs; output using that fallback depends on the host's installed fonts.
+`-DCANVAS_ENGINE_BUNDLED_FONTS=OFF` skips the downloads and warns that
+system-font rendering is nondeterministic.
+
+The deterministic guarantee is for a fixed Skia version, these pinned font
+versions, and the same rendering options. Skia version changes can alter
+rasterization. Text fallback is per Unicode codepoint; this build does not
+perform complex-script shaping.
+
 ## Compare against the browser
 
 Spin up a local dev server that renders the **native browser ECharts canvas** on top and the **PNG exported by this backend** below, so you can compare them visually:
