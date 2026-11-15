@@ -99,7 +99,8 @@ std::shared_ptr<ImageAsset> ImageAsset::LoadFromEncodedBytes(
   }
 
   CGImageRef cg_image = CGImageSourceCreateImageAtIndex(
-      static_cast<CGImageSourceRef>(source_ref.value), 0, nullptr);
+      static_cast<CGImageSourceRef>(const_cast<void*>(source_ref.value)), 0,
+      nullptr);
   if (cg_image == nullptr) {
     return nullptr;
   }

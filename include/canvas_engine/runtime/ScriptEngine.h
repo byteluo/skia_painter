@@ -12,6 +12,8 @@
 #include "libplatform/libplatform.h"
 #include "v8.h"
 
+#include "canvas_engine/runtime/V8Compat.h"
+
 namespace canvas_engine {
 
 class ScriptEngine {
@@ -90,12 +92,12 @@ class ScriptEngine {
                                 const v8::PropertyCallbackInfo<v8::Value>& info);
   static void CanvasWidthSetter(v8::Local<v8::Name> property,
                                 v8::Local<v8::Value> value,
-                                const v8::PropertyCallbackInfo<void>& info);
+                                const V8Compat::SetterInfo& info);
   static void CanvasHeightGetter(v8::Local<v8::Name> property,
                                  const v8::PropertyCallbackInfo<v8::Value>& info);
   static void CanvasHeightSetter(v8::Local<v8::Name> property,
                                  v8::Local<v8::Value> value,
-                                 const v8::PropertyCallbackInfo<void>& info);
+                                 const V8Compat::SetterInfo& info);
   static void CanvasSetAttribute(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CanvasAddEventListener(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CanvasRemoveEventListener(const v8::FunctionCallbackInfo<v8::Value>& info);
@@ -108,102 +110,102 @@ class ScriptEngine {
                              const v8::PropertyCallbackInfo<v8::Value>& info);
   static void ImageSrcSetter(v8::Local<v8::Name> property,
                              v8::Local<v8::Value> value,
-                             const v8::PropertyCallbackInfo<void>& info);
+                             const V8Compat::SetterInfo& info);
   static void ImageCompleteGetter(v8::Local<v8::Name> property,
                                   const v8::PropertyCallbackInfo<v8::Value>& info);
   static void ImageOnloadGetter(v8::Local<v8::Name> property,
                                 const v8::PropertyCallbackInfo<v8::Value>& info);
   static void ImageOnloadSetter(v8::Local<v8::Name> property,
                                 v8::Local<v8::Value> value,
-                                const v8::PropertyCallbackInfo<void>& info);
+                                const V8Compat::SetterInfo& info);
   static void ImageOnerrorGetter(v8::Local<v8::Name> property,
                                  const v8::PropertyCallbackInfo<v8::Value>& info);
   static void ImageOnerrorSetter(v8::Local<v8::Name> property,
                                  v8::Local<v8::Value> value,
-                                 const v8::PropertyCallbackInfo<void>& info);
+                                 const V8Compat::SetterInfo& info);
 
   static void FillStyleGetter(v8::Local<v8::Name> property,
                               const v8::PropertyCallbackInfo<v8::Value>& info);
   static void FillStyleSetter(v8::Local<v8::Name> property,
                               v8::Local<v8::Value> value,
-                              const v8::PropertyCallbackInfo<void>& info);
+                              const V8Compat::SetterInfo& info);
   static void StrokeStyleGetter(v8::Local<v8::Name> property,
                                 const v8::PropertyCallbackInfo<v8::Value>& info);
   static void StrokeStyleSetter(v8::Local<v8::Name> property,
                                 v8::Local<v8::Value> value,
-                                const v8::PropertyCallbackInfo<void>& info);
+                                const V8Compat::SetterInfo& info);
   static void LineWidthGetter(v8::Local<v8::Name> property,
                               const v8::PropertyCallbackInfo<v8::Value>& info);
   static void LineWidthSetter(v8::Local<v8::Name> property,
                               v8::Local<v8::Value> value,
-                              const v8::PropertyCallbackInfo<void>& info);
+                              const V8Compat::SetterInfo& info);
   static void FontGetter(v8::Local<v8::Name> property,
                          const v8::PropertyCallbackInfo<v8::Value>& info);
   static void FontSetter(v8::Local<v8::Name> property,
                          v8::Local<v8::Value> value,
-                         const v8::PropertyCallbackInfo<void>& info);
+                         const V8Compat::SetterInfo& info);
   static void TextAlignGetter(v8::Local<v8::Name> property,
                               const v8::PropertyCallbackInfo<v8::Value>& info);
   static void TextAlignSetter(v8::Local<v8::Name> property,
                               v8::Local<v8::Value> value,
-                              const v8::PropertyCallbackInfo<void>& info);
+                              const V8Compat::SetterInfo& info);
   static void TextBaselineGetter(v8::Local<v8::Name> property,
                                  const v8::PropertyCallbackInfo<v8::Value>& info);
   static void TextBaselineSetter(v8::Local<v8::Name> property,
                                  v8::Local<v8::Value> value,
-                                 const v8::PropertyCallbackInfo<void>& info);
+                                 const V8Compat::SetterInfo& info);
   static void GlobalAlphaGetter(v8::Local<v8::Name> property,
                                 const v8::PropertyCallbackInfo<v8::Value>& info);
   static void GlobalAlphaSetter(v8::Local<v8::Name> property,
                                 v8::Local<v8::Value> value,
-                                const v8::PropertyCallbackInfo<void>& info);
+                                const V8Compat::SetterInfo& info);
   static void GlobalCompositeOperationGetter(
       v8::Local<v8::Name> property,
       const v8::PropertyCallbackInfo<v8::Value>& info);
   static void GlobalCompositeOperationSetter(
       v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-      const v8::PropertyCallbackInfo<void>& info);
+      const V8Compat::SetterInfo& info);
   static void LineCapGetter(v8::Local<v8::Name> property,
                             const v8::PropertyCallbackInfo<v8::Value>& info);
   static void LineCapSetter(v8::Local<v8::Name> property,
                             v8::Local<v8::Value> value,
-                            const v8::PropertyCallbackInfo<void>& info);
+                            const V8Compat::SetterInfo& info);
   static void LineJoinGetter(v8::Local<v8::Name> property,
                              const v8::PropertyCallbackInfo<v8::Value>& info);
   static void LineJoinSetter(v8::Local<v8::Name> property,
                              v8::Local<v8::Value> value,
-                             const v8::PropertyCallbackInfo<void>& info);
+                             const V8Compat::SetterInfo& info);
   static void MiterLimitGetter(v8::Local<v8::Name> property,
                                const v8::PropertyCallbackInfo<v8::Value>& info);
   static void MiterLimitSetter(v8::Local<v8::Name> property,
                                v8::Local<v8::Value> value,
-                               const v8::PropertyCallbackInfo<void>& info);
+                               const V8Compat::SetterInfo& info);
   static void ShadowBlurGetter(v8::Local<v8::Name> property,
                                const v8::PropertyCallbackInfo<v8::Value>& info);
   static void ShadowBlurSetter(v8::Local<v8::Name> property,
                                v8::Local<v8::Value> value,
-                               const v8::PropertyCallbackInfo<void>& info);
+                               const V8Compat::SetterInfo& info);
   static void ShadowColorGetter(v8::Local<v8::Name> property,
                                 const v8::PropertyCallbackInfo<v8::Value>& info);
   static void ShadowColorSetter(v8::Local<v8::Name> property,
                                 v8::Local<v8::Value> value,
-                                const v8::PropertyCallbackInfo<void>& info);
+                                const V8Compat::SetterInfo& info);
   static void ShadowOffsetXGetter(v8::Local<v8::Name> property,
                                   const v8::PropertyCallbackInfo<v8::Value>& info);
   static void ShadowOffsetXSetter(v8::Local<v8::Name> property,
                                   v8::Local<v8::Value> value,
-                                  const v8::PropertyCallbackInfo<void>& info);
+                                  const V8Compat::SetterInfo& info);
   static void ShadowOffsetYGetter(v8::Local<v8::Name> property,
                                   const v8::PropertyCallbackInfo<v8::Value>& info);
   static void ShadowOffsetYSetter(v8::Local<v8::Name> property,
                                   v8::Local<v8::Value> value,
-                                  const v8::PropertyCallbackInfo<void>& info);
+                                  const V8Compat::SetterInfo& info);
   static void LineDashOffsetGetter(
       v8::Local<v8::Name> property,
       const v8::PropertyCallbackInfo<v8::Value>& info);
   static void LineDashOffsetSetter(
       v8::Local<v8::Name> property, v8::Local<v8::Value> value,
-      const v8::PropertyCallbackInfo<void>& info);
+      const V8Compat::SetterInfo& info);
 
   static void CtxSave(const v8::FunctionCallbackInfo<v8::Value>& info);
   static void CtxRestore(const v8::FunctionCallbackInfo<v8::Value>& info);
