@@ -24,6 +24,9 @@ class EChartsRenderer {
   bool Render(const std::string& option_json,
               const RenderOptions& options);
   bool RenderLastScriptResult(const RenderOptions& options);
+  bool RenderBatchRequest(const std::string& request_json,
+                          float default_dpr,
+                          std::string* response_json);
   const std::string& last_error() const { return last_error_; }
 
  private:

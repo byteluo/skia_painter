@@ -101,6 +101,72 @@ bool EChartsRenderer::RenderLastScriptResult(
                           options);
 }
 
+bool EChartsRenderer::RenderBatchRequest(const std::string& request_json,
+                                         float default_dpr,
+                                         std::string* response_json) {
+  if (response_json == nullptr) {
+    last_error_ = "batch response output must not be null";
+    return false;
+  }
+  if (!Initialize()) {
+    return false;
+  }
+  if (!(default_dpr > 0.0f) || !std::isfinite(default_dpr)) {
+    last_error_ = "batch default DPR must be positive";
+    return false;
+  }
+
+  const std::string source =
+      "((request, defaultDpr) => {"
+      "try {"
+      "if (!request || typeof request !== 'object' || Array.isArray(request)) "
+      "throw new Error('request must be an object');"
+      "if (typeof request.out !== 'string' || request.out.length === 0) "
+      "throw new Error('request.out must be a non-empty string');"
+      "const width = request.width === undefined ? 960 : request.width;"
+      "const height = request.height === undefined ? 540 : request.height;"
+      "const dpr = request.dpr === undefined ? defaultDpr : request.dpr;"
+      "if (!Number.isInteger(width) || width <= 0) "
+      "throw new Error('request.width must be a positive integer');"
+      "if (!Number.isInteger(height) || height <= 0) "
+      "throw new Error('request.height must be a positive integer');"
+      "if (typeof dpr !== 'number' || !Number.isFinite(dpr) || dpr <= 0) "
+      "throw new Error('request.dpr must be a positive number');"
+      "let option;"
+      "if (request.optionFile !== undefined) {"
+      "if (typeof request.optionFile !== 'string' || "
+      "request.optionFile.length === 0) "
+      "throw new Error('request.optionFile must be a non-empty string');"
+      "option = loadScript(request.optionFile);"
+      "} else if (Object.prototype.hasOwnProperty.call(request, 'option')) {"
+      "option = request.option;"
+      "} else {"
+      "throw new Error('request must include option or optionFile');"
+      "}"
+      "const theme = request.theme === undefined ? '' : request.theme;"
+      "const background = request.background === undefined ? '' : "
+      "request.background;"
+      "if (typeof theme !== 'string') "
+      "throw new Error('request.theme must be a string');"
+      "if (typeof background !== 'string') "
+      "throw new Error('request.background must be a string');"
+      "__renderChart(option, {width, height, dpr, theme, background}, "
+      "request.out);"
+      "return {ok: true, out: request.out};"
+      "} catch (error) {"
+      "return {ok: false, error: String(error && error.message || error)};"
+      "}"
+      "})(JSON.parse(" +
+      QuoteJsString(request_json) + ")," + FloatLiteral(default_dpr) + ");";
+  if (!engine_.RunScriptSource(source, "<echarts-batch>")) {
+    last_error_ = engine_.last_error();
+    return false;
+  }
+  *response_json = engine_.last_result_json();
+  last_error_.clear();
+  return true;
+}
+
 bool EChartsRenderer::RenderExpression(
     const std::string& option_expression,
     const RenderOptions& options) {
