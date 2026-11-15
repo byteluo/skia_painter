@@ -53,7 +53,62 @@ runs:
     - name: Build Skia (minimal target set)
       shell: bash
       run: |
-        if [[ -f "third_party/skia/bazel-bin/src/core/libcore.a" ]]; then
+        skia_targets=(
+          //:core
+          //src/base:base
+          //src/codec:any_decoder
+          //src/encode:encoder_common
+          //src/encode:icc_support
+          //src/encode:png_encode
+          //src/encode:png_encode_base
+          //src/ports:fontmgr_fontconfig
+          //src/ports:freetype_support
+          //src/ports:typeface_proxy
+          //src/utils:char_to_glyphcache
+          //modules/skcms:skcms
+          @freetype//:freetype
+        )
+        required_artifacts=(
+          src/core/libcore.a
+          src/base/libbase.a
+          src/encode/libpng_encode.a
+          src/encode/libpng_encode_base.a
+          src/encode/libencoder_common.a
+          src/encode/libicc_support.a
+          src/codec/libany_decoder.a
+          src/ports/libfontmgr_fontconfig.a
+          src/ports/libfreetype_support.a
+          src/ports/libtypeface_proxy.a
+          src/utils/libchar_to_glyphcache.a
+          external/+cpp_modules+freetype/libfreetype.a
+          modules/skcms/_objs/skcms_public/skcms.pic.o
+          modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o
+        )
+        cpu_artifacts=()
+        if [[ "$(uname -m)" == "x86_64" ]]; then
+          skia_targets+=(//src/opts:ml3)
+          cpu_artifacts+=(
+            src/opts/libml3.a
+            modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o
+            modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o
+          )
+        fi
+        cache_hit=true
+        for artifact in "${required_artifacts[@]}"; do
+          if [[ ! -f "third_party/skia/bazel-bin/${artifact}" ]]; then
+            cache_hit=false
+            break
+          fi
+        done
+        if [[ "${cache_hit}" == true ]]; then
+          for artifact in "${cpu_artifacts[@]}"; do
+            if [[ ! -f "third_party/skia/bazel-bin/${artifact}" ]]; then
+              cache_hit=false
+              break
+            fi
+          done
+        fi
+        if [[ "${cache_hit}" == true ]]; then
           echo "Skia artifacts found in cache"; exit 0
         fi
         cd third_party/skia
@@ -63,20 +118,7 @@ runs:
           build \
           --cxxopt=-std=c++20 \
           --cxxopt=-Wno-error=ignored-attributes \
-          //:core \
-          //src/base:base \
-          //src/codec:any_decoder \
-          //src/encode:encoder_common \
-          //src/encode:icc_support \
-          //src/encode:png_encode \
-          //src/encode:png_encode_base \
-          //src/ports:fontmgr_fontconfig \
-          //src/ports:freetype_support \
-          //src/ports:typeface_proxy \
-          //src/utils:char_to_glyphcache \
-          //src/opts:ml3 \
-          //modules/skcms:skcms \
-          @freetype//:freetype
+          "${skia_targets[@]}"
 
     - name: Cache V8 build
       id: cache-v8
