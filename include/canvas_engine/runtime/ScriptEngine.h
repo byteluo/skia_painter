@@ -9,7 +9,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "libplatform/libplatform.h"
 #include "v8.h"
 
 namespace canvas_engine {
@@ -245,7 +244,6 @@ class ScriptEngine {
   static void GradientAddColorStop(
       const v8::FunctionCallbackInfo<v8::Value>& info);
 
-  std::unique_ptr<v8::Platform> platform_;
   std::unique_ptr<v8::ArrayBuffer::Allocator> allocator_;
   v8::Isolate* isolate_ = nullptr;
   v8::Global<v8::Context> context_;

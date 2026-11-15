@@ -21,6 +21,7 @@
 #include "canvas_engine/canvas/CanvasSurface.h"
 #include "canvas_engine/canvas/ColorParser.h"
 #include "canvas_engine/canvas/ImageAsset.h"
+#include "canvas_engine/runtime/V8Platform.h"
 #include "include/effects/SkGradient.h"
 
 namespace canvas_engine {
@@ -55,47 +56,6 @@ v8::Local<v8::String> ToV8String(v8::Isolate* isolate,
 std::string ToStdString(v8::Isolate* isolate, v8::Local<v8::Value> value) {
   v8::String::Utf8Value utf8(isolate, value);
   return *utf8 ? *utf8 : "";
-}
-
-std::string DetectV8DataDir() {
-  constexpr const char* kCandidateDirs[] = {
-#if defined(__APPLE__)
-      "/opt/homebrew/opt/v8/libexec",
-      "/usr/local/opt/v8/libexec",
-#endif
-      "/usr/share/v8",
-      "/usr/lib/v8",
-      "/usr/local/lib/v8",
-      "/usr/local/share/v8",
-  };
-  for (const char* dir : kCandidateDirs) {
-    if (std::filesystem::exists(std::filesystem::path(dir) / "icudtl.dat")) {
-      return dir;
-    }
-  }
-
-  // Check V8_ICU_DATA_DIR environment variable as fallback
-  const char* env_dir = std::getenv("V8_ICU_DATA_DIR");
-  if (env_dir != nullptr &&
-      std::filesystem::exists(std::filesystem::path(env_dir) / "icudtl.dat")) {
-    return env_dir;
-  }
-
-  return {};
-}
-
-void V8FatalError(const char* location, int line, const char* message) {
-  std::cerr << "V8 fatal error";
-  if (location != nullptr) {
-    std::cerr << " at " << location;
-    if (line > 0) {
-      std::cerr << ":" << line;
-    }
-  }
-  if (message != nullptr) {
-    std::cerr << ": " << message;
-  }
-  std::cerr << std::endl;
 }
 
 bool ReadFile(const std::string& path, std::string* out_source) {
@@ -525,26 +485,7 @@ struct ScriptEngine::GradientHandle {
 };
 
 ScriptEngine::ScriptEngine() {
-  v8::V8::SetFatalErrorHandler(V8FatalError);
-
-  const std::string v8_data_dir = DetectV8DataDir();
-  if (!v8_data_dir.empty()) {
-    const auto icu_data_path =
-        (std::filesystem::path(v8_data_dir) / "icudtl.dat").string();
-    v8::V8::InitializeICU(icu_data_path.c_str());
-    const auto snapshot_path =
-        (std::filesystem::path(v8_data_dir) / "snapshot_blob.bin").string();
-    if (std::filesystem::exists(snapshot_path)) {
-      v8::V8::InitializeExternalStartupDataFromFile(snapshot_path.c_str());
-    }
-  } else {
-    v8::V8::InitializeICUDefaultLocation(nullptr);
-    v8::V8::InitializeExternalStartupData(nullptr);
-  }
-
-  platform_ = v8::platform::NewDefaultPlatform();
-  v8::V8::InitializePlatform(platform_.get());
-  v8::V8::Initialize();
+  V8Platform::Initialize();
 
   allocator_.reset(v8::ArrayBuffer::Allocator::NewDefaultAllocator());
 
@@ -579,8 +520,6 @@ ScriptEngine::~ScriptEngine() {
   isolate_->Dispose();
   isolate_ = nullptr;
   allocator_.reset();
-  v8::V8::Dispose();
-  v8::V8::DisposePlatform();
 }
 
 bool ScriptEngine::RunScriptFile(const std::string& script_path) {
