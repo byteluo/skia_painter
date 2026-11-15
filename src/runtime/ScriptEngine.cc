@@ -45,7 +45,8 @@ constexpr char kVirtualDateBootstrap[] = R"js(
 (() => {
   const NativeDate = Date;
   const performanceNow = performance.now;
-  const now = () => __canvasEngineClockEpochMs + performanceNow();
+  const epoch = __canvasEngineClockEpochMs;
+  const now = () => epoch + performanceNow();
   const VirtualDate = new Proxy(NativeDate, {
     apply() {
       return new NativeDate(now()).toString();
@@ -748,18 +749,6 @@ bool ScriptEngine::DrainPendingTasks() {
                     });
     const std::uint64_t draw_ops_before_batch = draw_op_count_;
     if (advances_frame) {
-      const double remaining_advance_ms =
-          kMaxVirtualAdvanceMs - virtual_advance_ms;
-      if (kFrameDurationMs > remaining_advance_ms) {
-        const std::size_t dropped_tasks =
-            ready_tasks.size() + pending_tasks_.size();
-        pending_tasks_.clear();
-        std::cerr << "[canvas_engine] DrainPendingTasks hit the "
-                  << kMaxVirtualAdvanceMs << "ms virtual advance cap, "
-                  << dropped_tasks << " task(s) dropped" << std::endl;
-        draining_tasks_ = false;
-        return true;
-      }
       next_frame_ms_ = batch_time_ms + kFrameDurationMs;
     }
 
@@ -813,11 +802,6 @@ bool ScriptEngine::DrainPendingTasks() {
         pending_tasks_.clear();
         return false;
       }
-    }
-
-    if (advances_frame) {
-      clock_offset_ms_ += kFrameDurationMs;
-      virtual_advance_ms += kFrameDurationMs;
     }
 
     const auto is_frame_task = [](const PendingTask& task) {

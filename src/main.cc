@@ -326,6 +326,7 @@ int RunCommand(int argc, char** argv, int first_argument) {
   bool expose_gc = false;
   bool realtime_clock = false;
   std::optional<double> epoch_ms;
+  std::string error_message;
   std::string script_path;
   for (int index = first_argument; index < argc; ++index) {
     const std::string argument(argv[index]);
