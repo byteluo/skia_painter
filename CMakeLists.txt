@@ -295,6 +295,13 @@ if(BUILD_TESTING)
     ${CMAKE_CURRENT_BINARY_DIR}/text_rotate_regression.js
     @ONLY
   )
+  set(TEXT_CJK_VISUAL_OUTPUT
+      "${CMAKE_CURRENT_BINARY_DIR}/test_output/text_cjk_visual.png")
+  configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/text_cjk_visual.js.in
+    ${CMAKE_CURRENT_BINARY_DIR}/text_cjk_visual.js
+    @ONLY
+  )
 
   add_test(
     NAME smoke
@@ -356,6 +363,39 @@ if(BUILD_TESTING)
   set_tests_properties(font_weight_regression PROPERTIES
     PASS_REGULAR_EXPRESSION "font_weight_regression ok"
   )
+
+  if(CANVAS_ENGINE_BUNDLED_FONTS)
+    add_test(
+      NAME text_metrics
+      COMMAND $<TARGET_FILE:canvas_engine>
+              ${CMAKE_CURRENT_SOURCE_DIR}/tests/text_metrics.js
+    )
+    set_tests_properties(text_metrics PROPERTIES
+      PASS_REGULAR_EXPRESSION "text_metrics ok"
+    )
+
+    add_test(
+      NAME text_cjk
+      COMMAND $<TARGET_FILE:canvas_engine>
+              ${CMAKE_CURRENT_SOURCE_DIR}/tests/text_cjk.js
+    )
+    set_tests_properties(text_cjk PROPERTIES
+      PASS_REGULAR_EXPRESSION "text_cjk ok"
+    )
+
+    add_test(
+      NAME font_dir_resolution
+      COMMAND ${CMAKE_COMMAND}
+              -DENGINE=$<TARGET_FILE:canvas_engine>
+              -DSOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+              -DTEST_OUTPUT=${CMAKE_CURRENT_BINARY_DIR}/test_output
+              -DVALID_FONT_DIR=${CANVAS_ENGINE_FONTS_DIR}
+              -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/font_dir_resolution.cmake
+    )
+    set_tests_properties(font_dir_resolution PROPERTIES
+      PASS_REGULAR_EXPRESSION "font_dir_resolution ok"
+    )
+  endif()
 
   add_test(
     NAME canvas_semantics
