@@ -61,6 +61,12 @@ std::string FloatLiteral(float value) {
   return stream.str();
 }
 
+std::string DoubleLiteral(double value) {
+  std::ostringstream stream;
+  stream << std::setprecision(17) << value;
+  return stream.str();
+}
+
 }  // namespace
 
 EChartsRenderer::EChartsRenderer(ScriptEngine& engine,
@@ -103,6 +109,7 @@ bool EChartsRenderer::RenderLastScriptResult(
 
 bool EChartsRenderer::RenderBatchRequest(const std::string& request_json,
                                          float default_dpr,
+                                         double default_settle_ms,
                                          std::string* response_json) {
   if (response_json == nullptr) {
     last_error_ = "batch response output must not be null";
@@ -115,9 +122,13 @@ bool EChartsRenderer::RenderBatchRequest(const std::string& request_json,
     last_error_ = "batch default DPR must be positive";
     return false;
   }
+  if (default_settle_ms < 0.0 || !std::isfinite(default_settle_ms)) {
+    last_error_ = "batch settle time must be non-negative";
+    return false;
+  }
 
   const std::string source =
-      "((request, defaultDpr) => {"
+      "((request, defaultDpr, defaultSettleMs) => {"
       "try {"
       "if (!request || typeof request !== 'object' || Array.isArray(request)) "
       "throw new Error('request must be an object');"
@@ -126,6 +137,7 @@ bool EChartsRenderer::RenderBatchRequest(const std::string& request_json,
       "const width = request.width === undefined ? 960 : request.width;"
       "const height = request.height === undefined ? 540 : request.height;"
       "const dpr = request.dpr === undefined ? defaultDpr : request.dpr;"
+      "const settleMs = defaultSettleMs;"
       "if (!Number.isInteger(width) || width <= 0) "
       "throw new Error('request.width must be a positive integer');"
       "if (!Number.isInteger(height) || height <= 0) "
@@ -150,14 +162,15 @@ bool EChartsRenderer::RenderBatchRequest(const std::string& request_json,
       "throw new Error('request.theme must be a string');"
       "if (typeof background !== 'string') "
       "throw new Error('request.background must be a string');"
-      "__renderChart(option, {width, height, dpr, theme, background}, "
+      "__renderChart(option, {width, height, dpr, settleMs, theme, background}, "
       "request.out);"
       "return {ok: true, out: request.out};"
       "} catch (error) {"
       "return {ok: false, error: String(error && error.message || error)};"
       "}"
       "})(JSON.parse(" +
-      QuoteJsString(request_json) + ")," + FloatLiteral(default_dpr) + ");";
+      QuoteJsString(request_json) + ")," + FloatLiteral(default_dpr) + "," +
+      DoubleLiteral(default_settle_ms) + ");";
   if (!engine_.RunScriptSource(source, "<echarts-batch>")) {
     last_error_ = engine_.last_error();
     return false;
@@ -175,6 +188,7 @@ bool EChartsRenderer::RenderExpression(
   }
   if (options.width <= 0 || options.height <= 0 ||
       !(options.dpr > 0.0f) || !std::isfinite(options.dpr) ||
+      options.settle_ms < 0.0 || !std::isfinite(options.settle_ms) ||
       options.output_path.empty()) {
     last_error_ =
         "render requires positive dimensions, DPR, and an output path";
@@ -193,6 +207,7 @@ bool EChartsRenderer::RenderExpression(
   std::ostringstream render_options;
   render_options << "{width:" << options.width << ",height:" << options.height
                  << ",dpr:" << FloatLiteral(options.dpr)
+                 << ",settleMs:" << DoubleLiteral(options.settle_ms)
                  << ",theme:" << QuoteJsString(options.theme)
                  << ",background:" << QuoteJsString(options.background)
                  << "}";

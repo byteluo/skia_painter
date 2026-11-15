@@ -12,6 +12,7 @@ struct RenderOptions {
   int width = 960;
   int height = 540;
   float dpr = 3.0f;
+  double settle_ms = 3000.0;
   std::string theme;
   std::string background;
 };
@@ -26,6 +27,7 @@ class EChartsRenderer {
   bool RenderLastScriptResult(const RenderOptions& options);
   bool RenderBatchRequest(const std::string& request_json,
                           float default_dpr,
+                          double default_settle_ms,
                           std::string* response_json);
   const std::string& last_error() const { return last_error_; }
 

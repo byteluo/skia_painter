@@ -16,7 +16,7 @@ set(request_two "{\"option\":${option_json},\"width\":320,\"height\":180,\"dpr\"
 file(WRITE "${requests_file}" "${request_one}\n${request_two}\n")
 
 execute_process(
-  COMMAND "${ENGINE}" batch --epoch-ms 1700000000000
+  COMMAND "${ENGINE}" batch --epoch-ms 1700000000000 --settle-ms 0
   WORKING_DIRECTORY "${SOURCE_ROOT}"
   INPUT_FILE "${requests_file}"
   RESULT_VARIABLE result

@@ -9,6 +9,7 @@ file(REMOVE "${output}")
 execute_process(
   COMMAND "${ENGINE}" render
           --epoch-ms 1700000000000
+          --settle-ms 0
           --width 320
           --height 180
           --dpr 1

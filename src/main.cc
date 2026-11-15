@@ -22,9 +22,9 @@ constexpr char kUsage[] =
     "[--epoch-ms n] <script.js>\n"
     "  canvas_engine render <option.json|option.js|-> -o <out.png> "
     "[--width 960] [--height 540] [--dpr 3] [--theme name] "
-    "[--echarts path] [--realtime-clock] [--epoch-ms n]\n"
+    "[--echarts path] [--realtime-clock] [--epoch-ms n] [--settle-ms n]\n"
     "  canvas_engine batch [--echarts path] [--realtime-clock] "
-    "[--epoch-ms n]\n"
+    "[--epoch-ms n] [--settle-ms n]\n"
     "  canvas_engine --help";
 
 struct RenderArguments {
@@ -37,6 +37,7 @@ struct RenderArguments {
   std::optional<std::string> echarts_path;
   bool realtime_clock = false;
   std::optional<double> epoch_ms;
+  double settle_ms = 3000.0;
   bool show_help = false;
 };
 
@@ -238,7 +239,7 @@ bool ParseRenderArguments(int argc,
     if (argument == "-o" || argument == "--width" ||
         argument == "--height" || argument == "--dpr" ||
         argument == "--theme" || argument == "--echarts" ||
-        argument == "--epoch-ms") {
+        argument == "--epoch-ms" || argument == "--settle-ms") {
       if (index + 1 >= argc) {
         *error_message = "missing value for " + argument;
         return false;
@@ -265,6 +266,12 @@ bool ParseRenderArguments(int argc,
         arguments->theme = value;
       } else if (argument == "--echarts") {
         arguments->echarts_path = value;
+      } else if (argument == "--settle-ms") {
+        if (!ParseFiniteDouble(value, &arguments->settle_ms) ||
+            arguments->settle_ms < 0.0) {
+          *error_message = "--settle-ms must be a non-negative number";
+          return false;
+        }
       } else {
         double epoch_ms = 0.0;
         if (!ParseFiniteDouble(value, &epoch_ms)) {
@@ -423,6 +430,7 @@ int RunRenderCommand(int argc, char** argv) {
   options.width = arguments.width;
   options.height = arguments.height;
   options.dpr = arguments.dpr;
+  options.settle_ms = arguments.settle_ms;
   options.theme = arguments.theme;
 
   if (std::filesystem::path(arguments.input).extension() == ".js") {
@@ -507,6 +515,7 @@ int RunBatchCommand(int argc, char** argv) {
   std::optional<std::string> requested_echarts_path;
   bool realtime_clock = false;
   std::optional<double> epoch_ms;
+  double settle_ms = 3000.0;
   std::string error_message;
   for (int index = 2; index < argc; ++index) {
     const std::string argument(argv[index]);
@@ -526,6 +535,14 @@ int RunBatchCommand(int argc, char** argv) {
         return 2;
       }
       epoch_ms = parsed;
+      continue;
+    }
+    if (argument == "--settle-ms") {
+      if (index + 1 >= argc ||
+          !ParseFiniteDouble(argv[++index], &settle_ms) || settle_ms < 0.0) {
+        std::cerr << "--settle-ms requires a non-negative number" << std::endl;
+        return 2;
+      }
       continue;
     }
     if (argument == "--echarts" && index + 1 < argc) {
@@ -562,7 +579,8 @@ int RunBatchCommand(int argc, char** argv) {
   while (std::getline(std::cin, request)) {
     const auto start = std::chrono::steady_clock::now();
     std::string response;
-    if (!renderer.RenderBatchRequest(request, default_dpr, &response)) {
+    if (!renderer.RenderBatchRequest(request, default_dpr, settle_ms,
+                                     &response)) {
       response = "{\"ok\":false,\"error\":" +
                  QuoteJsonString(renderer.last_error()) + "}";
     }

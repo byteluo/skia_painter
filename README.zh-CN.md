@@ -129,6 +129,9 @@ epoch。默认情况下，`performance.now()`、`Date.now()` 和无参 `Date`
 纳入时间轴，以支持依赖 `performance.now()` 忙等的脚本。默认虚拟时钟下，
 这类忙等不会结束；请改用定时器 / 动画帧，或显式启用实时钟。
 
+`render` 和 `batch` 会在 ECharts 触发 `finished` 事件后保存；若事件未触发，
+则使用 3000 毫秒的虚拟时间回退。可通过 `--settle-ms <毫秒>` 修改回退时间。
+
 ## 与浏览器对比
 
 启动一个本地 dev 服务，上半部分是**浏览器原生 ECharts canvas 渲染**，下半部分是**当前后端导出的 PNG**，方便上下对比视觉效果：

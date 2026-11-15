@@ -34,6 +34,7 @@ loadScript("../../node_modules/echarts/dist/echarts.js");
   }
   chart.getZr().refreshImmediately();
   canvas.saveToPng(output);
+  chart.dispose();
 }
 
   return { renderChart, createCanvas };
