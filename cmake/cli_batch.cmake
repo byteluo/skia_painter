@@ -20,6 +20,7 @@ file(WRITE "${requests_file}" "${request_one}\n${request_two}\n")
 
 execute_process(
   COMMAND "${ENGINE}" batch --epoch-ms 1700000000000 --settle-ms 0
+          --png-compression fast
   WORKING_DIRECTORY "${SOURCE_ROOT}"
   INPUT_FILE "${requests_file}"
   RESULT_VARIABLE result
@@ -56,6 +57,7 @@ set(animate_request "{\"option\":${option_json},\"width\":320,\"height\":180,\"d
 file(WRITE "${animate_requests_file}" "${animate_request}\n")
 execute_process(
   COMMAND "${ENGINE}" batch --animate --epoch-ms 1700000000000 --settle-ms 0
+          --png-compression small
   WORKING_DIRECTORY "${SOURCE_ROOT}"
   INPUT_FILE "${animate_requests_file}"
   RESULT_VARIABLE animate_result

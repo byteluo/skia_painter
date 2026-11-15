@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 
+#include "canvas_engine/canvas/PngCompression.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkSurface.h"
 
@@ -23,7 +24,9 @@ class CanvasSurface {
   sk_sp<SkImage> MakeImageSnapshot() const;
 
   bool Resize(int width, int height);
-  bool SavePng(const std::string& output_path) const;
+  bool SavePng(
+      const std::string& output_path,
+      PngCompression compression = PngCompression::kDefault) const;
 
  private:
   CanvasSurface(int width, int height, float pixel_ratio, sk_sp<SkSurface> surface);

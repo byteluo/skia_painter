@@ -57,7 +57,7 @@ globalThis.__renderChart = function(option, renderOptions, outPath) {
     chart.off("finished", finish);
     if (settleTimer) clearTimeout(settleTimer);
     try {
-      canvas.saveToPng(outPath);
+      canvas.saveToPng(outPath, renderOptions.pngCompression);
     } finally {
       chart.dispose();
     }

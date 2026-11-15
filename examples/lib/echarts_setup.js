@@ -13,7 +13,8 @@ loadScript("../../node_modules/echarts/dist/echarts.js");
     height,
     output,
     afterSetOption,
-    captureTimeMs = 0
+    captureTimeMs = 0,
+    pngCompression = "default"
   }) {
     echarts.setPlatformAPI({
       createCanvas() {
@@ -61,7 +62,7 @@ loadScript("../../node_modules/echarts/dist/echarts.js");
     }
 
     try {
-      canvas.saveToPng(output, !hasCaptureTime);
+      canvas.saveToPng(output, !hasCaptureTime, pngCompression);
     } finally {
       chart.dispose();
     }

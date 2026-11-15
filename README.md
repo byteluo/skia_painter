@@ -137,6 +137,12 @@ Use `--animate` to enable ECharts animation; rendering waits for the `finished`
 event or the 3000 ms virtual-time fallback. Use `--settle-ms <milliseconds>`
 to change the fallback duration.
 
+Use `--png-compression fast|default|small` to choose PNG encoding. `default`
+preserves the existing encoder settings; `fast` and `small` use measured
+Skia PNG encoder settings. Scripts may pass a preset as the second argument to
+`canvas.saveToPng(path, "fast")`, or after the drain flag as
+`canvas.saveToPng(path, false, "fast")`.
+
 ## Compare against the browser
 
 Spin up a local dev server that renders the **native browser ECharts canvas** on top and the **PNG exported by this backend** below, so you can compare them visually:

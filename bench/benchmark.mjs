@@ -102,7 +102,7 @@ function stats(samples) {
 // ---------------------------------------------------------------------------
 const skiaPainter = {
   id: "skia_painter",
-  label: "Skia Painter (spawn, static)",
+  label: "Skia Painter (spawn, static, fast PNG)",
   bin: CANVAS_ENGINE_BIN,
   available() {
     return Boolean(this.bin && existsSync(this.bin) && existsSync(ECHARTS_PATH));
@@ -119,7 +119,7 @@ const skiaPainter = {
     const r = spawnSync(this.bin, [
       "render", optionPath, "-o", out,
       "--width", String(WIDTH), "--height", String(HEIGHT), "--dpr", "3",
-      "--settle-ms", "0",
+      "--settle-ms", "0", "--png-compression", "fast",
     ], { cwd: ROOT, stdio: "ignore" });
     const dt = performance.now() - t0;
     if (r.status !== 0) throw new Error(`canvas_engine exited ${r.status}`);
@@ -132,7 +132,7 @@ const skiaPainter = {
 // ---------------------------------------------------------------------------
 const skiaPainterBatch = {
   id: "skia_painter_batch",
-  label: "Skia Painter (batch, static)",
+  label: "Skia Painter (batch, static, fast PNG)",
   bin: CANVAS_ENGINE_BIN,
   available() {
     return Boolean(this.bin && existsSync(this.bin) && existsSync(ECHARTS_PATH));
@@ -142,7 +142,7 @@ const skiaPainterBatch = {
     return "canvas_engine binary not built (./scripts/bootstrap.sh)";
   },
   async setup() {
-    this.child = spawn(this.bin, ["batch"], {
+    this.child = spawn(this.bin, ["batch", "--png-compression", "fast"], {
       cwd: ROOT,
       stdio: ["pipe", "pipe", "pipe"],
     });

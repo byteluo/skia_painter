@@ -17,9 +17,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkStream.h"
-#if !defined(__APPLE__)
 #include "include/encode/SkPngEncoder.h"
-#endif
 
 namespace canvas_engine {
 
@@ -84,7 +82,8 @@ sk_sp<SkImage> CanvasSurface::MakeImageSnapshot() const {
   return surface_ ? surface_->makeImageSnapshot() : nullptr;
 }
 
-bool CanvasSurface::SavePng(const std::string& output_path) const {
+bool CanvasSurface::SavePng(const std::string& output_path,
+                            PngCompression compression) const {
   SkPixmap pixmap;
   if (!surface_) {
     return false;
@@ -95,92 +94,98 @@ bool CanvasSurface::SavePng(const std::string& output_path) const {
   }
 
 #if defined(__APPLE__)
-  std::vector<std::uint8_t> rgba_pixels(static_cast<size_t>(pixmap.width()) *
-                                        static_cast<size_t>(pixmap.height()) * 4);
-  const auto* src = static_cast<const std::uint8_t*>(pixmap.addr());
-  if (src == nullptr) {
-    return false;
-  }
+  if (compression == PngCompression::kDefault) {
+    std::vector<std::uint8_t> rgba_pixels(
+        static_cast<size_t>(pixmap.width()) *
+        static_cast<size_t>(pixmap.height()) * 4);
+    const auto* src = static_cast<const std::uint8_t*>(pixmap.addr());
+    if (src == nullptr) {
+      return false;
+    }
 
-  const size_t src_row_bytes = pixmap.rowBytes();
-  const size_t dst_row_bytes = static_cast<size_t>(pixmap.width()) * 4;
-  for (int y = 0; y < pixmap.height(); ++y) {
-    const auto* src_row = src + static_cast<size_t>(y) * src_row_bytes;
-    auto* dst_row = rgba_pixels.data() + static_cast<size_t>(y) * dst_row_bytes;
-    for (int x = 0; x < pixmap.width(); ++x) {
-      const auto* pixel = src_row + static_cast<size_t>(x) * 4;
-      auto* dst_pixel = dst_row + static_cast<size_t>(x) * 4;
-      if (pixmap.colorType() == kBGRA_8888_SkColorType) {
-        dst_pixel[0] = pixel[2];
-        dst_pixel[1] = pixel[1];
-        dst_pixel[2] = pixel[0];
-        dst_pixel[3] = pixel[3];
-      } else {
-        dst_pixel[0] = pixel[0];
-        dst_pixel[1] = pixel[1];
-        dst_pixel[2] = pixel[2];
-        dst_pixel[3] = pixel[3];
+    const size_t src_row_bytes = pixmap.rowBytes();
+    const size_t dst_row_bytes = static_cast<size_t>(pixmap.width()) * 4;
+    for (int y = 0; y < pixmap.height(); ++y) {
+      const auto* src_row = src + static_cast<size_t>(y) * src_row_bytes;
+      auto* dst_row =
+          rgba_pixels.data() + static_cast<size_t>(y) * dst_row_bytes;
+      for (int x = 0; x < pixmap.width(); ++x) {
+        const auto* pixel = src_row + static_cast<size_t>(x) * 4;
+        auto* dst_pixel = dst_row + static_cast<size_t>(x) * 4;
+        if (pixmap.colorType() == kBGRA_8888_SkColorType) {
+          dst_pixel[0] = pixel[2];
+          dst_pixel[1] = pixel[1];
+          dst_pixel[2] = pixel[0];
+          dst_pixel[3] = pixel[3];
+        } else {
+          dst_pixel[0] = pixel[0];
+          dst_pixel[1] = pixel[1];
+          dst_pixel[2] = pixel[2];
+          dst_pixel[3] = pixel[3];
+        }
       }
     }
-  }
 
-  const size_t data_size = rgba_pixels.size();
-  auto release_callback = [](void*, const void*, size_t) {};
+    const size_t data_size = rgba_pixels.size();
+    auto release_callback = [](void*, const void*, size_t) {};
 
-  CGDataProviderRef provider = CGDataProviderCreateWithData(
-      nullptr, rgba_pixels.data(), data_size, release_callback);
-  if (!provider) {
-    return false;
-  }
+    CGDataProviderRef provider = CGDataProviderCreateWithData(
+        nullptr, rgba_pixels.data(), data_size, release_callback);
+    if (!provider) {
+      return false;
+    }
 
-  CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
-  if (!color_space) {
+    CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
+    if (!color_space) {
+      CGDataProviderRelease(provider);
+      return false;
+    }
+
+    const CGBitmapInfo bitmap_info = static_cast<CGBitmapInfo>(
+        static_cast<unsigned>(kCGBitmapByteOrder32Big) |
+        static_cast<unsigned>(kCGImageAlphaPremultipliedLast));
+
+    CGImageRef image =
+        CGImageCreate(pixmap.width(), pixmap.height(), 8, 32, dst_row_bytes,
+                      color_space, bitmap_info, provider, nullptr, false,
+                      kCGRenderingIntentDefault);
+    CGColorSpaceRelease(color_space);
     CGDataProviderRelease(provider);
-    return false;
-  }
+    if (!image) {
+      return false;
+    }
 
-  const CGBitmapInfo bitmap_info =
-      static_cast<CGBitmapInfo>(static_cast<unsigned>(kCGBitmapByteOrder32Big) |
-                                static_cast<unsigned>(kCGImageAlphaPremultipliedLast));
+    CFStringRef path = CFStringCreateWithCString(
+        nullptr, output_path.c_str(), kCFStringEncodingUTF8);
+    if (!path) {
+      CGImageRelease(image);
+      return false;
+    }
 
-  CGImageRef image = CGImageCreate(
-      pixmap.width(), pixmap.height(), 8, 32, dst_row_bytes, color_space,
-      bitmap_info, provider, nullptr, false, kCGRenderingIntentDefault);
-  CGColorSpaceRelease(color_space);
-  CGDataProviderRelease(provider);
-  if (!image) {
-    return false;
-  }
+    CFURLRef url = CFURLCreateWithFileSystemPath(
+        nullptr, path, kCFURLPOSIXPathStyle, false);
+    CFRelease(path);
+    if (!url) {
+      CGImageRelease(image);
+      return false;
+    }
 
-  CFStringRef path = CFStringCreateWithCString(
-      nullptr, output_path.c_str(), kCFStringEncodingUTF8);
-  if (!path) {
+    CGImageDestinationRef destination =
+        CGImageDestinationCreateWithURL(url, CFSTR("public.png"), 1, nullptr);
+    CFRelease(url);
+    if (!destination) {
+      CGImageRelease(image);
+      return false;
+    }
+
+    CGImageDestinationAddImage(destination, image, nullptr);
+    const bool success = CGImageDestinationFinalize(destination);
+    CFRelease(destination);
     CGImageRelease(image);
-    return false;
+    return success;
   }
+#endif
 
-  CFURLRef url = CFURLCreateWithFileSystemPath(
-      nullptr, path, kCFURLPOSIXPathStyle, false);
-  CFRelease(path);
-  if (!url) {
-    CGImageRelease(image);
-    return false;
-  }
-
-  CGImageDestinationRef destination =
-      CGImageDestinationCreateWithURL(url, CFSTR("public.png"), 1, nullptr);
-  CFRelease(url);
-  if (!destination) {
-    CGImageRelease(image);
-    return false;
-  }
-
-  CGImageDestinationAddImage(destination, image, nullptr);
-  const bool success = CGImageDestinationFinalize(destination);
-  CFRelease(destination);
-  CGImageRelease(image);
-  return success;
-#else
   SkFILEWStream stream(output_path.c_str());
   if (!stream.isValid()) {
     return false;
@@ -188,8 +193,11 @@ bool CanvasSurface::SavePng(const std::string& output_path) const {
 
   SkPngEncoder::Options options;
   options.fZLibLevel = 6;
+  options.fFilterFlags = SkPngEncoder::FilterFlag::kAll;
+  if (compression != PngCompression::kDefault) {
+    options.fFilterFlags = SkPngEncoder::FilterFlag::kNone;
+  }
   return SkPngEncoder::Encode(&stream, pixmap, options);
-#endif
 }
 
 }  // namespace canvas_engine

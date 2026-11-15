@@ -67,6 +67,18 @@ std::string DoubleLiteral(double value) {
   return stream.str();
 }
 
+const char* PngCompressionName(PngCompression compression) {
+  switch (compression) {
+    case PngCompression::kFast:
+      return "fast";
+    case PngCompression::kSmall:
+      return "small";
+    case PngCompression::kDefault:
+      return "default";
+  }
+  return "default";
+}
+
 }  // namespace
 
 EChartsRenderer::EChartsRenderer(ScriptEngine& engine,
@@ -111,7 +123,8 @@ bool EChartsRenderer::RenderBatchRequest(const std::string& request_json,
                                          float default_dpr,
                                          double default_settle_ms,
                                          std::string* response_json,
-                                         bool animation) {
+                                         bool animation,
+                                         PngCompression png_compression) {
   if (response_json == nullptr) {
     last_error_ = "batch response output must not be null";
     return false;
@@ -129,7 +142,7 @@ bool EChartsRenderer::RenderBatchRequest(const std::string& request_json,
   }
 
   const std::string source =
-      "((request, defaultDpr, defaultSettleMs, animation) => {"
+      "((request, defaultDpr, defaultSettleMs, animation, pngCompression) => {"
       "try {"
       "if (!request || typeof request !== 'object' || Array.isArray(request)) "
       "throw new Error('request must be an object');"
@@ -164,8 +177,7 @@ bool EChartsRenderer::RenderBatchRequest(const std::string& request_json,
       "if (typeof background !== 'string') "
       "throw new Error('request.background must be a string');"
       "__renderChart(option, {width, height, dpr, settleMs, theme, background, "
-      "animation}, "
-      "request.out);"
+      "animation, pngCompression}, request.out);"
       "return {ok: true, out: request.out};"
       "} catch (error) {"
       "return {ok: false, error: String(error && error.message || error)};"
@@ -173,7 +185,8 @@ bool EChartsRenderer::RenderBatchRequest(const std::string& request_json,
       "})(JSON.parse(" +
       QuoteJsString(request_json) + ")," + FloatLiteral(default_dpr) + "," +
       DoubleLiteral(default_settle_ms) + "," +
-      (animation ? "true" : "false") + ");";
+      (animation ? "true" : "false") + "," +
+      QuoteJsString(PngCompressionName(png_compression)) + ");";
   if (!engine_.RunScriptSource(source, "<echarts-batch>")) {
     last_error_ = engine_.last_error();
     return false;
@@ -211,6 +224,8 @@ bool EChartsRenderer::RenderExpression(
   render_options << "{width:" << options.width << ",height:" << options.height
                  << ",dpr:" << FloatLiteral(options.dpr)
                  << ",animation:" << (options.animation ? "true" : "false")
+                 << ",pngCompression:"
+                 << QuoteJsString(PngCompressionName(options.png_compression))
                  << ",settleMs:" << DoubleLiteral(options.settle_ms)
                  << ",theme:" << QuoteJsString(options.theme)
                  << ",background:" << QuoteJsString(options.background)

@@ -1658,13 +1658,51 @@ void ScriptEngine::CanvasSaveToPng(
   }
 
   bool drain_pending_tasks = true;
-  if (info.Length() > 1) {
-    if (!info[1]->IsBoolean()) {
+  PngCompression png_compression = PngCompression::kDefault;
+  const auto parse_png_compression = [&](v8::Local<v8::Value> value) {
+    if (!value->IsString()) {
       ThrowTypeError(isolate,
-                     "saveToPng(path, drainPendingTasks) requires a boolean");
+                     "saveToPng PNG compression must be a string");
+      return false;
+    }
+    const std::string compression = ToStdString(isolate, value);
+    if (compression == "fast") {
+      png_compression = PngCompression::kFast;
+    } else if (compression == "default") {
+      png_compression = PngCompression::kDefault;
+    } else if (compression == "small") {
+      png_compression = PngCompression::kSmall;
+    } else {
+      ThrowTypeError(isolate,
+                     "saveToPng PNG compression must be fast, default, or "
+                     "small");
+      return false;
+    }
+    return true;
+  };
+  if (info.Length() > 1) {
+    if (info[1]->IsBoolean()) {
+      drain_pending_tasks = info[1]->BooleanValue(isolate);
+    } else if (info[1]->IsString()) {
+      if (!parse_png_compression(info[1])) {
+        return;
+      }
+    } else {
+      ThrowTypeError(isolate,
+                     "saveToPng second argument must be a boolean or "
+                     "compression string");
       return;
     }
-    drain_pending_tasks = info[1]->BooleanValue(isolate);
+  }
+  if (info.Length() > 2) {
+    if (!info[1]->IsBoolean() || !parse_png_compression(info[2])) {
+      if (!info[1]->IsBoolean()) {
+        ThrowTypeError(
+            isolate,
+            "saveToPng third argument requires a boolean second argument");
+      }
+      return;
+    }
   }
 
   auto* engine = From(isolate);
@@ -1674,7 +1712,7 @@ void ScriptEngine::CanvasSaveToPng(
     return;
   }
   const auto resolved = engine->ResolveScriptPath(output_path);
-  if (!canvas->surface->SavePng(resolved.string())) {
+  if (!canvas->surface->SavePng(resolved.string(), png_compression)) {
     ThrowError(isolate, "failed to write png: " + resolved.string());
   }
 }
