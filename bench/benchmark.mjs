@@ -2,7 +2,8 @@
 // Reproducible benchmark harness for server-side ECharts rendering.
 //
 // It renders the SAME set of ECharts options through several backends and
-// reports the wall-clock time per chart, so the numbers are comparable.
+// reports the wall-clock time per chart, including spawn-per-render and
+// reused-batch modes for Skia Painter.
 //
 // Engines are probed at runtime; any whose dependency is missing is SKIPPED
 // (never faked). Install what you want to compare:
@@ -18,12 +19,13 @@
 // Output is a Markdown table you can paste into docs/benchmarks.md.
 
 import { createRequire } from "node:module";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
+import { createInterface } from "node:readline";
 
 const require = createRequire(import.meta.url);
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -85,6 +87,8 @@ const CHARTS = {
 const CHART_NAMES = Object.keys(CHARTS);
 
 const ECHARTS_PATH = join(ROOT, "node_modules", "echarts", "dist", "echarts.js");
+const CANVAS_ENGINE_BIN = process.env.CANVAS_ENGINE_BIN
+  || [join(ROOT, "build/dev/canvas_engine"), join(ROOT, "build/canvas_engine"), join(ROOT, "build/release/canvas_engine")].find(existsSync);
 
 function stats(samples) {
   const s = [...samples].sort((a, b) => a - b);
@@ -98,9 +102,8 @@ function stats(samples) {
 // ---------------------------------------------------------------------------
 const skiaPainter = {
   id: "skia_painter",
-  label: "Skia Painter (this project)",
-  bin: process.env.CANVAS_ENGINE_BIN
-    || [join(ROOT, "build/dev/canvas_engine"), join(ROOT, "build/canvas_engine"), join(ROOT, "build/release/canvas_engine")].find(existsSync),
+  label: "Skia Painter (spawn, static, fast PNG)",
+  bin: CANVAS_ENGINE_BIN,
   available() {
     return Boolean(this.bin && existsSync(this.bin) && existsSync(ECHARTS_PATH));
   },
@@ -110,26 +113,85 @@ const skiaPainter = {
   },
   renderOnce(name, dir) {
     const out = join(dir, `${name}.png`);
-    const script = `
-loadScript(${JSON.stringify(ECHARTS_PATH)});
-const W=${WIDTH},H=${HEIGHT};
-const canvas=new Canvas(W,H);canvas.style={};
-echarts.setPlatformAPI({
-  createCanvas(){const c=new Canvas(W,H);c.style={};return c;},
-  loadImage(src,onload){const im=new Image();if(typeof onload==='function')im.onload=onload;im.src=src;return im;}
-});
-const chart=echarts.init(canvas,null,{renderer:'canvas',width:W,height:H});
-chart.setOption(${JSON.stringify(CHARTS[name])});
-chart.getZr().refreshImmediately();
-canvas.saveToPng(${JSON.stringify(out)});
-`;
-    const scriptPath = join(dir, `${name}.js`);
-    writeFileSync(scriptPath, script);
+    const optionPath = join(dir, `${name}.json`);
+    writeFileSync(optionPath, JSON.stringify(CHARTS[name]));
     const t0 = performance.now();
-    const r = spawnSync(this.bin, [scriptPath], { stdio: "ignore" });
+    const r = spawnSync(this.bin, [
+      "render", optionPath, "-o", out,
+      "--width", String(WIDTH), "--height", String(HEIGHT), "--dpr", "3",
+      "--settle-ms", "0", "--png-compression", "fast",
+    ], { cwd: ROOT, stdio: "ignore" });
     const dt = performance.now() - t0;
     if (r.status !== 0) throw new Error(`canvas_engine exited ${r.status}`);
     return dt;
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Engine: Skia Painter — reuses one batch process for all requests.
+// ---------------------------------------------------------------------------
+const skiaPainterBatch = {
+  id: "skia_painter_batch",
+  label: "Skia Painter (batch, static, fast PNG)",
+  bin: CANVAS_ENGINE_BIN,
+  available() {
+    return Boolean(this.bin && existsSync(this.bin) && existsSync(ECHARTS_PATH));
+  },
+  reason() {
+    if (!existsSync(ECHARTS_PATH)) return "echarts not installed (npm install)";
+    return "canvas_engine binary not built (./scripts/bootstrap.sh)";
+  },
+  async setup() {
+    this.child = spawn(this.bin, [
+      "batch", "--settle-ms", "0", "--png-compression", "fast",
+    ], {
+      cwd: ROOT,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    this.lines = createInterface({ input: this.child.stdout });
+    this.lineIterator = this.lines[Symbol.asyncIterator]();
+    this.stderr = "";
+    this.childError = null;
+    this.child.stderr.on("data", (chunk) => {
+      this.stderr = `${this.stderr}${chunk}`.slice(-4000);
+    });
+    this.child.on("error", (error) => {
+      this.childError = error;
+    });
+  },
+  async renderOnce(name, dir) {
+    const request = {
+      option: CHARTS[name],
+      width: WIDTH,
+      height: HEIGHT,
+      dpr: 3,
+      out: join(dir, `${name}.png`),
+    };
+    const startedAt = performance.now();
+    const responsePromise = this.lineIterator.next();
+    await new Promise((resolveWrite, rejectWrite) => {
+      this.child.stdin.write(`${JSON.stringify(request)}\n`, (error) => {
+        if (error) rejectWrite(error);
+        else resolveWrite();
+      });
+    });
+    const { value, done } = await responsePromise;
+    if (done) {
+      const cause = this.childError?.message
+        || `canvas_engine batch exited ${this.child.exitCode ?? this.child.signalCode}: ${this.stderr}`;
+      throw new Error(cause);
+    }
+    const response = JSON.parse(value);
+    if (response.ok !== true) throw new Error(response.error);
+    return performance.now() - startedAt;
+  },
+  async teardown() {
+    if (!this.child) return;
+    this.child.stdin.end();
+    if (this.child.exitCode === null && this.child.signalCode === null) {
+      await new Promise((resolveClose) => this.child.once("close", resolveClose));
+    }
+    this.lines.close();
   },
 };
 
@@ -219,7 +281,7 @@ const puppeteerEngine = {
   async teardown() { if (this.browser) await this.browser.close(); },
 };
 
-const ENGINES = [skiaPainter, nodeCanvas, echartsSvg, puppeteerEngine];
+const ENGINES = [skiaPainter, skiaPainterBatch, nodeCanvas, echartsSvg, puppeteerEngine];
 
 async function run() {
   console.log(`# Benchmark — ${ITERATIONS} iterations, ${WIDTH}x${HEIGHT} logical px\n`);

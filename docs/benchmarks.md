@@ -25,7 +25,9 @@ These are **not** identical workloads — a raster PNG and an SVG string are dif
 
 - The harness renders the **same five ECharts options** (`bar`, `line`, `pie`, `scatter` with 1k points, `candlestick`) through every available backend.
 - 1 warmup pass, then `ITERATIONS` (default 20) timed passes per chart; we report the **median ms per chart** (robust to outliers) and the overall median.
-- Skia Painter is timed **including process spawn**, because that is how it is used in production (one binary invocation per chart). The in-process Node backends are timed around `setOption` + export only — so the comparison is, if anything, conservative toward Skia Painter.
+- `Skia Painter (spawn-per-render)` includes a new process for every chart, matching one-shot CLI usage.
+- `skia_painter (batch)` keeps one `canvas_engine batch` process alive across warmup and timed requests. Its timed samples exclude process startup and ECharts initialization (covered by warmup), but include per-request JSONL I/O and render/export.
+- The in-process Node backends are timed around `setOption` + export only. The two Skia rows therefore distinguish cold process-per-chart cost from warm engine reuse; compare them with that methodology in mind.
 - Headless Chrome reuses a single warm browser/page across renders (best case for it; excludes the multi-hundred-MB cold start).
 
 ### How to run
@@ -56,7 +58,8 @@ The harness prints a Markdown table you can paste straight back into this file.
 
 | Backend                         | bar  | line | pie  | scatter | candlestick | median |
 | ------------------------------- | ---- | ---- | ---- | ------- | ----------- | ------ |
-| Skia Painter (this project)     |  —   |  —   |  —   |   —     |     —       |   —    |  (build the binary)
+| Skia Painter (spawn-per-render) |  —   |  —   |  —   |   —     |     —       |   —    |  (build the binary)
+| skia_painter (batch)            |  —   |  —   |  —   |   —     |     —       |   —    |  (build the binary)
 | node-canvas + ECharts           | 13.0 | 16.4 | 13.3 |  23.8   |    13.8     |  14.2  |
 | ECharts SVG SSR                 |  1.7 |  2.6 |  1.3 |  18.6   |     2.6     |   2.5  |
 | Headless Chrome (Puppeteer)     |  —   |  —   |  —   |   —     |     —       |   —    |  (Chromium not available here)
@@ -69,6 +72,7 @@ Environment: Node v22.22.3, linux/x64, i5-12600K.
 - **SVG SSR** is the cheapest because it never rasterizes — but it emits a vector string, not a pixel buffer, and downstream you still pay to rasterize it if you need an image.
 - **Headless Chrome** is the fidelity reference, but carries the heaviest footprint (a full browser process, hundreds of MB RSS, and a slow cold start that this table deliberately excludes).
 - **Skia Painter** trades the browser away for a single native binary: no Chromium download, no display server, no DOM — at the cost of being a render-and-export host rather than a full browser environment (see [Known limitations](../README.md#known-limitations)).
+- **Batch mode** amortizes process startup and ECharts initialization across requests; it is not directly comparable to the one-process-per-chart row or the in-process Node timings.
 
 ---
 
@@ -91,7 +95,9 @@ Environment: Node v22.22.3, linux/x64, i5-12600K.
 
 - harness 把**同一组 5 个 ECharts option**（`bar`、`line`、`pie`、1000 点 `scatter`、`candlestick`）喂给每个可用后端。
 - 先 1 次预热，再对每张图跑 `ITERATIONS`（默认 20）次计时，报告**每张图的中位耗时**（抗离群）以及总体中位数。
-- Skia Painter 的计时**包含进程启动开销**，因为它在生产里就是这样用的（每张图一次二进制调用）。Node 内的后端只计 `setOption` + 导出这一段——所以这个对比即使有偏，也是偏向不利于 Skia Painter 的（更保守）。
+- `Skia Painter (spawn-per-render)` 每张图都会启动一个新进程，对应一次性 CLI 用法。
+- `skia_painter (batch)` 在预热和计时请求期间复用同一个 `canvas_engine batch` 进程。计时样本不包括进程启动和 ECharts 初始化（由预热覆盖），但包括每条请求的 JSONL I/O 及渲染/导出。
+- Node 进程内的后端只计 `setOption` + 导出。两行 Skia 结果分别体现每图启动进程的成本与复用热引擎的成本，解读时需考虑这一口径差异。
 - 无头 Chrome 复用同一个已预热的浏览器/页面（对它最有利，排除了几百 MB 的冷启动）。
 
 ### 如何运行
@@ -121,7 +127,8 @@ harness 会打印一张 Markdown 表，可直接粘回本文件。
 
 | Backend                         | bar  | line | pie  | scatter | candlestick | median |
 | ------------------------------- | ---- | ---- | ---- | ------- | ----------- | ------ |
-| Skia Painter (this project)     |  —   |  —   |  —   |   —     |     —       |   —    |  (需先构建二进制)
+| Skia Painter (spawn-per-render) |  —   |  —   |  —   |   —     |     —       |   —    |  (需先构建二进制)
+| skia_painter (batch)            |  —   |  —   |  —   |   —     |     —       |   —    |  (需先构建二进制)
 | node-canvas + ECharts           | 13.0 | 16.4 | 13.3 |  23.8   |    13.8     |  14.2  |
 | ECharts SVG SSR                 |  1.7 |  2.6 |  1.3 |  18.6   |     2.6     |   2.5  |
 | Headless Chrome (Puppeteer)     |  —   |  —   |  —   |   —     |     —       |   —    |  (此环境无 Chromium)
@@ -134,3 +141,4 @@ Environment: Node v22.22.3, linux/x64, i5-12600K.
 - **SVG SSR** 最便宜，因为它根本不栅格化——但它产出的是矢量字符串而非像素缓冲，下游若需要图片仍要再付一次栅格化成本。
 - **无头 Chrome** 是保真度参考，但代价最重（完整浏览器进程、几百 MB RSS、以及本表刻意排除掉的缓慢冷启动）。
 - **Skia Painter** 用单个原生二进制换掉浏览器：不下载 Chromium、不需要显示服务器、没有 DOM——代价是它只是一个“渲染导出宿主”，而非完整浏览器环境（见 [已知限制](../README.md#已知限制)）。
+- **Batch 模式**可在多条请求间分摊进程启动和 ECharts 初始化开销；它与每图启动一次进程的结果或 Node 进程内计时并非同一口径。

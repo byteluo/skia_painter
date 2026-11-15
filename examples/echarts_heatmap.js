@@ -1,34 +1,10 @@
-loadScript("../node_modules/echarts/dist/echarts.js");
+const { renderChart } = loadScript("./lib/echarts_setup.js");
 
 const width = 960;
 const height = 540;
 
-function createCanvas(targetWidth, targetHeight) {
-  const canvas = new Canvas(targetWidth, targetHeight);
-  canvas.style = {};
-  return canvas;
-}
 
-echarts.setPlatformAPI({
-  createCanvas() {
-    return createCanvas(width, height);
-  },
-  loadImage(src, onload) {
-    const image = new Image();
-    if (typeof onload === "function") {
-      image.onload = onload;
-    }
-    image.src = src;
-    return image;
-  }
-});
 
-const canvas = createCanvas(width, height);
-const chart = echarts.init(canvas, null, {
-  renderer: "canvas",
-  width,
-  height
-});
 
 const hours = ["12a", "3a", "6a", "9a", "12p", "3p", "6p", "9p"];
 const days = ["Sat", "Fri", "Thu", "Wed", "Tue", "Mon", "Sun"];
@@ -42,77 +18,79 @@ const data = [
   [0, 6, 1], [1, 6, 2], [2, 6, 5], [3, 6, 8], [4, 6, 13], [5, 6, 12], [6, 6, 8], [7, 6, 4]
 ];
 
-chart.setOption({
-  animation: false,
-  backgroundColor: "#f8fafc",
-  title: {
-    text: "Heatmap Compatibility",
-    left: "center",
-    top: 24,
-    textStyle: {
-      color: "#0f172a",
-      fontSize: 24,
-      fontWeight: "bold"
-    }
-  },
-  tooltip: {
-    position: "top"
-  },
-  grid: {
-    left: 90,
-    right: 50,
-    top: 96,
-    bottom: 60
-  },
-  xAxis: {
-    type: "category",
-    data: hours,
-    splitArea: {
-      show: true
-    },
-    axisLabel: {
-      color: "#334155"
-    }
-  },
-  yAxis: {
-    type: "category",
-    data: days,
-    splitArea: {
-      show: true
-    },
-    axisLabel: {
-      color: "#334155"
-    }
-  },
-  visualMap: {
-    min: 0,
-    max: 24,
-    calculable: true,
-    orient: "horizontal",
-    left: "center",
-    bottom: 12,
-    inRange: {
-      color: ["#dbeafe", "#60a5fa", "#2563eb", "#0f172a"]
-    }
-  },
-  series: [
-    {
-      type: "heatmap",
-      data,
-      label: {
-        show: true,
-        color: "#ffffff"
-      },
-      emphasis: {
-        itemStyle: {
-          shadowBlur: 10,
-          shadowColor: "rgba(15, 23, 42, 0.25)"
+renderChart({
+  option: {
+      animation: false,
+      backgroundColor: "#f8fafc",
+      title: {
+        text: "Heatmap Compatibility",
+        left: "center",
+        top: 24,
+        textStyle: {
+          color: "#0f172a",
+          fontSize: 24,
+          fontWeight: "bold"
         }
-      }
-    }
-  ]
+      },
+      tooltip: {
+        position: "top"
+      },
+      grid: {
+        left: 90,
+        right: 50,
+        top: 96,
+        bottom: 60
+      },
+      xAxis: {
+        type: "category",
+        data: hours,
+        splitArea: {
+          show: true
+        },
+        axisLabel: {
+          color: "#334155"
+        }
+      },
+      yAxis: {
+        type: "category",
+        data: days,
+        splitArea: {
+          show: true
+        },
+        axisLabel: {
+          color: "#334155"
+        }
+      },
+      visualMap: {
+        min: 0,
+        max: 24,
+        calculable: true,
+        orient: "horizontal",
+        left: "center",
+        bottom: 12,
+        inRange: {
+          color: ["#dbeafe", "#60a5fa", "#2563eb", "#0f172a"]
+        }
+      },
+      series: [
+        {
+          type: "heatmap",
+          data,
+          label: {
+            show: true,
+            color: "#ffffff"
+          },
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 10,
+              shadowColor: "rgba(15, 23, 42, 0.25)"
+            }
+          }
+        }
+      ]
+  },
+  width,
+  height,
+  output: "../output/echarts_heatmap.png",
 });
-
-chart.getZr().refreshImmediately();
-canvas.saveToPng("../output/echarts_heatmap.png");
 console.log("wrote ../output/echarts_heatmap.png");

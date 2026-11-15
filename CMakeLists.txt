@@ -188,88 +188,112 @@ find_package(ZLIB REQUIRED)
 include(CTest)
 include(GNUInstallDirs)
 
-add_executable(canvas_engine
-  src/main.cc
+add_library(canvas_engine_core STATIC
   src/canvas/CanvasSurface.cc
   src/canvas/Canvas2DContext.cc
   src/canvas/ColorParser.cc
   src/canvas/FontParser.cc
   src/canvas/ImageAsset.cc
+  src/runtime/EventLoop.cc
+  src/runtime/HandleRegistry.cc
   src/runtime/ScriptEngine.cc
+  src/runtime/ScriptEngineImpl.cc
+  src/runtime/ScriptLoader.cc
+  src/runtime/bindings/CanvasBinding.cc
+  src/runtime/bindings/Context2DBinding.cc
+  src/runtime/bindings/Context2DImages.cc
+  src/runtime/bindings/Context2DText.cc
+  src/runtime/bindings/GlobalBindings.cc
+  src/runtime/bindings/GradientBinding.cc
+  src/runtime/bindings/ImageBinding.cc
+  src/runtime/bindings/Path2DBinding.cc
+  src/runtime/bindings/PatternBinding.cc
+  src/runtime/V8Platform.cc
 )
 
-add_executable(color_parser_test
-  tests/color_parser_test.cc
-  src/canvas/ColorParser.cc
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/js/echarts_host.js"
+     ECHARTS_HOST_SOURCE)
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/cmake/echarts_host.cc.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/echarts_host.cc"
+  @ONLY
+)
+target_sources(canvas_engine_core PRIVATE
+  src/echarts/EChartsRenderer.cc
+  "${CMAKE_CURRENT_BINARY_DIR}/generated/echarts_host.cc"
 )
 
-target_include_directories(color_parser_test
-  PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${SKIA_INCLUDE_DIRS}
-)
-
-target_link_libraries(color_parser_test
-  PRIVATE
-    ${SKIA_LIBRARIES}
-    Threads::Threads
-    PNG::PNG
-    ZLIB::ZLIB
-)
-if(UNIX AND NOT APPLE)
-  target_link_libraries(color_parser_test PRIVATE fontconfig)
-endif()
-
-add_executable(font_parser_test
-  tests/font_parser_test.cc
-  src/canvas/FontParser.cc
-)
-
-target_include_directories(font_parser_test
-  PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${SKIA_INCLUDE_DIRS}
-)
-
-target_include_directories(canvas_engine
-  PRIVATE
+target_include_directories(canvas_engine_core
+  PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${V8_INCLUDE_DIRS}
     ${SKIA_INCLUDE_DIRS}
 )
 
 if(NOT "${V8_COMPILE_DEFINITIONS}" STREQUAL "")
-  target_compile_definitions(canvas_engine PRIVATE ${V8_COMPILE_DEFINITIONS})
+  target_compile_definitions(canvas_engine_core
+    PUBLIC ${V8_COMPILE_DEFINITIONS})
 endif()
 
 if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
-  target_link_directories(canvas_engine PRIVATE ${V8_LINK_DIRECTORIES})
+  target_link_directories(canvas_engine_core
+    PUBLIC ${V8_LINK_DIRECTORIES})
 endif()
 
 if(NOT "${SKIA_LINK_DIRECTORIES}" STREQUAL "")
-  target_link_directories(canvas_engine PRIVATE ${SKIA_LINK_DIRECTORIES})
+  target_link_directories(canvas_engine_core
+    PUBLIC ${SKIA_LINK_DIRECTORIES})
 endif()
 
-target_link_libraries(canvas_engine
-  PRIVATE
+target_link_libraries(canvas_engine_core
+  PUBLIC
     ${V8_LIBRARIES}
     ${SKIA_LIBRARIES}
     Threads::Threads
+  PRIVATE
     ZLIB::ZLIB
+    PNG::PNG
 )
 if(UNIX AND NOT APPLE)
-  target_link_libraries(canvas_engine PRIVATE fontconfig)
+  target_link_libraries(canvas_engine_core PRIVATE fontconfig)
 endif()
 
-if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
-  set_target_properties(canvas_engine PROPERTIES
-    BUILD_RPATH "${V8_LINK_DIRECTORIES}"
-    INSTALL_RPATH "${V8_LINK_DIRECTORIES}"
-  )
-endif()
+add_executable(canvas_engine src/main.cc src/cli/Cli.cc)
+target_link_libraries(canvas_engine PRIVATE canvas_engine_core)
+
+add_executable(color_parser_test tests/color_parser_test.cc)
+target_link_libraries(color_parser_test PRIVATE canvas_engine_core)
+
+add_executable(font_parser_test tests/font_parser_test.cc)
+target_link_libraries(font_parser_test PRIVATE canvas_engine_core)
+
+add_executable(multi_engine_test tests/multi_engine_test.cc)
+target_link_libraries(multi_engine_test PRIVATE canvas_engine_core)
+
+add_executable(handle_registry_test tests/handle_registry_test.cc)
+target_include_directories(handle_registry_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/runtime
+)
+target_link_libraries(handle_registry_test PRIVATE canvas_engine_core)
+
+function(canvas_engine_apply_v8_rpath target)
+  if(NOT "${V8_LINK_DIRECTORIES}" STREQUAL "")
+    set_target_properties(${target} PROPERTIES
+      BUILD_RPATH "${V8_LINK_DIRECTORIES}"
+      INSTALL_RPATH "${V8_LINK_DIRECTORIES}"
+    )
+  endif()
+endfunction()
+
+canvas_engine_apply_v8_rpath(canvas_engine)
+canvas_engine_apply_v8_rpath(color_parser_test)
+canvas_engine_apply_v8_rpath(font_parser_test)
+canvas_engine_apply_v8_rpath(multi_engine_test)
+canvas_engine_apply_v8_rpath(handle_registry_test)
 
 if(APPLE)
-  target_link_libraries(canvas_engine
+  target_link_libraries(canvas_engine_core
     PRIVATE
       "-framework CoreFoundation"
       "-framework CoreGraphics"
@@ -278,8 +302,8 @@ if(APPLE)
       "-framework CoreServices"
   )
 elseif(UNIX)
-  target_include_directories(canvas_engine PRIVATE ${PNG_INCLUDE_DIRS})
-  target_link_libraries(canvas_engine PRIVATE dl m PNG::PNG)
+  target_include_directories(canvas_engine_core PRIVATE ${PNG_INCLUDE_DIRS})
+  target_link_libraries(canvas_engine_core PRIVATE dl m)
 endif()
 
 install(TARGETS canvas_engine
@@ -313,6 +337,20 @@ if(BUILD_TESTING)
     PASS_REGULAR_EXPRESSION "smoke"
   )
 
+  set(V8_ICU_DATA_MISSING_DIR
+      "${CMAKE_CURRENT_BINARY_DIR}/test_output/missing-v8-data")
+  add_test(
+    NAME v8_data_dir_fallback
+    COMMAND ${CMAKE_COMMAND} -E env
+            "V8_ICU_DATA_DIR=${V8_ICU_DATA_MISSING_DIR}"
+            $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_SOURCE_DIR}/examples/smoke.js
+  )
+  set_tests_properties(v8_data_dir_fallback PROPERTIES
+    PASS_REGULAR_EXPRESSION
+      "V8_ICU_DATA_DIR='${V8_ICU_DATA_MISSING_DIR}'.*icudtl.dat"
+  )
+
   add_test(
     NAME handle_gc
     COMMAND $<TARGET_FILE:canvas_engine>
@@ -326,6 +364,16 @@ if(BUILD_TESTING)
   add_test(
     NAME color_parser
     COMMAND color_parser_test
+  )
+
+  add_test(
+    NAME handle_registry
+    COMMAND handle_registry_test
+  )
+
+  add_test(
+    NAME multi_engine
+    COMMAND multi_engine_test
   )
 
   add_test(
@@ -349,6 +397,14 @@ if(BUILD_TESTING)
   )
   set_tests_properties(canvas_semantics PROPERTIES
     PASS_REGULAR_EXPRESSION "canvas_semantics ok"
+  )
+  add_test(
+    NAME path2d
+    COMMAND $<TARGET_FILE:canvas_engine>
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/path2d.js
+  )
+  set_tests_properties(path2d PROPERTIES
+    PASS_REGULAR_EXPRESSION "path2d ok"
   )
 
   add_test(
@@ -377,6 +433,42 @@ if(BUILD_TESTING)
   )
   set_tests_properties(drawing_animation_frame PROPERTIES
     PASS_REGULAR_EXPRESSION "DrainPendingTasks hit the 10000ms virtual advance cap"
+  )
+
+  add_test(
+    NAME deterministic_render
+    COMMAND ${CMAKE_COMMAND}
+            -DENGINE=$<TARGET_FILE:canvas_engine>
+            -DSOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DTEST_OUTPUT=${CMAKE_CURRENT_BINARY_DIR}/test_output
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/deterministic_render.cmake
+  )
+  set_tests_properties(deterministic_render PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    RUN_SERIAL TRUE
+    PASS_REGULAR_EXPRESSION "deterministic_render ok"
+  )
+
+  add_test(
+    NAME clock_epoch
+    COMMAND ${CMAKE_COMMAND} -E env
+            CANVAS_ENGINE_EPOCH_MS=1700000000000
+            $<TARGET_FILE:canvas_engine>
+            run ${CMAKE_CURRENT_SOURCE_DIR}/tests/clock_epoch.js
+  )
+  set_tests_properties(clock_epoch PROPERTIES
+    PASS_REGULAR_EXPRESSION "clock_epoch ok"
+  )
+
+  add_test(
+    NAME realtime_clock
+    COMMAND $<TARGET_FILE:canvas_engine>
+            run --realtime-clock --epoch-ms 1700000000000
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/realtime_clock.js
+  )
+  set_tests_properties(realtime_clock PROPERTIES
+    PASS_REGULAR_EXPRESSION "realtime_clock ok"
+    TIMEOUT 5
   )
 
   add_test(
@@ -432,6 +524,30 @@ if(BUILD_TESTING)
   set(ECHARTS_DIST_PATH
       "${CMAKE_CURRENT_SOURCE_DIR}/node_modules/echarts/dist/echarts.js")
   if(EXISTS "${ECHARTS_DIST_PATH}")
+    add_test(
+      NAME cli_render
+      COMMAND ${CMAKE_COMMAND}
+              -DENGINE=$<TARGET_FILE:canvas_engine>
+              -DSOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+              -DTEST_OUTPUT=${CMAKE_CURRENT_BINARY_DIR}/test_output
+              -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cli_render.cmake
+    )
+    set_tests_properties(cli_render PROPERTIES
+      PASS_REGULAR_EXPRESSION "cli_render ok"
+    )
+
+    add_test(
+      NAME cli_batch
+      COMMAND ${CMAKE_COMMAND}
+              -DENGINE=$<TARGET_FILE:canvas_engine>
+              -DSOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+              -DTEST_OUTPUT=${CMAKE_CURRENT_BINARY_DIR}/test_output
+              -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cli_batch.cmake
+    )
+    set_tests_properties(cli_batch PROPERTIES
+      PASS_REGULAR_EXPRESSION "cli_batch ok"
+    )
+
     set(ECHARTS_SUNBURST_REGRESSION_OUTPUT_PNG
         "${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_sunburst_regression.png")
     set(ECHARTS_TIMELINE_REGRESSION_OUTPUT_PNG

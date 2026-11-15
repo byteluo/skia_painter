@@ -64,4 +64,41 @@ for (const method of [
   assert(threwTypeError, "invalid fillRule did not throw TypeError");
 }
 
+const assignmentCanvas = new Canvas(20, 20);
+const assignmentContext = assignmentCanvas.getContext("2d");
+assignmentContext.fillStyle = "not-a-color";
+assignmentContext.strokeStyle = {};
+assignmentContext.lineWidth = Infinity;
+assignmentContext.globalAlpha = NaN;
+assignmentContext.textAlign = "middle";
+assignmentContext.textBaseline = "invalid";
+assignmentContext.globalCompositeOperation = "invalid";
+assignmentContext.lineCap = "invalid";
+assignmentContext.lineJoin = "invalid";
+assignmentContext.miterLimit = -1;
+assignmentContext.shadowBlur = Infinity;
+assignmentContext.shadowColor = "not-a-color";
+assignmentContext.shadowOffsetX = NaN;
+assignmentContext.shadowOffsetY = Infinity;
+assignmentContext.lineDashOffset = NaN;
+assert(assignmentContext.fillStyle === "#000000" &&
+       assignmentContext.strokeStyle === "#000000",
+       "invalid color assignments were not ignored");
+assert(assignmentContext.lineWidth === 1 &&
+       assignmentContext.globalAlpha === 1,
+       "invalid numeric assignments were not ignored");
+assert(assignmentContext.textAlign === "start" &&
+       assignmentContext.textBaseline === "alphabetic" &&
+       assignmentContext.globalCompositeOperation === "source-over" &&
+       assignmentContext.lineCap === "butt" &&
+       assignmentContext.lineJoin === "miter",
+       "invalid enum assignments were not ignored");
+assert(assignmentContext.miterLimit === 10 &&
+       assignmentContext.shadowBlur === 0 &&
+       assignmentContext.shadowColor === "rgba(0, 0, 0, 0)" &&
+       assignmentContext.shadowOffsetX === 0 &&
+       assignmentContext.shadowOffsetY === 0 &&
+       assignmentContext.lineDashOffset === 0,
+       "invalid shadow or dash assignments were not ignored");
+
 print("canvas_semantics ok");

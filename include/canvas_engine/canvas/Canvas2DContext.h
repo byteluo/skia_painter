@@ -115,8 +115,18 @@ class Canvas2DContext {
                float start_angle, float end_angle, bool counter_clockwise);
   void ClosePath();
   void Clip(SkPathFillType fill_type = SkPathFillType::kWinding);
+  void Clip(const SkPath& path,
+            SkPathFillType fill_type = SkPathFillType::kWinding);
   void Fill(SkPathFillType fill_type = SkPathFillType::kWinding);
+  void Fill(const SkPath& path,
+            SkPathFillType fill_type = SkPathFillType::kWinding);
   void Stroke();
+  void Stroke(const SkPath& path);
+  bool IsPointInPath(float x, float y,
+                     SkPathFillType fill_type = SkPathFillType::kWinding) const;
+  bool IsPointInPath(
+      const SkPath& path, float x, float y,
+      SkPathFillType fill_type = SkPathFillType::kWinding) const;
   void DrawImage(const sk_sp<SkImage>& image, float sx, float sy, float sw,
                  float sh, float dx, float dy, float dw, float dh);
   std::optional<ImageData> GetImageData(int x, int y, int width, int height) const;

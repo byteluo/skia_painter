@@ -101,6 +101,49 @@ mkdir -p output
 ./scripts/run_demo.sh
 ```
 
+## Render and batch commands
+
+The legacy `canvas_engine [--expose-gc] script.js` form remains supported. The
+explicit `run` command accepts the same script plus runtime options:
+
+```bash
+./build/dev/canvas_engine run examples/smoke.js
+./build/dev/canvas_engine render -o output/chart.png path/to/option.json
+```
+
+`render` accepts an ECharts option JSON file or a JavaScript file whose result
+is an option object. `batch` keeps one engine process alive and reads one JSON
+request per line (`option` or `optionFile` plus `out`):
+
+```bash
+printf '%s\n' \
+  '{"option":{"series":[{"type":"bar","data":[1,2,3]}]},"out":"output/chart.png"}' \
+  | ./build/dev/canvas_engine batch
+```
+
+`run`, `render`, and `batch` accept `--epoch-ms <milliseconds>` and
+`--realtime-clock`. The `CANVAS_ENGINE_EPOCH_MS` environment variable also
+sets the epoch; an explicit `--epoch-ms` takes precedence. If no epoch is
+provided, the engine captures the current wall-clock epoch once at startup.
+By default, `performance.now()`, `Date.now()`, and no-argument `Date`
+constructors use a deterministic virtual timeline. `--realtime-clock` makes
+that timeline include real elapsed time for scripts that busy-wait on
+`performance.now()`. Such a busy-wait does not terminate with the default
+virtual clock; use timers/animation frames or opt into the realtime clock.
+
+`render` and `batch` are static by default: they apply top-level
+`animation: false` to the option without changing series-level settings.
+Use `--animate` to enable ECharts animation; rendering waits for the `finished`
+event or the 3000 ms virtual-time fallback. Use `--settle-ms <milliseconds>`
+to change the fallback duration.
+
+Use `--png-compression fast|default|small` to choose PNG encoding. `default`
+preserves the existing encoder settings; `fast` uses zlib level 6 without PNG
+filtering, and `small` uses zlib level 9 without PNG filtering. Scripts may pass
+a preset as the second argument to
+`canvas.saveToPng(path, "fast")`, or after the drain flag as
+`canvas.saveToPng(path, false, "fast")`.
+
 ## Compare against the browser
 
 Spin up a local dev server that renders the **native browser ECharts canvas** on top and the **PNG exported by this backend** below, so you can compare them visually:

@@ -1,0 +1,9 @@
+#include <string_view>
+
+namespace canvas_engine {
+
+std::string_view EChartsHostSource() {
+  return R"ECHARTS_HOST(@ECHARTS_HOST_SOURCE@)ECHARTS_HOST";
+}
+
+}  // namespace canvas_engine
