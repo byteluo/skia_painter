@@ -329,6 +329,7 @@ if(BUILD_TESTING)
               -DSOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
               -DTEST_OUTPUT=${CMAKE_CURRENT_BINARY_DIR}/test_output
               -DVALID_FONT_DIR=${CANVAS_ENGINE_FONTS_DIR}
+              -DAPPLE_BUILD=${APPLE}
               -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/font_dir_resolution.cmake
     )
     set_tests_properties(font_dir_resolution PROPERTIES
