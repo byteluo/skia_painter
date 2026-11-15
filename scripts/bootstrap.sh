@@ -147,7 +147,7 @@ build_skia_minimal() {
   if [[ "${FORCE_SKIA_BUILD}" != "1" ]]; then
     cache_hit=1
     for artifact in "${required_artifacts[@]}"; do
-      if [[ ! -f "${SKIA_DIR}/bazel-bin/${artifact}" ]]; then
+      if [[ ! -f "${SKIA_DIR}/bazel-bin/${artifact}" && ! -f "${SKIA_DIR}/bazel-bin/${artifact%.pic.o}.o" ]]; then
         cache_hit=0
         break
       fi
@@ -155,7 +155,7 @@ build_skia_minimal() {
     if [[ "${cache_hit}" == "1" ]] &&
        [[ "${#cpu_artifacts[@]}" -gt 0 ]]; then
       for artifact in "${cpu_artifacts[@]}"; do
-        if [[ ! -f "${SKIA_DIR}/bazel-bin/${artifact}" ]]; then
+        if [[ ! -f "${SKIA_DIR}/bazel-bin/${artifact}" && ! -f "${SKIA_DIR}/bazel-bin/${artifact%.pic.o}.o" ]]; then
           cache_hit=0
           break
         fi
@@ -197,11 +197,11 @@ build_skia_minimal() {
   [[ -f "${SKIA_DIR}/bazel-bin/src/ports/libtypeface_proxy.a" ]] || fail "Skia typeface proxy archive was not produced"
   [[ -f "${SKIA_DIR}/bazel-bin/src/utils/libchar_to_glyphcache.a" ]] || fail "Skia char-to-glyph cache archive was not produced"
   [[ -f "${SKIA_DIR}/bazel-bin/external/+cpp_modules+freetype/libfreetype.a" ]] || fail "Skia bundled freetype archive was not produced"
-  [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.pic.o" ]] || fail "Skia skcms object was not produced"
-  [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o" ]] || fail "Skia skcms baseline object was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.pic.o" || -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.o" ]] || fail "Skia skcms object was not produced"
+  [[ -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o" || -f "${SKIA_DIR}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.o" ]] || fail "Skia skcms baseline object was not produced"
   if [[ "${#cpu_artifacts[@]}" -gt 0 ]]; then
     for artifact in "${cpu_artifacts[@]}"; do
-      [[ -f "${SKIA_DIR}/bazel-bin/${artifact}" ]] || fail "Skia CPU-specific artifact was not produced: ${artifact}"
+      [[ -f "${SKIA_DIR}/bazel-bin/${artifact}" || -f "${SKIA_DIR}/bazel-bin/${artifact%.pic.o}.o" ]] || fail "Skia CPU-specific artifact was not produced: ${artifact}"
     done
   fi
 }
