@@ -87,7 +87,23 @@ jobs:
 
       - name: Build Skia (minimal target set)
         run: |
-          if [[ -f "third_party/skia/bazel-bin/src/core/libcore.a" ]]; then
+          if [[ -f "third_party/skia/bazel-bin/src/core/libcore.a" &&
+                -f "third_party/skia/bazel-bin/src/base/libbase.a" &&
+                -f "third_party/skia/bazel-bin/src/encode/libpng_encode.a" &&
+                -f "third_party/skia/bazel-bin/src/encode/libpng_encode_base.a" &&
+                -f "third_party/skia/bazel-bin/src/encode/libencoder_common.a" &&
+                -f "third_party/skia/bazel-bin/src/encode/libicc_support.a" &&
+                -f "third_party/skia/bazel-bin/src/codec/libany_decoder.a" &&
+                -f "third_party/skia/bazel-bin/src/ports/libfontmgr_coretext.a" &&
+                -f "third_party/skia/bazel-bin/src/ports/libfreetype_support.a" &&
+                -f "third_party/skia/bazel-bin/src/ports/libtypeface_proxy.a" &&
+                -f "third_party/skia/bazel-bin/src/utils/libchar_to_glyphcache.a" &&
+                -f "third_party/skia/bazel-bin/src/opts/libml3.a" &&
+                -f "third_party/skia/bazel-bin/external/+cpp_modules+freetype/libfreetype.a" &&
+                -f "third_party/skia/bazel-bin/modules/skcms/_objs/skcms_public/skcms.pic.o" &&
+                -f "third_party/skia/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o" &&
+                -f "third_party/skia/bazel-bin/modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o" &&
+                -f "third_party/skia/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o" ]]; then
             echo "Skia artifacts found in cache"; exit 0
           fi
           cd third_party/skia
@@ -104,7 +120,7 @@ jobs:
             //src/encode:icc_support \
             //src/encode:png_encode \
             //src/encode:png_encode_base \
-            //src/ports:fontmgr_fontconfig \
+            //src/ports:fontmgr_coretext \
             //src/ports:freetype_support \
             //src/ports:typeface_proxy \
             //src/utils:char_to_glyphcache \
