@@ -102,7 +102,7 @@ function stats(samples) {
 // ---------------------------------------------------------------------------
 const skiaPainter = {
   id: "skia_painter",
-  label: "Skia Painter (spawn-per-render)",
+  label: "Skia Painter (spawn, static)",
   bin: CANVAS_ENGINE_BIN,
   available() {
     return Boolean(this.bin && existsSync(this.bin) && existsSync(ECHARTS_PATH));
@@ -113,23 +113,14 @@ const skiaPainter = {
   },
   renderOnce(name, dir) {
     const out = join(dir, `${name}.png`);
-    const script = `
-loadScript(${JSON.stringify(ECHARTS_PATH)});
-const W=${WIDTH},H=${HEIGHT};
-const canvas=new Canvas(W,H);canvas.style={};
-echarts.setPlatformAPI({
-  createCanvas(){const c=new Canvas(W,H);c.style={};return c;},
-  loadImage(src,onload){const im=new Image();if(typeof onload==='function')im.onload=onload;im.src=src;return im;}
-});
-const chart=echarts.init(canvas,null,{renderer:'canvas',width:W,height:H});
-chart.setOption(${JSON.stringify(CHARTS[name])});
-chart.getZr().refreshImmediately();
-canvas.saveToPng(${JSON.stringify(out)});
-`;
-    const scriptPath = join(dir, `${name}.js`);
-    writeFileSync(scriptPath, script);
+    const optionPath = join(dir, `${name}.json`);
+    writeFileSync(optionPath, JSON.stringify(CHARTS[name]));
     const t0 = performance.now();
-    const r = spawnSync(this.bin, [scriptPath], { stdio: "ignore" });
+    const r = spawnSync(this.bin, [
+      "render", optionPath, "-o", out,
+      "--width", String(WIDTH), "--height", String(HEIGHT), "--dpr", "3",
+      "--settle-ms", "0",
+    ], { cwd: ROOT, stdio: "ignore" });
     const dt = performance.now() - t0;
     if (r.status !== 0) throw new Error(`canvas_engine exited ${r.status}`);
     return dt;
@@ -141,7 +132,7 @@ canvas.saveToPng(${JSON.stringify(out)});
 // ---------------------------------------------------------------------------
 const skiaPainterBatch = {
   id: "skia_painter_batch",
-  label: "skia_painter (batch)",
+  label: "Skia Painter (batch, static)",
   bin: CANVAS_ENGINE_BIN,
   available() {
     return Boolean(this.bin && existsSync(this.bin) && existsSync(ECHARTS_PATH));

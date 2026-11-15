@@ -110,7 +110,8 @@ bool EChartsRenderer::RenderLastScriptResult(
 bool EChartsRenderer::RenderBatchRequest(const std::string& request_json,
                                          float default_dpr,
                                          double default_settle_ms,
-                                         std::string* response_json) {
+                                         std::string* response_json,
+                                         bool animation) {
   if (response_json == nullptr) {
     last_error_ = "batch response output must not be null";
     return false;
@@ -128,7 +129,7 @@ bool EChartsRenderer::RenderBatchRequest(const std::string& request_json,
   }
 
   const std::string source =
-      "((request, defaultDpr, defaultSettleMs) => {"
+      "((request, defaultDpr, defaultSettleMs, animation) => {"
       "try {"
       "if (!request || typeof request !== 'object' || Array.isArray(request)) "
       "throw new Error('request must be an object');"
@@ -162,7 +163,8 @@ bool EChartsRenderer::RenderBatchRequest(const std::string& request_json,
       "throw new Error('request.theme must be a string');"
       "if (typeof background !== 'string') "
       "throw new Error('request.background must be a string');"
-      "__renderChart(option, {width, height, dpr, settleMs, theme, background}, "
+      "__renderChart(option, {width, height, dpr, settleMs, theme, background, "
+      "animation}, "
       "request.out);"
       "return {ok: true, out: request.out};"
       "} catch (error) {"
@@ -170,7 +172,8 @@ bool EChartsRenderer::RenderBatchRequest(const std::string& request_json,
       "}"
       "})(JSON.parse(" +
       QuoteJsString(request_json) + ")," + FloatLiteral(default_dpr) + "," +
-      DoubleLiteral(default_settle_ms) + ");";
+      DoubleLiteral(default_settle_ms) + "," +
+      (animation ? "true" : "false") + ");";
   if (!engine_.RunScriptSource(source, "<echarts-batch>")) {
     last_error_ = engine_.last_error();
     return false;
@@ -207,6 +210,7 @@ bool EChartsRenderer::RenderExpression(
   std::ostringstream render_options;
   render_options << "{width:" << options.width << ",height:" << options.height
                  << ",dpr:" << FloatLiteral(options.dpr)
+                 << ",animation:" << (options.animation ? "true" : "false")
                  << ",settleMs:" << DoubleLiteral(options.settle_ms)
                  << ",theme:" << QuoteJsString(options.theme)
                  << ",background:" << QuoteJsString(options.background)

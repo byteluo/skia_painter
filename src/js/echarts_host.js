@@ -35,11 +35,12 @@ globalThis.__renderChart = function(option, renderOptions, outPath) {
   __canvasEngineRenderDpr = dpr;
 
   let renderOption = option;
-  if (renderOptions.background && option &&
-      typeof option === "object" && option.backgroundColor == null) {
-    renderOption = Object.assign({}, option, {
-      backgroundColor: renderOptions.background
-    });
+  if (option && typeof option === "object") {
+    const overrides = { animation: renderOptions.animation };
+    if (renderOptions.background && option.backgroundColor == null) {
+      overrides.backgroundColor = renderOptions.background;
+    }
+    renderOption = Object.assign({}, option, overrides);
   }
 
   const canvas = __canvasEngineCreateCanvas(width, height, dpr);

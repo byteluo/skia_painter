@@ -4,7 +4,8 @@ endif()
 
 file(MAKE_DIRECTORY "${TEST_OUTPUT}")
 set(output "${TEST_OUTPUT}/cli_render.png")
-file(REMOVE "${output}")
+set(animate_output "${TEST_OUTPUT}/cli_render_animate.png")
+file(REMOVE "${output}" "${animate_output}")
 
 execute_process(
   COMMAND "${ENGINE}" render
@@ -30,6 +31,30 @@ endif()
 file(SIZE "${output}" output_size)
 if(output_size LESS 100)
   message(FATAL_ERROR "render output is unexpectedly small: ${output_size} bytes")
+endif()
+
+execute_process(
+  COMMAND "${ENGINE}" render
+          --animate
+          --epoch-ms 1700000000000
+          --settle-ms 0
+          --width 320
+          --height 180
+          --dpr 1
+          -o "${animate_output}"
+          "${SOURCE_ROOT}/tests/cli_render_option.json"
+  WORKING_DIRECTORY "${SOURCE_ROOT}"
+  RESULT_VARIABLE animate_result
+  OUTPUT_VARIABLE animate_stdout
+  ERROR_VARIABLE animate_stderr
+  TIMEOUT 60
+)
+if(NOT animate_result STREQUAL "0")
+  message(FATAL_ERROR
+    "animated render failed (${animate_result}): ${animate_stderr}${animate_stdout}")
+endif()
+if(NOT EXISTS "${animate_output}")
+  message(FATAL_ERROR "animated render did not create ${animate_output}")
 endif()
 
 message(STATUS "cli_render ok")

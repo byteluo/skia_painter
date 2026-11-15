@@ -131,9 +131,11 @@ that timeline include real elapsed time for scripts that busy-wait on
 `performance.now()`. Such a busy-wait does not terminate with the default
 virtual clock; use timers/animation frames or opt into the realtime clock.
 
-`render` and `batch` wait for ECharts' `finished` event before saving, with a
-3000 ms virtual-time fallback. Use `--settle-ms <milliseconds>` to change the
-fallback duration.
+`render` and `batch` are static by default: they apply top-level
+`animation: false` to the option without changing series-level settings.
+Use `--animate` to enable ECharts animation; rendering waits for the `finished`
+event or the 3000 ms virtual-time fallback. Use `--settle-ms <milliseconds>`
+to change the fallback duration.
 
 ## Compare against the browser
 

@@ -129,8 +129,10 @@ epoch。默认情况下，`performance.now()`、`Date.now()` 和无参 `Date`
 纳入时间轴，以支持依赖 `performance.now()` 忙等的脚本。默认虚拟时钟下，
 这类忙等不会结束；请改用定时器 / 动画帧，或显式启用实时钟。
 
-`render` 和 `batch` 会在 ECharts 触发 `finished` 事件后保存；若事件未触发，
-则使用 3000 毫秒的虚拟时间回退。可通过 `--settle-ms <毫秒>` 修改回退时间。
+`render` 和 `batch` 默认生成静态图：会在 option 顶层应用
+`animation: false`，但不会修改 series 级别的设置。使用 `--animate` 启用
+ECharts 动画；渲染会等待 `finished` 事件，或等待 3000 毫秒虚拟时间后回退。
+可通过 `--settle-ms <毫秒>` 修改回退时间。
 
 ## 与浏览器对比
 

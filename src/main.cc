@@ -22,9 +22,10 @@ constexpr char kUsage[] =
     "[--epoch-ms n] <script.js>\n"
     "  canvas_engine render <option.json|option.js|-> -o <out.png> "
     "[--width 960] [--height 540] [--dpr 3] [--theme name] "
-    "[--echarts path] [--realtime-clock] [--epoch-ms n] [--settle-ms n]\n"
+    "[--echarts path] [--realtime-clock] [--epoch-ms n] [--settle-ms n] "
+    "[--animate]\n"
     "  canvas_engine batch [--echarts path] [--realtime-clock] "
-    "[--epoch-ms n] [--settle-ms n]\n"
+    "[--epoch-ms n] [--settle-ms n] [--animate]\n"
     "  canvas_engine --help";
 
 struct RenderArguments {
@@ -36,6 +37,7 @@ struct RenderArguments {
   std::string theme;
   std::optional<std::string> echarts_path;
   bool realtime_clock = false;
+  bool animation = false;
   std::optional<double> epoch_ms;
   double settle_ms = 3000.0;
   bool show_help = false;
@@ -282,6 +284,8 @@ bool ParseRenderArguments(int argc,
       }
     } else if (argument == "--realtime-clock") {
       arguments->realtime_clock = true;
+    } else if (argument == "--animate") {
+      arguments->animation = true;
     } else if (argument == "--help") {
       arguments->show_help = true;
       return true;
@@ -430,6 +434,7 @@ int RunRenderCommand(int argc, char** argv) {
   options.width = arguments.width;
   options.height = arguments.height;
   options.dpr = arguments.dpr;
+  options.animation = arguments.animation;
   options.settle_ms = arguments.settle_ms;
   options.theme = arguments.theme;
 
@@ -514,6 +519,7 @@ void AddElapsedMilliseconds(std::string* response, double elapsed_ms) {
 int RunBatchCommand(int argc, char** argv) {
   std::optional<std::string> requested_echarts_path;
   bool realtime_clock = false;
+  bool animation = false;
   std::optional<double> epoch_ms;
   double settle_ms = 3000.0;
   std::string error_message;
@@ -525,6 +531,10 @@ int RunBatchCommand(int argc, char** argv) {
     }
     if (argument == "--realtime-clock") {
       realtime_clock = true;
+      continue;
+    }
+    if (argument == "--animate") {
+      animation = true;
       continue;
     }
     if (argument == "--epoch-ms") {
@@ -579,8 +589,8 @@ int RunBatchCommand(int argc, char** argv) {
   while (std::getline(std::cin, request)) {
     const auto start = std::chrono::steady_clock::now();
     std::string response;
-    if (!renderer.RenderBatchRequest(request, default_dpr, settle_ms,
-                                     &response)) {
+    if (!renderer.RenderBatchRequest(request, default_dpr, settle_ms, &response,
+                                     animation)) {
       response = "{\"ok\":false,\"error\":" +
                  QuoteJsonString(renderer.last_error()) + "}";
     }
