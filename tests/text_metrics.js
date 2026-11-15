@@ -41,13 +41,17 @@ assert(metrics.actualBoundingBoxRight > 0,
        "actualBoundingBoxRight must be positive");
 assert(metrics.alphabeticBaseline === 0,
        "alphabetic baseline should be the default reference");
+assert(Math.abs(metrics.emHeightAscent + metrics.emHeightDescent - 20) <= 0.01,
+       "em-height metrics should sum to the font size");
 context.textBaseline = "top";
 const topMetrics = context.measureText("Hello");
 assert(topMetrics.alphabeticBaseline < 0,
        "alphabetic baseline should be below the top reference");
-assert(topMetrics.fontBoundingBoxAscent === 0 &&
-       topMetrics.emHeightAscent === 0,
+assert(topMetrics.fontBoundingBoxAscent === 0,
        "top baseline should align with the top of the font metrics");
+assert(Math.abs(topMetrics.emHeightAscent + topMetrics.emHeightDescent - 20) <=
+           0.01,
+       "top-baseline em-height metrics should preserve the font size");
 assert(topMetrics.actualBoundingBoxDescent >
        metrics.actualBoundingBoxDescent,
        "top baseline should move the glyph bounds below the reference");

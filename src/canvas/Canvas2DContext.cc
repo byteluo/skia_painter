@@ -762,11 +762,13 @@ Canvas2DContext::TextMetrics Canvas2DContext::MeasureText(
 Canvas2DContext::TextMetrics Canvas2DContext::MeasureTextRuns(
     const std::vector<TextRun>& runs) const {
   TextMetrics metrics;
+  const SkFont metrics_font = runs.empty() ? MakeFont() : runs.front().font;
+  const float em_size = metrics_font.getSize();
   float font_ascent = 0.0f;
   float font_descent = 0.0f;
   if (runs.empty()) {
     SkFontMetrics font_metrics;
-    MakeFont().getMetrics(&font_metrics);
+    metrics_font.getMetrics(&font_metrics);
     font_ascent = std::max(-font_metrics.fAscent, 0.0f);
     font_descent = std::max(font_metrics.fDescent, 0.0f);
   }
@@ -824,8 +826,13 @@ Canvas2DContext::TextMetrics Canvas2DContext::MeasureTextRuns(
     metrics.actual_bounding_box_descent =
         std::max(metrics.baseline_offset + bottom, 0.0f);
   }
-  metrics.em_height_ascent = metrics.font_bounding_box_ascent;
-  metrics.em_height_descent = metrics.font_bounding_box_descent;
+  const float font_metric_height = font_ascent + font_descent;
+  const float em_ascent =
+      font_metric_height > 0.0f
+          ? em_size * font_ascent / font_metric_height
+          : em_size;
+  metrics.em_height_ascent = em_ascent - metrics.baseline_offset;
+  metrics.em_height_descent = em_size - em_ascent + metrics.baseline_offset;
   metrics.alphabetic_baseline = -metrics.baseline_offset;
   metrics.hanging_baseline =
       BaselineOffset("hanging", font_ascent, font_descent) -
