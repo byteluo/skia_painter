@@ -184,7 +184,7 @@ if(UNIX AND NOT APPLE)
   target_link_libraries(canvas_engine_core PRIVATE fontconfig)
 endif()
 
-add_executable(canvas_engine src/main.cc)
+add_executable(canvas_engine src/main.cc src/cli/Cli.cc)
 target_link_libraries(canvas_engine PRIVATE canvas_engine_core)
 
 add_executable(color_parser_test tests/color_parser_test.cc)
