@@ -185,6 +185,19 @@ cmake --preset release  && cmake --build --preset release  && ctest --preset rel
 # 输出目录：build/dev、build/release
 ```
 
+Linux CI 使用固定的 V8 15.0.39 和 Skia `31521f8` 原生依赖 Release
+归档，以避免每次运行都重新构建这些依赖。若归档无法下载或校验和不匹配，
+CI 会回退到从源码构建 V8 和 Skia。
+
+如需从本地已有构建重新生成 Linux x86_64 归档：
+
+```bash
+scripts/package_native_deps.sh --out dist/native-deps
+```
+
+将生成的归档及 `.sha256` 文件上传到新的 GitHub Release，然后更新
+`.github/actions/setup-native-deps/action.yml` 中的 Release URL 和固定 SHA-256。
+
 ## 集成 ECharts
 
 推荐直接加载 ECharts 的 UMD 构建，并用宿主提供的 `Canvas` 作为渲染目标：
