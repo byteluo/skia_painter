@@ -1657,9 +1657,19 @@ void ScriptEngine::CanvasSaveToPng(
     return;
   }
 
+  bool drain_pending_tasks = true;
+  if (info.Length() > 1) {
+    if (!info[1]->IsBoolean()) {
+      ThrowTypeError(isolate,
+                     "saveToPng(path, drainPendingTasks) requires a boolean");
+      return;
+    }
+    drain_pending_tasks = info[1]->BooleanValue(isolate);
+  }
+
   auto* engine = From(isolate);
   const std::string output_path = ToStdString(isolate, info[0]);
-  if (engine && !engine->DrainPendingTasks()) {
+  if (engine && drain_pending_tasks && !engine->DrainPendingTasks()) {
     ThrowError(isolate, engine->last_error_);
     return;
   }

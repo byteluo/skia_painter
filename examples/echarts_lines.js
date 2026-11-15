@@ -7,6 +7,7 @@ const height = 540;
 
 
 renderChart({
+  captureTimeMs: 60000,
   option: {
       animation: false,
       backgroundColor: "#f8fafc",
