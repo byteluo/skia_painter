@@ -130,6 +130,7 @@ add_library(canvas_engine_core STATIC
   src/canvas/ColorParser.cc
   src/canvas/FontParser.cc
   src/canvas/ImageAsset.cc
+  src/runtime/EventLoop.cc
   src/runtime/HandleRegistry.cc
   src/runtime/ScriptEngine.cc
   src/runtime/V8Platform.cc

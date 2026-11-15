@@ -15,6 +15,7 @@
 namespace canvas_engine {
 
 class HandleRegistry;
+class EventLoop;
 
 class ScriptEngine {
  public:
@@ -45,16 +46,6 @@ class ScriptEngine {
   struct HandleFinalizerData;
   struct ImageHandle;
   struct PatternHandle;
-  struct PendingTask {
-    std::uint32_t id = 0;
-    bool animation_frame = false;
-    bool cancelled = false;
-    double ready_at_ms = 0.0;
-    v8::Global<v8::Function> callback;
-    std::vector<v8::Global<v8::Value>> arguments;
-    std::function<void()> native;
-  };
-
   v8::Local<v8::Context> GetContext();
   v8::Local<v8::FunctionTemplate> GetCanvasTemplate();
   v8::Local<v8::FunctionTemplate> GetContext2DTemplate();
@@ -74,7 +65,7 @@ class ScriptEngine {
   std::uint32_t EnqueueNativeTask(std::function<void()> callback,
                                  double ready_at_ms);
   double NowMs() const;
-  void RecordDrawOp() { ++draw_op_count_; }
+  void RecordDrawOp();
   void CancelTask(std::uint32_t task_id);
   std::uint64_t NextHandleId();
   std::filesystem::path ResolveScriptPath(const std::string& script_path) const;
@@ -281,22 +272,16 @@ class ScriptEngine {
   v8::Global<v8::FunctionTemplate> image_template_;
   v8::Global<v8::FunctionTemplate> pattern_template_;
   std::vector<std::filesystem::path> script_stack_;
-  std::uint32_t next_timer_id_ = 1;
   std::uint64_t next_handle_id_ = 1;
   std::chrono::steady_clock::time_point engine_start_time_ =
       std::chrono::steady_clock::now();
   double clock_epoch_ms_ = 0.0;
-  double clock_offset_ms_ = 0.0;
-  std::uint64_t draw_op_count_ = 0;
-  std::size_t consecutive_idle_frame_batches_ = 0;
-  double next_frame_ms_ = 0.0;
-  bool draining_tasks_ = false;
   std::string last_error_;
+  std::unique_ptr<EventLoop> event_loop_;
   std::unique_ptr<HandleRegistry> handle_registry_;
   std::unordered_map<std::uint64_t, std::unique_ptr<CanvasHandle>> canvases_;
   std::unordered_map<std::uint64_t, std::unique_ptr<GradientHandle>> gradients_;
   std::unordered_map<std::uint64_t, std::unique_ptr<ImageHandle>> images_;
-  std::vector<PendingTask> pending_tasks_;
   std::unordered_map<std::uint64_t, std::unique_ptr<PatternHandle>> patterns_;
 };
 
