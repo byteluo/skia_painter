@@ -12,6 +12,8 @@ ScriptEngineImpl::Options ToImplOptions(const ScriptEngine::Options& options) {
   impl_options.expose_gc = options.expose_gc;
   impl_options.realtime_clock = options.realtime_clock;
   impl_options.clock_epoch_ms = options.clock_epoch_ms;
+  impl_options.font_dir = options.font_dir;
+  impl_options.allow_system_fonts = options.allow_system_fonts;
   return impl_options;
 }
 

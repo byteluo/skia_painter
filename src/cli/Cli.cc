@@ -3,10 +3,12 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -21,14 +23,15 @@ constexpr char kUsage[] =
     "Usage:\n"
     "  canvas_engine [--expose-gc] <script.js>\n"
     "  canvas_engine run [--expose-gc] [--realtime-clock] "
-    "[--epoch-ms n] <script.js>\n"
+    "[--epoch-ms n] [--font-dir path] [--system-fonts] <script.js>\n"
     "  canvas_engine render <option.json|option.js|-> -o <out.png> "
     "[--width 960] [--height 540] [--dpr 3] [--theme name] "
     "[--echarts path] [--realtime-clock] [--epoch-ms n] [--settle-ms n] "
-    "[--animate] [--png-compression fast|default|small]\n"
+    "[--animate] [--font-dir path] [--system-fonts] "
+    "[--png-compression fast|default|small]\n"
     "  canvas_engine batch [--echarts path] [--realtime-clock] "
     "[--epoch-ms n] [--settle-ms n] [--animate] "
-    "[--png-compression fast|default|small]\n"
+    "[--font-dir path] [--system-fonts] [--png-compression fast|default|small]\n"
     "  canvas_engine --help";
 
 struct RenderArguments {
@@ -45,6 +48,8 @@ struct RenderArguments {
       canvas_engine::PngCompression::kDefault;
   std::optional<double> epoch_ms;
   double settle_ms = 3000.0;
+  std::filesystem::path font_dir;
+  bool allow_system_fonts = false;
   bool show_help = false;
 };
 
@@ -70,13 +75,27 @@ float DefaultDevicePixelRatio() {
 canvas_engine::ScriptEngine::Options MakeEngineOptions(
     bool expose_gc,
     bool realtime_clock,
-    std::optional<double> epoch_ms) {
+    std::optional<double> epoch_ms,
+    std::filesystem::path font_dir = {},
+    bool allow_system_fonts = false) {
   canvas_engine::ScriptEngine::Options options;
   options.device_pixel_ratio = DefaultDevicePixelRatio();
   options.expose_gc = expose_gc;
   options.realtime_clock = realtime_clock;
   options.clock_epoch_ms = epoch_ms;
+  options.font_dir = std::move(font_dir);
+  options.allow_system_fonts = allow_system_fonts;
   return options;
+}
+
+std::unique_ptr<canvas_engine::ScriptEngine> CreateEngine(
+    canvas_engine::ScriptEngine::Options options, std::string* error_message) {
+  try {
+    return std::make_unique<canvas_engine::ScriptEngine>(std::move(options));
+  } catch (const std::exception& error) {
+    *error_message = error.what();
+    return nullptr;
+  }
 }
 
 bool ParseFiniteDouble(const std::string& value, double* result) {
@@ -202,6 +221,28 @@ bool IsRegularFile(const std::filesystem::path& path) {
   return std::filesystem::is_regular_file(path, error) && !error;
 }
 
+std::filesystem::path ResolveFontDirectory(
+    const std::filesystem::path& explicit_path, const std::string& argv0) {
+  if (!explicit_path.empty()) {
+    return explicit_path;
+  }
+  const char* environment_path = std::getenv("CANVAS_ENGINE_FONT_DIR");
+  if (environment_path != nullptr && *environment_path != '\0') {
+    return {};
+  }
+#if CANVAS_ENGINE_BUNDLED_FONTS
+  const auto executable_fonts =
+      ResolveExecutablePath(argv0).parent_path() / "fonts";
+  std::error_code error;
+  if (std::filesystem::is_directory(executable_fonts, error) && !error) {
+    return executable_fonts;
+  }
+#else
+  (void)argv0;
+#endif
+  return {};
+}
+
 bool ResolveEChartsPath(const std::optional<std::string>& explicit_path,
                         const std::string& argv0,
                         std::filesystem::path* result,
@@ -263,6 +304,7 @@ bool ParseRenderArguments(int argc,
     if (argument == "-o" || argument == "--width" ||
         argument == "--height" || argument == "--dpr" ||
         argument == "--theme" || argument == "--echarts" ||
+        argument == "--font-dir" ||
         argument == "--epoch-ms" || argument == "--settle-ms" ||
         argument == "--png-compression") {
       if (index + 1 >= argc) {
@@ -291,6 +333,8 @@ bool ParseRenderArguments(int argc,
         arguments->theme = value;
       } else if (argument == "--echarts") {
         arguments->echarts_path = value;
+      } else if (argument == "--font-dir") {
+        arguments->font_dir = value;
       } else if (argument == "--settle-ms") {
         if (!ParseFiniteDouble(value, &arguments->settle_ms) ||
             arguments->settle_ms < 0.0) {
@@ -313,6 +357,8 @@ bool ParseRenderArguments(int argc,
       }
     } else if (argument == "--realtime-clock") {
       arguments->realtime_clock = true;
+    } else if (argument == "--system-fonts") {
+      arguments->allow_system_fonts = true;
     } else if (argument == "--animate") {
       arguments->animation = true;
     } else if (argument == "--help") {
@@ -347,11 +393,20 @@ bool ParseRenderArguments(int argc,
 int RunScript(const std::string& script_path,
               bool expose_gc,
               bool realtime_clock,
-              std::optional<double> epoch_ms) {
-  canvas_engine::ScriptEngine engine(
-      MakeEngineOptions(expose_gc, realtime_clock, epoch_ms));
-  if (!engine.RunScriptFile(script_path)) {
-    std::cerr << engine.last_error() << std::endl;
+              std::optional<double> epoch_ms,
+              std::filesystem::path font_dir,
+              bool allow_system_fonts) {
+  std::string error_message;
+  auto engine = CreateEngine(
+      MakeEngineOptions(expose_gc, realtime_clock, epoch_ms,
+                        std::move(font_dir), allow_system_fonts),
+      &error_message);
+  if (!engine) {
+    std::cerr << error_message << std::endl;
+    return 1;
+  }
+  if (!engine->RunScriptFile(script_path)) {
+    std::cerr << engine->last_error() << std::endl;
     return 1;
   }
   return 0;
@@ -366,6 +421,8 @@ int RunCommand(int argc, char** argv, int first_argument) {
   bool expose_gc = false;
   bool realtime_clock = false;
   std::optional<double> epoch_ms;
+  std::filesystem::path font_dir;
+  bool allow_system_fonts = false;
   std::string error_message;
   std::string script_path;
   for (int index = first_argument; index < argc; ++index) {
@@ -374,6 +431,14 @@ int RunCommand(int argc, char** argv, int first_argument) {
       expose_gc = true;
     } else if (argument == "--realtime-clock") {
       realtime_clock = true;
+    } else if (argument == "--system-fonts") {
+      allow_system_fonts = true;
+    } else if (argument == "--font-dir") {
+      if (index + 1 >= argc) {
+        std::cerr << "--font-dir requires a path" << std::endl;
+        return 2;
+      }
+      font_dir = argv[++index];
     } else if (argument == "--epoch-ms") {
       double parsed = 0.0;
       if (index + 1 >= argc ||
@@ -406,7 +471,9 @@ int RunCommand(int argc, char** argv, int first_argument) {
     std::cerr << error_message << std::endl;
     return 2;
   }
-  return RunScript(script_path, expose_gc, realtime_clock, epoch_ms);
+  return RunScript(script_path, expose_gc, realtime_clock, epoch_ms,
+                   ResolveFontDirectory(font_dir, argv[0]),
+                   allow_system_fonts);
 }
 
 bool ReadOptionInput(const std::string& input_path,
@@ -450,9 +517,16 @@ int RunRenderCommand(int argc, char** argv) {
     return 1;
   }
 
-  canvas_engine::ScriptEngine engine(MakeEngineOptions(
-      false, arguments.realtime_clock, arguments.epoch_ms));
-  canvas_engine::EChartsRenderer renderer(engine, echarts_path);
+  auto engine = CreateEngine(
+      MakeEngineOptions(false, arguments.realtime_clock, arguments.epoch_ms,
+                        ResolveFontDirectory(arguments.font_dir, argv[0]),
+                        arguments.allow_system_fonts),
+      &error_message);
+  if (!engine) {
+    std::cerr << error_message << std::endl;
+    return 1;
+  }
+  canvas_engine::EChartsRenderer renderer(*engine, echarts_path);
   if (!renderer.Initialize()) {
     std::cerr << renderer.last_error() << std::endl;
     return 1;
@@ -469,8 +543,8 @@ int RunRenderCommand(int argc, char** argv) {
   options.theme = arguments.theme;
 
   if (std::filesystem::path(arguments.input).extension() == ".js") {
-    if (!engine.RunScriptFile(arguments.input)) {
-      std::cerr << engine.last_error() << std::endl;
+    if (!engine->RunScriptFile(arguments.input)) {
+      std::cerr << engine->last_error() << std::endl;
       return 1;
     }
     if (!renderer.RenderLastScriptResult(options)) {
@@ -550,6 +624,8 @@ int RunBatchCommand(int argc, char** argv) {
   std::optional<std::string> requested_echarts_path;
   bool realtime_clock = false;
   bool animation = false;
+  bool allow_system_fonts = false;
+  std::filesystem::path font_dir;
   canvas_engine::PngCompression png_compression =
       canvas_engine::PngCompression::kDefault;
   std::optional<double> epoch_ms;
@@ -567,6 +643,10 @@ int RunBatchCommand(int argc, char** argv) {
     }
     if (argument == "--animate") {
       animation = true;
+      continue;
+    }
+    if (argument == "--system-fonts") {
+      allow_system_fonts = true;
       continue;
     }
     if (argument == "--epoch-ms") {
@@ -600,6 +680,10 @@ int RunBatchCommand(int argc, char** argv) {
       requested_echarts_path = argv[++index];
       continue;
     }
+    if (argument == "--font-dir" && index + 1 < argc) {
+      font_dir = argv[++index];
+      continue;
+    }
     std::cerr << "invalid batch option: " << argument << std::endl;
     PrintUsage(std::cerr);
     return 2;
@@ -618,9 +702,16 @@ int RunBatchCommand(int argc, char** argv) {
   }
 
   const float default_dpr = DefaultDevicePixelRatio();
-  canvas_engine::ScriptEngine engine(
-      MakeEngineOptions(false, realtime_clock, epoch_ms));
-  canvas_engine::EChartsRenderer renderer(engine, echarts_path);
+  auto engine = CreateEngine(
+      MakeEngineOptions(false, realtime_clock, epoch_ms,
+                        ResolveFontDirectory(font_dir, argv[0]),
+                        allow_system_fonts),
+      &error_message);
+  if (!engine) {
+    std::cerr << error_message << std::endl;
+    return 1;
+  }
+  canvas_engine::EChartsRenderer renderer(*engine, echarts_path);
   if (!renderer.Initialize()) {
     std::cerr << renderer.last_error() << std::endl;
     return 1;

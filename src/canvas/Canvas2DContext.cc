@@ -5,20 +5,9 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <optional>
 #include <string>
-#include <tuple>
-
-#if defined(__APPLE__)
-#include <CoreFoundation/CoreFoundation.h>
-#include <CoreGraphics/CoreGraphics.h>
-#include <CoreText/CoreText.h>
-#elif defined(__linux__)
-#include "include/ports/SkFontMgr_fontconfig.h"
-#include "include/ports/SkFontScanner_FreeType.h"
-#endif
 
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkCanvas.h"
@@ -30,6 +19,7 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkSamplingOptions.h"
+#include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
 #include "include/effects/SkDashPathEffect.h"
 #include "include/effects/SkImageFilters.h"
@@ -56,8 +46,83 @@ float ComputeShadowSigma(float blur) {
   return std::max(0.0f, blur * 0.5f);
 }
 
+float BaselineOffset(std::string_view baseline, float ascent, float descent) {
+  if (baseline == "top") {
+    return ascent;
+  }
+  if (baseline == "hanging") {
+    return ascent * 0.8f;
+  }
+  if (baseline == "middle") {
+    return (ascent - descent) * 0.5f;
+  }
+  if (baseline == "ideographic") {
+    return -descent * 0.5f;
+  }
+  if (baseline == "bottom") {
+    return -descent;
+  }
+  return 0.0f;
+}
+
 std::uint8_t ClampByte(int value) {
   return static_cast<std::uint8_t>(std::clamp(value, 0, 255));
+}
+
+std::vector<SkUnichar> DecodeUtf8(std::string_view text) {
+  std::vector<SkUnichar> codepoints;
+  for (std::size_t index = 0; index < text.size();) {
+    const auto first = static_cast<std::uint8_t>(text[index]);
+    if (first < 0x80) {
+      codepoints.push_back(first);
+      ++index;
+      continue;
+    }
+
+    int length = 0;
+    SkUnichar codepoint = 0;
+    if ((first & 0xe0) == 0xc0) {
+      length = 2;
+      codepoint = first & 0x1f;
+    } else if ((first & 0xf0) == 0xe0) {
+      length = 3;
+      codepoint = first & 0x0f;
+    } else if ((first & 0xf8) == 0xf0 && first <= 0xf4) {
+      length = 4;
+      codepoint = first & 0x07;
+    } else {
+      codepoints.push_back(0xfffd);
+      ++index;
+      continue;
+    }
+
+    bool valid = index + static_cast<std::size_t>(length) <= text.size();
+    for (int offset = 1; valid && offset < length; ++offset) {
+      const auto next =
+          static_cast<std::uint8_t>(text[index + static_cast<std::size_t>(offset)]);
+      if ((next & 0xc0) != 0x80) {
+        valid = false;
+        break;
+      }
+      codepoint = (codepoint << 6) | (next & 0x3f);
+    }
+    if (valid &&
+        ((length == 2 && codepoint < 0x80) ||
+         (length == 3 && codepoint < 0x800) ||
+         (length == 4 && codepoint < 0x10000) ||
+         (codepoint >= 0xd800 && codepoint <= 0xdfff) ||
+         codepoint > 0x10ffff)) {
+      valid = false;
+    }
+    if (!valid) {
+      codepoints.push_back(0xfffd);
+      ++index;
+      continue;
+    }
+    codepoints.push_back(codepoint);
+    index += static_cast<std::size_t>(length);
+  }
+  return codepoints;
 }
 
 SkColor ApplyGlobalAlpha(SkColor color, float global_alpha) {
@@ -69,155 +134,15 @@ SkColor ApplyGlobalAlpha(SkColor color, float global_alpha) {
                         SkColorGetB(color));
 }
 
-std::string MapFontconfigFamily(std::string_view family) {
-  const std::string lower = ToLower(family);
-  if (lower == "sans-serif" || lower == "system-ui" ||
-      lower == "-apple-system" || lower == "cursive" ||
-      lower == "fantasy") {
-    return "sans-serif";
-  }
-  if (lower == "serif") {
-    return "serif";
-  }
-  if (lower == "monospace") {
-    return "monospace";
-  }
-  return std::string(family);
-}
-
-#if defined(__APPLE__)
-std::string MapCoreTextFamily(std::string_view family) {
-  const std::string lower = ToLower(family);
-  if (lower == "sans-serif" || lower == "system-ui" ||
-      lower == "-apple-system" || lower == "cursive" ||
-      lower == "fantasy") {
-    return "Helvetica";
-  }
-  if (lower == "serif") {
-    return "Times New Roman";
-  }
-  if (lower == "monospace") {
-    return "Menlo";
-  }
-  return std::string(family);
-}
-
-struct ScopedCFTypeRef {
-  ScopedCFTypeRef() = default;
-  explicit ScopedCFTypeRef(CFTypeRef value) : value(value) {}
-  ~ScopedCFTypeRef() {
-    if (value != nullptr) {
-      CFRelease(value);
-    }
-  }
-
-  void Reset(CFTypeRef next_value) {
-    if (value != nullptr) {
-      CFRelease(value);
-    }
-    value = next_value;
-  }
-
-  CFTypeRef value = nullptr;
-};
-
-CFAttributedStringRef CreateAttributedString(std::string_view text,
-                                             const FontDescriptor& descriptor,
-                                             SkColor color,
-                                             float global_alpha) {
-  ScopedCFTypeRef text_ref(
-      CFStringCreateWithBytes(nullptr,
-                              reinterpret_cast<const UInt8*>(text.data()),
-                              static_cast<CFIndex>(text.size()),
-                              kCFStringEncodingUTF8, false));
-  if (text_ref.value == nullptr) {
-    return nullptr;
-  }
-
-  ScopedCFTypeRef font_ref;
-  for (const auto& family : descriptor.families) {
-    const std::string mapped_family = MapCoreTextFamily(family);
-    ScopedCFTypeRef family_ref(
-        CFStringCreateWithCString(nullptr, mapped_family.c_str(),
-                                  kCFStringEncodingUTF8));
-    if (family_ref.value == nullptr) {
-      continue;
-    }
-    CTFontRef candidate = CTFontCreateWithName(
-        static_cast<CFStringRef>(family_ref.value), descriptor.size_px,
-        nullptr);
-    if (candidate != nullptr) {
-      font_ref.value = candidate;
-      break;
-    }
-  }
-  if (font_ref.value == nullptr) {
-    return nullptr;
-  }
-
-  CTFontSymbolicTraits traits = 0;
-  if (descriptor.weight >= 600) {
-    traits |= kCTFontBoldTrait;
-  }
-  if (descriptor.slant != SkFontStyle::kUpright_Slant) {
-    traits |= kCTFontItalicTrait;
-  }
-  if (traits != 0) {
-    CTFontRef trait_font = CTFontCreateCopyWithSymbolicTraits(
-        static_cast<CTFontRef>(font_ref.value), descriptor.size_px, nullptr,
-        traits, traits);
-    if (trait_font != nullptr) {
-      font_ref.Reset(trait_font);
-    }
-  }
-
-  const CGFloat alpha =
-      (static_cast<CGFloat>(SkColorGetA(color)) / 255.0f) * global_alpha;
-  CGColorRef fill_color = CGColorCreateGenericRGB(
-      static_cast<CGFloat>(SkColorGetR(color)) / 255.0f,
-      static_cast<CGFloat>(SkColorGetG(color)) / 255.0f,
-      static_cast<CGFloat>(SkColorGetB(color)) / 255.0f, alpha);
-  if (fill_color == nullptr) {
-    return nullptr;
-  }
-
-  const void* keys[] = {kCTFontAttributeName, kCTForegroundColorAttributeName};
-  const void* values[] = {font_ref.value, fill_color};
-  CFDictionaryRef attributes = CFDictionaryCreate(
-      nullptr, keys, values, 2, &kCFTypeDictionaryKeyCallBacks,
-      &kCFTypeDictionaryValueCallBacks);
-  CGColorRelease(fill_color);
-  if (attributes == nullptr) {
-    return nullptr;
-  }
-
-  CFAttributedStringRef attributed =
-      CFAttributedStringCreate(nullptr, static_cast<CFStringRef>(text_ref.value),
-                               attributes);
-  CFRelease(attributes);
-  return attributed;
-}
-
-CTLineRef CreateTextLine(std::string_view text,
-                         const FontDescriptor& descriptor, SkColor color,
-                         float global_alpha) {
-  ScopedCFTypeRef attributed(
-      CreateAttributedString(text, descriptor, color, global_alpha));
-  if (attributed.value == nullptr) {
-    return nullptr;
-  }
-  return CTLineCreateWithAttributedString(
-      static_cast<CFAttributedStringRef>(attributed.value));
-}
-#endif
-
 }  // namespace
 
 Canvas2DContext::Canvas2DContext(
     std::shared_ptr<CanvasSurface> surface,
-    std::function<void()> draw_op_callback)
+    std::function<void()> draw_op_callback,
+    std::shared_ptr<FontManager> font_manager)
     : surface_(std::move(surface)),
-      draw_op_callback_(std::move(draw_op_callback)) {
+      draw_op_callback_(std::move(draw_op_callback)),
+      font_manager_(std::move(font_manager)) {
   ApplyDeviceScale();
 }
 
@@ -831,30 +756,83 @@ bool Canvas2DContext::PutImageData(const ImageData& image_data, int dx, int dy) 
 
 Canvas2DContext::TextMetrics Canvas2DContext::MeasureText(
     std::string_view text) const {
-  TextMetrics metrics;
-#if defined(__APPLE__)
-  ScopedCFTypeRef line(CreateTextLine(text, state_.font_descriptor,
-                                      state_.fill_style, state_.global_alpha));
-  if (line.value != nullptr) {
-    CGFloat ascent = 0.0;
-    CGFloat descent = 0.0;
-    CGFloat leading = 0.0;
-    metrics.width = static_cast<float>(CTLineGetTypographicBounds(
-        static_cast<CTLineRef>(line.value), &ascent, &descent, &leading));
-    metrics.actual_bounding_box_ascent = static_cast<float>(ascent);
-    metrics.actual_bounding_box_descent = static_cast<float>(descent);
-    return metrics;
-  }
-#endif
-  const SkFont font = MakeFont();
-  SkRect bounds;
-  metrics.width = font.measureText(text.data(), text.size(),
-                                   SkTextEncoding::kUTF8, &bounds);
+  return MeasureTextRuns(MakeTextRuns(text));
+}
 
-  SkFontMetrics font_metrics;
-  font.getMetrics(&font_metrics);
-  metrics.actual_bounding_box_ascent = std::max(-font_metrics.fAscent, 0.0f);
-  metrics.actual_bounding_box_descent = std::max(font_metrics.fDescent, 0.0f);
+Canvas2DContext::TextMetrics Canvas2DContext::MeasureTextRuns(
+    const std::vector<TextRun>& runs) const {
+  TextMetrics metrics;
+  float font_ascent = 0.0f;
+  float font_descent = 0.0f;
+  if (runs.empty()) {
+    SkFontMetrics font_metrics;
+    MakeFont().getMetrics(&font_metrics);
+    font_ascent = std::max(-font_metrics.fAscent, 0.0f);
+    font_descent = std::max(font_metrics.fDescent, 0.0f);
+  }
+  float pen_x = 0.0f;
+  float left = 0.0f;
+  float right = 0.0f;
+  float top = 0.0f;
+  float bottom = 0.0f;
+  bool has_bounds = false;
+  for (const auto& run : runs) {
+    SkFontMetrics run_metrics;
+    run.font.getMetrics(&run_metrics);
+    font_ascent = std::max(font_ascent, std::max(-run_metrics.fAscent, 0.0f));
+    font_descent =
+        std::max(font_descent, std::max(run_metrics.fDescent, 0.0f));
+    for (const SkGlyphID glyph : run.glyphs) {
+      const float advance = run.font.getWidth(glyph);
+      const SkRect bounds = run.font.getBounds(glyph, nullptr);
+      if (!bounds.isEmpty()) {
+        if (!has_bounds) {
+          left = pen_x + bounds.left();
+          right = pen_x + bounds.right();
+          top = bounds.top();
+          bottom = bounds.bottom();
+          has_bounds = true;
+        } else {
+          left = std::min(left, pen_x + bounds.left());
+          right = std::max(right, pen_x + bounds.right());
+          top = std::min(top, bounds.top());
+          bottom = std::max(bottom, bounds.bottom());
+        }
+      }
+      pen_x += advance;
+    }
+  }
+  metrics.width = pen_x;
+  metrics.baseline_offset =
+      BaselineOffset(state_.text_baseline, font_ascent, font_descent);
+  metrics.font_bounding_box_ascent =
+      std::max(font_ascent - metrics.baseline_offset, 0.0f);
+  metrics.font_bounding_box_descent =
+      std::max(font_descent + metrics.baseline_offset, 0.0f);
+  if (has_bounds) {
+    float alignment_offset = 0.0f;
+    if (state_.text_align == "center") {
+      alignment_offset = -metrics.width * 0.5f;
+    } else if (state_.text_align == "right" ||
+               state_.text_align == "end") {
+      alignment_offset = -metrics.width;
+    }
+    metrics.actual_bounding_box_left = -(alignment_offset + left);
+    metrics.actual_bounding_box_right = alignment_offset + right;
+    metrics.actual_bounding_box_ascent =
+        std::max(-(metrics.baseline_offset + top), 0.0f);
+    metrics.actual_bounding_box_descent =
+        std::max(metrics.baseline_offset + bottom, 0.0f);
+  }
+  metrics.em_height_ascent = metrics.font_bounding_box_ascent;
+  metrics.em_height_descent = metrics.font_bounding_box_descent;
+  metrics.alphabetic_baseline = -metrics.baseline_offset;
+  metrics.hanging_baseline =
+      BaselineOffset("hanging", font_ascent, font_descent) -
+      metrics.baseline_offset;
+  metrics.ideographic_baseline =
+      BaselineOffset("ideographic", font_ascent, font_descent) -
+      metrics.baseline_offset;
   return metrics;
 }
 
@@ -878,53 +856,68 @@ void Canvas2DContext::ApplyDeviceScale() {
 }
 
 SkFont Canvas2DContext::MakeFont() const {
-  SkFont font;
   const auto& descriptor = state_.font_descriptor;
-  font.setSize(descriptor.size_px);
-  font.setSubpixel(true);
-  font.setEdging(SkFont::Edging::kAntiAlias);
-#if defined(__linux__)
-  static sk_sp<SkFontMgr> font_mgr =
-      SkFontMgr_New_FontConfig(nullptr, SkFontScanner_Make_FreeType());
   const SkFontStyle requested_style(
       descriptor.weight, SkFontStyle::kNormal_Width, descriptor.slant);
-  if (font_mgr) {
-    using TypefaceKey = std::tuple<std::string, int, int>;
-    static std::map<TypefaceKey, sk_sp<SkTypeface>> typeface_cache;
+  if (font_manager_) {
     sk_sp<SkTypeface> typeface;
     for (const auto& family : descriptor.families) {
-      const std::string mapped_family = MapFontconfigFamily(family);
-      const TypefaceKey key(mapped_family, descriptor.weight,
-                            static_cast<int>(descriptor.slant));
-      const auto cached = typeface_cache.find(key);
-      if (cached != typeface_cache.end()) {
-        typeface = cached->second;
-      } else {
-        typeface =
-            font_mgr->matchFamilyStyle(mapped_family.c_str(), requested_style);
-        typeface_cache.emplace(key, typeface);
-      }
+      typeface = font_manager_->Match(family, requested_style);
       if (typeface) {
         break;
       }
     }
     if (!typeface) {
-      typeface = font_mgr->legacyMakeTypeface(nullptr, requested_style);
+      typeface = font_manager_->Match("Noto Sans", requested_style);
     }
-    if (typeface) {
-      const SkFontStyle matched_style = typeface->fontStyle();
-      font.setTypeface(std::move(typeface));
-      if (descriptor.weight >= 600 && matched_style.weight() < 600) {
-        font.setEmbolden(true);
-      }
-      if (descriptor.slant != SkFontStyle::kUpright_Slant &&
-          matched_style.slant() == SkFontStyle::kUpright_Slant) {
-        font.setSkewX(-0.25f);
-      }
+    return MakeFontForTypeface(std::move(typeface));
+  }
+  return MakeFontForTypeface(nullptr);
+}
+
+SkFont Canvas2DContext::MakeFontForTypeface(
+    sk_sp<SkTypeface> typeface) const {
+  SkFont font;
+  const auto& descriptor = state_.font_descriptor;
+  font.setSize(descriptor.size_px);
+  font.setSubpixel(true);
+  font.setEdging(SkFont::Edging::kAntiAlias);
+  if (typeface) {
+    const SkFontStyle matched_style = typeface->fontStyle();
+    font.setTypeface(std::move(typeface));
+    if (descriptor.weight >= 600 && matched_style.weight() < 600) {
+      font.setEmbolden(true);
+    }
+    if (descriptor.slant != SkFontStyle::kUpright_Slant &&
+        matched_style.slant() == SkFontStyle::kUpright_Slant) {
+      font.setSkewX(-0.25f);
     }
   }
-#endif
   return font;
+}
+
+std::vector<Canvas2DContext::TextRun> Canvas2DContext::MakeTextRuns(
+    std::string_view text) const {
+  std::vector<TextRun> runs;
+  const auto& descriptor = state_.font_descriptor;
+  const SkFontStyle requested_style(
+      descriptor.weight, SkFontStyle::kNormal_Width, descriptor.slant);
+  for (const SkUnichar codepoint : DecodeUtf8(text)) {
+    sk_sp<SkTypeface> typeface =
+        font_manager_ ? font_manager_->MatchGlyph(
+                            descriptor.families, requested_style, codepoint)
+                      : nullptr;
+    SkFont font = MakeFontForTypeface(std::move(typeface));
+    if (runs.empty() ||
+        runs.back().font.getTypeface() != font.getTypeface()) {
+      runs.push_back(TextRun{std::move(font), {}});
+    }
+    runs.back().glyphs.push_back(
+        runs.back().font.getTypeface()
+            ? runs.back().font.getTypeface()->unicharToGlyph(codepoint)
+            : 0);
+  }
+  return runs;
 }
 
 SkPaint Canvas2DContext::MakeFillPaint() const {
@@ -1013,103 +1006,9 @@ void Canvas2DContext::ConfigurePaint(SkPaint* paint, bool allow_line_dash) const
 void Canvas2DContext::DrawText(std::string_view text, float x, float y,
                                const SkPaint& paint) const {
   RecordDrawOp();
-#if defined(__APPLE__)
-  if (paint.getShader() == nullptr) {
-  SkPixmap pixmap;
-  if (surface_->PeekPixels(&pixmap)) {
-    CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
-    if (color_space != nullptr) {
-      const CGBitmapInfo bitmap_info = static_cast<CGBitmapInfo>(
-          static_cast<unsigned>(kCGBitmapByteOrder32Little) |
-          static_cast<unsigned>(kCGImageAlphaPremultipliedFirst));
-      CGContextRef cg = CGBitmapContextCreate(
-          const_cast<void*>(pixmap.addr()), pixmap.width(), pixmap.height(), 8,
-          pixmap.rowBytes(), color_space, bitmap_info);
-      CGColorSpaceRelease(color_space);
 
-      if (cg != nullptr) {
-        CGContextSetShouldAntialias(cg, true);
-        CGContextSetAllowsAntialiasing(cg, true);
-        const SkMatrix matrix = surface_->canvas()->getTotalMatrix();
-        CGContextSetTextMatrix(cg, CGAffineTransformIdentity);
-        CGContextSaveGState(cg);
-        CGContextTranslateCTM(cg, 0.0, static_cast<CGFloat>(pixmap.height()));
-        CGContextScaleCTM(cg, 1.0, -1.0);
-        CGContextConcatCTM(
-            cg, CGAffineTransformMake(
-                    static_cast<CGFloat>(matrix.getScaleX()),
-                    static_cast<CGFloat>(matrix.getSkewY()),
-                    static_cast<CGFloat>(matrix.getSkewX()),
-                    static_cast<CGFloat>(matrix.getScaleY()),
-                    static_cast<CGFloat>(matrix.getTranslateX()),
-                    static_cast<CGFloat>(matrix.getTranslateY())));
-
-        const TextMetrics text_metrics = MeasureText(text);
-        float draw_x = x;
-        if (state_.text_align == "center") {
-          draw_x -= text_metrics.width * 0.5f;
-        } else if (state_.text_align == "right" || state_.text_align == "end") {
-          draw_x -= text_metrics.width;
-        }
-
-        float baseline_y = y;
-        if (state_.text_baseline == "top" || state_.text_baseline == "hanging") {
-          baseline_y += text_metrics.actual_bounding_box_ascent;
-        } else if (state_.text_baseline == "middle") {
-          baseline_y += (text_metrics.actual_bounding_box_ascent -
-                         text_metrics.actual_bounding_box_descent) *
-                        0.5f;
-        } else if (state_.text_baseline == "bottom" ||
-                   state_.text_baseline == "ideographic") {
-          baseline_y -= text_metrics.actual_bounding_box_descent;
-        }
-
-        ScopedCFTypeRef line(CreateTextLine(
-            text, state_.font_descriptor,
-            paint.getStyle() == SkPaint::kStroke_Style ? state_.stroke_style
-                                                       : state_.fill_style,
-            state_.global_alpha));
-        if (line.value != nullptr) {
-          if ((SkColorGetA(state_.shadow_color) > 0) &&
-              (state_.shadow_blur > 0.0f || state_.shadow_offset_x != 0.0f ||
-               state_.shadow_offset_y != 0.0f)) {
-            CGColorRef shadow_color = CGColorCreateGenericRGB(
-                static_cast<CGFloat>(SkColorGetR(state_.shadow_color)) / 255.0f,
-                static_cast<CGFloat>(SkColorGetG(state_.shadow_color)) / 255.0f,
-                static_cast<CGFloat>(SkColorGetB(state_.shadow_color)) / 255.0f,
-                (static_cast<CGFloat>(SkColorGetA(state_.shadow_color)) / 255.0f) *
-                    state_.global_alpha);
-            if (shadow_color != nullptr) {
-              CGContextSetShadowWithColor(
-                  cg,
-                  CGSizeMake(static_cast<CGFloat>(state_.shadow_offset_x),
-                             static_cast<CGFloat>(-state_.shadow_offset_y)),
-                  static_cast<CGFloat>(state_.shadow_blur),
-                  shadow_color);
-              CGColorRelease(shadow_color);
-            }
-          }
-
-          CGContextSetTextPosition(cg, static_cast<CGFloat>(draw_x),
-                                   static_cast<CGFloat>(baseline_y));
-          CTLineDraw(static_cast<CTLineRef>(line.value), cg);
-          CGContextRestoreGState(cg);
-          CGContextRelease(cg);
-          return;
-        }
-
-        CGContextRestoreGState(cg);
-        CGContextRelease(cg);
-      }
-    }
-  }
-  }
-#endif
-
-  const SkFont font = MakeFont();
-  SkFontMetrics metrics;
-  font.getMetrics(&metrics);
-  const TextMetrics text_metrics = MeasureText(text);
+  const auto runs = MakeTextRuns(text);
+  const TextMetrics text_metrics = MeasureTextRuns(runs);
 
   float draw_x = x;
   if (state_.text_align == "center") {
@@ -1118,19 +1017,21 @@ void Canvas2DContext::DrawText(std::string_view text, float x, float y,
     draw_x -= text_metrics.width;
   }
 
-  float baseline_y = y;
-  if (state_.text_baseline == "top" || state_.text_baseline == "hanging") {
-    baseline_y -= metrics.fAscent;
-  } else if (state_.text_baseline == "middle") {
-    baseline_y -= (metrics.fAscent + metrics.fDescent) * 0.5f;
-  } else if (state_.text_baseline == "bottom" ||
-             state_.text_baseline == "ideographic") {
-    baseline_y -= metrics.fDescent;
-  }
+  const float baseline_y = y + text_metrics.baseline_offset;
 
-  surface_->canvas()->drawSimpleText(text.data(), text.size(),
-                                     SkTextEncoding::kUTF8, draw_x, baseline_y,
-                                     font, paint);
+  SkTextBlobBuilder builder;
+  float pen_x = 0.0f;
+  for (const auto& run : runs) {
+    const auto& buffer = builder.allocRun(
+        run.font, static_cast<int>(run.glyphs.size()), pen_x, 0.0f);
+    std::copy(run.glyphs.begin(), run.glyphs.end(), buffer.glyphs);
+    for (const SkGlyphID glyph : run.glyphs) {
+      pen_x += run.font.getWidth(glyph);
+    }
+  }
+  if (auto blob = builder.make()) {
+    surface_->canvas()->drawTextBlob(blob, draw_x, baseline_y, paint);
+  }
 }
 
 void Canvas2DContext::RecordDrawOp() const {

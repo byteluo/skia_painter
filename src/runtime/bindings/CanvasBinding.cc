@@ -147,11 +147,14 @@ void ScriptEngineImpl::CanvasGetContext(
   auto context = isolate->GetCurrentContext();
   if (!canvas->context_handle) {
     canvas->context_handle = std::make_unique<ContextHandle>(
-        std::make_unique<Canvas2DContext>(canvas->surface, [engine]() {
-          if (engine) {
-            engine->RecordDrawOp();
-          }
-        }));
+        std::make_unique<Canvas2DContext>(
+            canvas->surface,
+            [engine]() {
+              if (engine) {
+                engine->RecordDrawOp();
+              }
+            },
+            engine ? engine->font_manager_ : nullptr));
   }
 
   if (canvas->context_object.IsEmpty()) {
