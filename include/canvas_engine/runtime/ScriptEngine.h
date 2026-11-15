@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -18,6 +19,8 @@ class ScriptEngine {
   struct Options {
     float device_pixel_ratio = 3.0f;
     bool expose_gc = false;
+    bool realtime_clock = false;
+    std::optional<double> clock_epoch_ms;
   };
 
   ScriptEngine();
@@ -273,6 +276,7 @@ class ScriptEngine {
   std::uint64_t next_handle_id_ = 1;
   std::chrono::steady_clock::time_point engine_start_time_ =
       std::chrono::steady_clock::now();
+  double clock_epoch_ms_ = 0.0;
   double clock_offset_ms_ = 0.0;
   std::uint64_t draw_op_count_ = 0;
   std::size_t consecutive_idle_frame_batches_ = 0;

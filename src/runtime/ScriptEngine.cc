@@ -41,6 +41,33 @@ constexpr v8::EmbedderDataTypeTag kGradientHandleTag = 3;
 constexpr v8::EmbedderDataTypeTag kImageHandleTag = 4;
 constexpr v8::EmbedderDataTypeTag kPatternHandleTag = 5;
 
+constexpr char kVirtualDateBootstrap[] = R"js(
+(() => {
+  const NativeDate = Date;
+  const performanceNow = performance.now;
+  const now = () => __canvasEngineClockEpochMs + performanceNow();
+  const VirtualDate = new Proxy(NativeDate, {
+    apply() {
+      return new NativeDate(now()).toString();
+    },
+    construct(target, args, newTarget) {
+      return Reflect.construct(
+        target, args.length === 0 ? [now()] : args, newTarget);
+    },
+    get(target, property, receiver) {
+      return property === "now" ? now : Reflect.get(target, property, receiver);
+    }
+  });
+  Object.defineProperty(NativeDate.prototype, "constructor", {
+    value: VirtualDate,
+    writable: true,
+    configurable: true
+  });
+  globalThis.Date = VirtualDate;
+  delete globalThis.__canvasEngineClockEpochMs;
+})();
+)js";
+
 template <typename T>
 T* Unwrap(v8::Isolate* isolate, v8::Local<v8::Object> object,
           v8::EmbedderDataTypeTag tag) {
@@ -492,6 +519,16 @@ ScriptEngine::ScriptEngine(Options options) : options_(options) {
       !std::isfinite(options_.device_pixel_ratio)) {
     throw std::invalid_argument("device_pixel_ratio must be positive");
   }
+  if (options_.clock_epoch_ms.has_value()) {
+    if (!std::isfinite(*options_.clock_epoch_ms)) {
+      throw std::invalid_argument("clock_epoch_ms must be finite");
+    }
+    clock_epoch_ms_ = *options_.clock_epoch_ms;
+  } else {
+    clock_epoch_ms_ = std::chrono::duration<double, std::milli>(
+                          std::chrono::system_clock::now().time_since_epoch())
+                          .count();
+  }
   V8Platform::Initialize();
 
   allocator_.reset(v8::ArrayBuffer::Allocator::NewDefaultAllocator());
@@ -832,8 +869,10 @@ std::uint32_t ScriptEngine::EnqueueNativeTask(std::function<void()> callback,
 }
 
 double ScriptEngine::NowMs() const {
-  const auto elapsed =
-      std::chrono::steady_clock::now() - engine_start_time_;
+  if (!options_.realtime_clock) {
+    return clock_offset_ms_;
+  }
+  const auto elapsed = std::chrono::steady_clock::now() - engine_start_time_;
   return std::chrono::duration<double, std::milli>(elapsed).count() +
          clock_offset_ms_;
 }
@@ -938,6 +977,16 @@ v8::Local<v8::Context> ScriptEngine::GetContext() {
       ->Set(context, v8::String::NewFromUtf8Literal(isolate_, "performance"),
             performance)
       .Check();
+  global
+      ->Set(context,
+            v8::String::NewFromUtf8Literal(isolate_,
+                                           "__canvasEngineClockEpochMs"),
+            v8::Number::New(isolate_, clock_epoch_ms_))
+      .Check();
+  auto date_bootstrap = v8::Script::Compile(
+                            context, ToV8String(isolate_, kVirtualDateBootstrap))
+                            .ToLocalChecked();
+  date_bootstrap->Run(context).ToLocalChecked();
   global
       ->Set(context,
             v8::String::NewFromUtf8Literal(isolate_,

@@ -18,11 +18,13 @@ namespace {
 constexpr char kUsage[] =
     "Usage:\n"
     "  canvas_engine [--expose-gc] <script.js>\n"
-    "  canvas_engine run [--expose-gc] <script.js>\n"
+    "  canvas_engine run [--expose-gc] [--realtime-clock] "
+    "[--epoch-ms n] <script.js>\n"
     "  canvas_engine render <option.json|option.js|-> -o <out.png> "
     "[--width 960] [--height 540] [--dpr 3] [--theme name] "
-    "[--echarts path]\n"
-    "  canvas_engine batch [--echarts path]\n"
+    "[--echarts path] [--realtime-clock] [--epoch-ms n]\n"
+    "  canvas_engine batch [--echarts path] [--realtime-clock] "
+    "[--epoch-ms n]\n"
     "  canvas_engine --help";
 
 struct RenderArguments {
@@ -33,6 +35,8 @@ struct RenderArguments {
   float dpr = 3.0f;
   std::string theme;
   std::optional<std::string> echarts_path;
+  bool realtime_clock = false;
+  std::optional<double> epoch_ms;
   bool show_help = false;
 };
 
@@ -55,11 +59,45 @@ float DefaultDevicePixelRatio() {
   return 3.0f;
 }
 
-canvas_engine::ScriptEngine::Options MakeEngineOptions(bool expose_gc) {
+canvas_engine::ScriptEngine::Options MakeEngineOptions(
+    bool expose_gc,
+    bool realtime_clock,
+    std::optional<double> epoch_ms) {
   canvas_engine::ScriptEngine::Options options;
   options.device_pixel_ratio = DefaultDevicePixelRatio();
   options.expose_gc = expose_gc;
+  options.realtime_clock = realtime_clock;
+  options.clock_epoch_ms = epoch_ms;
   return options;
+}
+
+bool ParseFiniteDouble(const std::string& value, double* result) {
+  try {
+    std::size_t parsed = 0;
+    const double number = std::stod(value, &parsed);
+    if (parsed != value.size() || !std::isfinite(number)) {
+      return false;
+    }
+    *result = number;
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
+bool ReadEnvironmentEpoch(std::optional<double>* epoch_ms,
+                          std::string* error_message) {
+  const char* value = std::getenv("CANVAS_ENGINE_EPOCH_MS");
+  if (value == nullptr || *value == '\0') {
+    return true;
+  }
+  double parsed = 0.0;
+  if (!ParseFiniteDouble(value, &parsed)) {
+    *error_message = "CANVAS_ENGINE_EPOCH_MS must be a finite number";
+    return false;
+  }
+  *epoch_ms = parsed;
+  return true;
 }
 
 bool ParsePositiveInteger(const std::string& value, int* result) {
@@ -199,7 +237,8 @@ bool ParseRenderArguments(int argc,
     const std::string argument(argv[index]);
     if (argument == "-o" || argument == "--width" ||
         argument == "--height" || argument == "--dpr" ||
-        argument == "--theme" || argument == "--echarts") {
+        argument == "--theme" || argument == "--echarts" ||
+        argument == "--epoch-ms") {
       if (index + 1 >= argc) {
         *error_message = "missing value for " + argument;
         return false;
@@ -224,9 +263,18 @@ bool ParseRenderArguments(int argc,
         }
       } else if (argument == "--theme") {
         arguments->theme = value;
-      } else {
+      } else if (argument == "--echarts") {
         arguments->echarts_path = value;
+      } else {
+        double epoch_ms = 0.0;
+        if (!ParseFiniteDouble(value, &epoch_ms)) {
+          *error_message = "--epoch-ms must be a finite number";
+          return false;
+        }
+        arguments->epoch_ms = epoch_ms;
       }
+    } else if (argument == "--realtime-clock") {
+      arguments->realtime_clock = true;
     } else if (argument == "--help") {
       arguments->show_help = true;
       return true;
@@ -249,11 +297,19 @@ bool ParseRenderArguments(int argc,
     *error_message = "render requires -o <out.png>";
     return false;
   }
+  if (!arguments->epoch_ms.has_value() &&
+      !ReadEnvironmentEpoch(&arguments->epoch_ms, error_message)) {
+    return false;
+  }
   return true;
 }
 
-int RunScript(const std::string& script_path, bool expose_gc) {
-  canvas_engine::ScriptEngine engine(MakeEngineOptions(expose_gc));
+int RunScript(const std::string& script_path,
+              bool expose_gc,
+              bool realtime_clock,
+              std::optional<double> epoch_ms) {
+  canvas_engine::ScriptEngine engine(
+      MakeEngineOptions(expose_gc, realtime_clock, epoch_ms));
   if (!engine.RunScriptFile(script_path)) {
     std::cerr << engine.last_error() << std::endl;
     return 1;
@@ -268,17 +324,48 @@ int RunCommand(int argc, char** argv, int first_argument) {
     return 0;
   }
   bool expose_gc = false;
-  int script_argument = first_argument;
-  if (script_argument < argc &&
-      std::string(argv[script_argument]) == "--expose-gc") {
-    expose_gc = true;
-    ++script_argument;
+  bool realtime_clock = false;
+  std::optional<double> epoch_ms;
+  std::string script_path;
+  for (int index = first_argument; index < argc; ++index) {
+    const std::string argument(argv[index]);
+    if (argument == "--expose-gc") {
+      expose_gc = true;
+    } else if (argument == "--realtime-clock") {
+      realtime_clock = true;
+    } else if (argument == "--epoch-ms") {
+      double parsed = 0.0;
+      if (index + 1 >= argc ||
+          !ParseFiniteDouble(argv[++index], &parsed)) {
+        std::cerr << "--epoch-ms requires a finite number" << std::endl;
+        return 2;
+      }
+      epoch_ms = parsed;
+    } else if (argument == "--help") {
+      PrintUsage(std::cout);
+      return 0;
+    } else if (!argument.empty() && argument[0] == '-') {
+      std::cerr << "unknown run option: " << argument << std::endl;
+      PrintUsage(std::cerr);
+      return 2;
+    } else if (script_path.empty()) {
+      script_path = argument;
+    } else {
+      std::cerr << "run accepts exactly one script" << std::endl;
+      PrintUsage(std::cerr);
+      return 2;
+    }
   }
-  if (script_argument >= argc || script_argument + 1 != argc) {
+  if (script_path.empty()) {
     PrintUsage(std::cerr);
     return 2;
   }
-  return RunScript(argv[script_argument], expose_gc);
+  if (!epoch_ms.has_value() &&
+      !ReadEnvironmentEpoch(&epoch_ms, &error_message)) {
+    std::cerr << error_message << std::endl;
+    return 2;
+  }
+  return RunScript(script_path, expose_gc, realtime_clock, epoch_ms);
 }
 
 bool ReadOptionInput(const std::string& input_path,
@@ -322,7 +409,8 @@ int RunRenderCommand(int argc, char** argv) {
     return 1;
   }
 
-  canvas_engine::ScriptEngine engine(MakeEngineOptions(false));
+  canvas_engine::ScriptEngine engine(MakeEngineOptions(
+      false, arguments.realtime_clock, arguments.epoch_ms));
   canvas_engine::EChartsRenderer renderer(engine, echarts_path);
   if (!renderer.Initialize()) {
     std::cerr << renderer.last_error() << std::endl;
@@ -416,22 +504,44 @@ void AddElapsedMilliseconds(std::string* response, double elapsed_ms) {
 
 int RunBatchCommand(int argc, char** argv) {
   std::optional<std::string> requested_echarts_path;
+  bool realtime_clock = false;
+  std::optional<double> epoch_ms;
+  std::string error_message;
   for (int index = 2; index < argc; ++index) {
     const std::string argument(argv[index]);
     if (argument == "--help") {
       PrintUsage(std::cout);
       return 0;
     }
-    if (argument != "--echarts" || index + 1 >= argc) {
-      std::cerr << "invalid batch option: " << argument << std::endl;
-      PrintUsage(std::cerr);
-      return 2;
+    if (argument == "--realtime-clock") {
+      realtime_clock = true;
+      continue;
     }
-    requested_echarts_path = argv[++index];
+    if (argument == "--epoch-ms") {
+      double parsed = 0.0;
+      if (index + 1 >= argc ||
+          !ParseFiniteDouble(argv[++index], &parsed)) {
+        std::cerr << "--epoch-ms requires a finite number" << std::endl;
+        return 2;
+      }
+      epoch_ms = parsed;
+      continue;
+    }
+    if (argument == "--echarts" && index + 1 < argc) {
+      requested_echarts_path = argv[++index];
+      continue;
+    }
+    std::cerr << "invalid batch option: " << argument << std::endl;
+    PrintUsage(std::cerr);
+    return 2;
+  }
+  if (!epoch_ms.has_value() &&
+      !ReadEnvironmentEpoch(&epoch_ms, &error_message)) {
+    std::cerr << error_message << std::endl;
+    return 2;
   }
 
   std::filesystem::path echarts_path;
-  std::string error_message;
   if (!ResolveEChartsPath(requested_echarts_path, argv[0], &echarts_path,
                           &error_message)) {
     std::cerr << error_message << std::endl;
@@ -439,7 +549,8 @@ int RunBatchCommand(int argc, char** argv) {
   }
 
   const float default_dpr = DefaultDevicePixelRatio();
-  canvas_engine::ScriptEngine engine(MakeEngineOptions(false));
+  canvas_engine::ScriptEngine engine(
+      MakeEngineOptions(false, realtime_clock, epoch_ms));
   canvas_engine::EChartsRenderer renderer(engine, echarts_path);
   if (!renderer.Initialize()) {
     std::cerr << renderer.last_error() << std::endl;

@@ -316,6 +316,42 @@ if(BUILD_TESTING)
   )
 
   add_test(
+    NAME deterministic_render
+    COMMAND ${CMAKE_COMMAND}
+            -DENGINE=$<TARGET_FILE:canvas_engine>
+            -DSOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}
+            -DTEST_OUTPUT=${CMAKE_CURRENT_BINARY_DIR}/test_output
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/deterministic_render.cmake
+  )
+  set_tests_properties(deterministic_render PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    RUN_SERIAL TRUE
+    PASS_REGULAR_EXPRESSION "deterministic_render ok"
+  )
+
+  add_test(
+    NAME clock_epoch
+    COMMAND ${CMAKE_COMMAND} -E env
+            CANVAS_ENGINE_EPOCH_MS=1700000000000
+            $<TARGET_FILE:canvas_engine>
+            run ${CMAKE_CURRENT_SOURCE_DIR}/tests/clock_epoch.js
+  )
+  set_tests_properties(clock_epoch PROPERTIES
+    PASS_REGULAR_EXPRESSION "clock_epoch ok"
+  )
+
+  add_test(
+    NAME realtime_clock
+    COMMAND $<TARGET_FILE:canvas_engine>
+            run --realtime-clock --epoch-ms 1700000000000
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/realtime_clock.js
+  )
+  set_tests_properties(realtime_clock PROPERTIES
+    PASS_REGULAR_EXPRESSION "realtime_clock ok"
+    TIMEOUT 5
+  )
+
+  add_test(
     NAME render_regression_render
     COMMAND $<TARGET_FILE:canvas_engine>
             ${CMAKE_CURRENT_BINARY_DIR}/render_regression.js
