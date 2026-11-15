@@ -185,6 +185,19 @@ cmake --preset release  && cmake --build --preset release  && ctest --preset rel
 # 输出目录：build/dev、build/release
 ```
 
+Linux CI 使用固定的 V8 15.0.39 和 Skia `31521f8` 原生依赖 Release
+归档，以避免每次运行都重新构建这些依赖。若归档无法下载或校验和不匹配，
+CI 会回退到从源码构建 V8 和 Skia。
+
+如需从本地已有构建重新生成 Linux x86_64 归档：
+
+```bash
+scripts/package_native_deps.sh --out dist/native-deps
+```
+
+将生成的归档及 `.sha256` 文件上传到新的 GitHub Release，然后更新
+`.github/actions/setup-native-deps/action.yml` 中的 Release URL 和固定 SHA-256。
+
 ## 集成 ECharts
 
 推荐直接加载 ECharts 的 UMD 构建，并用宿主提供的 `Canvas` 作为渲染目标：
@@ -274,9 +287,10 @@ canvas.saveToPng("../output/chart.png");
 ctest --test-dir build --output-on-failure   # 全部测试
 ctest --preset dev                            # 通过 preset
 python3 scripts/verify_compare_coverage.py    # 只跑 compare 覆盖校验
+python3 scripts/update_goldens.py --update-goldens  # 有意更新图像基线
 ```
 
-三类测试：**冒烟测试**（V8 宿主 + 脚本执行链路）、**渲染回归**（高清导出、图片绘制、曲线、椭圆、`arcTo`、`ImageData`、任务队列冲刷语义）、**compare 覆盖**（每个 `examples/echarts_*.js` 都已接入 `web/compare/cases.json`）。
+CTest 使用带容差的 PNG 对比，覆盖原生渲染用例和每个 `examples/echarts_*.js` 图表。失败时可检查 `build/dev/golden-diffs/` 下的差异图。仅在有意更新基线时运行 `update_goldens.py`；提交前请审查 `tests/golden/` 的改动。
 
 ## 性能对比
 

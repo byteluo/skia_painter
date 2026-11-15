@@ -34,8 +34,7 @@ jobs:
           cmake --preset release \
             -DV8_INCLUDE_DIRS="/usr/local/include" \
             -DV8_LINK_DIRECTORIES="/usr/local/lib" \
-            -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase" \
-            -DV8_COMPILE_DEFINITIONS="V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH"
+            -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase"
 
       - name: Build release
         run: cmake --build --preset release
@@ -76,8 +75,8 @@ jobs:
           SKIA_COMMIT="31521f8508c712615b3d35e8e4554ccb5bf568e1"
           mkdir -p third_party/skia
           for attempt in 1 2 3 4; do
-            if curl -fsSL --retry 3 "https://skia.googlesource.com/skia/+archive/${SKIA_COMMIT}.tar.gz" \
-                | tar xz -C third_party/skia; then
+            if curl -fsSL --retry 3 "https://github.com/google/skia/archive/${SKIA_COMMIT}.tar.gz" \
+                | tar xz --strip-components=1 -C third_party/skia; then
               test -f third_party/skia/MODULE.bazel && exit 0
             fi
             echo "attempt $attempt failed, retrying..."
@@ -157,7 +156,6 @@ jobs:
           cmake --preset dev \
             -DV8_INCLUDE_DIRS="${V8_PREFIX}/include" \
             -DV8_LINK_DIRECTORIES="${V8_PREFIX}/lib;${V8_PREFIX}/libexec" \
-            -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase" \
-            -DV8_COMPILE_DEFINITIONS="V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH;V8_ENABLE_SANDBOX;CPPGC_POINTER_COMPRESSION"
+            -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase"
           cmake --build --preset dev
           ctest --preset dev --output-on-failure

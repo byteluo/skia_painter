@@ -17,30 +17,35 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      V8_ROOT: /usr/local
+      V8_ICU_DATA_DIR: /usr/local/share/v8
+      LD_LIBRARY_PATH: /usr/local/lib
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate pre-generated PNGs
-        run: |
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
+      - uses: ./.github/actions/setup-native-deps
 
-          cases = json.load(open("web/compare/cases.json"))
-          missing = [
-              case["outputFile"]
-              for case in cases
-              if not Path(case["outputFile"]).is_file()
-          ]
-          if missing:
-              print("Missing pre-generated PNGs:")
-              for path in missing:
-                  print(f"  {path}")
-              raise SystemExit(1)
-          print(f"Validated {len(cases)} pre-generated PNGs")
-          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Configure release build
+        run: |
+          cmake --preset release \
+            -DV8_INCLUDE_DIRS="/usr/local/include" \
+            -DV8_LINK_DIRECTORIES="/usr/local/lib" \
+            -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase"
+
+      - name: Build release engine
+        run: cmake --build --preset release
 
       - name: Build static site
+        env:
+          CANVAS_ENGINE_BIN: ${{ github.workspace }}/build/release/canvas_engine
         run: bash scripts/build_pages.sh
 
       - uses: actions/upload-pages-artifact@v3

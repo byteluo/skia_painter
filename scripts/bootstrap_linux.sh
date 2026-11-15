@@ -158,8 +158,8 @@ ensure_skia_checkout() {
   log "Fetching Skia archive ${SKIA_COMMIT}"
   rm -rf "${SKIA_DIR}"
   mkdir -p "${SKIA_DIR}"
-  curl -fsSL "https://skia.googlesource.com/skia/+archive/${SKIA_COMMIT}.tar.gz" \
-    | tar xz -C "${SKIA_DIR}"
+  curl -fsSL "https://github.com/google/skia/archive/${SKIA_COMMIT}.tar.gz" \
+    | tar xz --strip-components=1 -C "${SKIA_DIR}"
 
   [[ -d "${SKIA_DIR}" ]] || fail "missing Skia checkout at ${SKIA_DIR}"
   [[ -f "${SKIA_DIR}/MODULE.bazel" ]] || fail "Skia checkout is incomplete at ${SKIA_DIR}"
@@ -257,8 +257,7 @@ configure_and_build_engine() {
   cmake --preset "${BUILD_PRESET}" \
     -DV8_INCLUDE_DIRS="${V8_ROOT}/include" \
     -DV8_LINK_DIRECTORIES="${V8_ROOT}/lib" \
-    -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase" \
-    -DV8_COMPILE_DEFINITIONS="V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH"
+    -DV8_LIBRARIES="v8;v8_libplatform;v8_libbase"
 
   log "Building project with preset ${BUILD_PRESET}"
   cmake --build --preset "${BUILD_PRESET}"

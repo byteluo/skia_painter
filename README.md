@@ -192,6 +192,21 @@ cmake --preset release  && cmake --build --preset release  && ctest --preset rel
 # output dirs: build/dev, build/release
 ```
 
+Linux CI uses the pinned V8 15.0.39 and Skia `31521f8` native-dependency
+release asset to avoid rebuilding those dependencies on every run. If the
+asset cannot be downloaded or its checksum does not match, CI falls back to
+building V8 and Skia from source.
+
+To regenerate the Linux x86_64 package from existing local builds:
+
+```bash
+scripts/package_native_deps.sh --out dist/native-deps
+```
+
+Upload the generated archive and `.sha256` file to a new GitHub release, then
+update the release URL and pinned SHA-256 in
+`.github/actions/setup-native-deps/action.yml`.
+
 ## Integrating ECharts
 
 The recommended path is to load the ECharts UMD build and use the host `Canvas` as the render target:
@@ -281,9 +296,10 @@ The full example index lives in [`examples/`](examples/).
 ctest --test-dir build --output-on-failure   # all tests
 ctest --preset dev                            # via preset
 python3 scripts/verify_compare_coverage.py    # compare-coverage check only
+python3 scripts/update_goldens.py --update-goldens  # intentionally refresh image baselines
 ```
 
-Three test classes: **smoke** (V8 host + script execution), **rendering regression** (HiDPI export, image draw, curves, ellipse, `arcTo`, `ImageData`, task-queue flush), and **compare coverage** (every `examples/echarts_*.js` wired into `web/compare/cases.json`).
+CTest includes tolerance-based PNG comparisons for the native rendering fixtures and every `examples/echarts_*.js` chart. On failure, inspect the diff PNGs under `build/dev/golden-diffs/`. Refresh baselines only intentionally with `update_goldens.py`; review the resulting `tests/golden/` changes before committing.
 
 ## Benchmarks
 

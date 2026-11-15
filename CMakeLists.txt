@@ -9,7 +9,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(V8_INCLUDE_DIRS "" CACHE STRING "Semicolon-separated V8 include directories")
 set(V8_LINK_DIRECTORIES "" CACHE STRING "Semicolon-separated V8 library directories")
 set(V8_LIBRARIES "" CACHE STRING "Semicolon-separated V8 libraries or targets")
-set(V8_COMPILE_DEFINITIONS "" CACHE STRING "Semicolon-separated V8 compile definitions")
+set(V8_COMPILE_DEFINITIONS "" CACHE STRING "Override V8 compile definitions")
+set(V8_GN_BUILD_DIR "" CACHE PATH "V8 GN output directory used to detect ABI definitions")
 
 set(SKIA_INCLUDE_DIRS "" CACHE STRING "Semicolon-separated Skia include directories")
 set(SKIA_LINK_DIRECTORIES "" CACHE STRING "Semicolon-separated Skia library directories")
@@ -24,10 +25,6 @@ if(APPLE)
   endif()
   if("${V8_LIBRARIES}" STREQUAL "" AND EXISTS "/opt/homebrew/opt/v8/lib/libv8.dylib")
     set(V8_LIBRARIES "v8;v8_libplatform;v8_libbase")
-  endif()
-  if("${V8_COMPILE_DEFINITIONS}" STREQUAL "" AND EXISTS "/opt/homebrew/opt/v8/include")
-    set(V8_COMPILE_DEFINITIONS
-      "V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH;V8_ENABLE_SANDBOX;CPPGC_POINTER_COMPRESSION")
   endif()
 elseif(UNIX)
   # Auto-detect V8 from environment variable or common Linux paths
@@ -52,119 +49,15 @@ elseif(UNIX)
       set(V8_LIBRARIES "v8;v8_libplatform;v8_libbase")
     endif()
   endif()
-  if("${V8_COMPILE_DEFINITIONS}" STREQUAL "" AND NOT "${V8_INCLUDE_DIRS}" STREQUAL "")
-    set(V8_COMPILE_DEFINITIONS
-      "V8_COMPRESS_POINTERS;V8_COMPRESS_POINTERS_IN_SHARED_CAGE;V8_31BIT_SMIS_ON_64BIT_ARCH")
-  endif()
 endif()
 
-set(SKIA_LOCAL_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/skia")
-set(SKIA_LOCAL_CORE "${SKIA_LOCAL_ROOT}/bazel-bin/src/core/libcore.a")
-set(SKIA_LOCAL_BASE "${SKIA_LOCAL_ROOT}/bazel-bin/src/base/libbase.a")
-set(SKIA_LOCAL_PNG_ENCODE "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libpng_encode.a")
-set(SKIA_LOCAL_PNG_ENCODE_BASE "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libpng_encode_base.a")
-set(SKIA_LOCAL_ENCODER_COMMON "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libencoder_common.a")
-set(SKIA_LOCAL_ICC_SUPPORT "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libicc_support.a")
-set(SKIA_LOCAL_ANY_DECODER "${SKIA_LOCAL_ROOT}/bazel-bin/src/codec/libany_decoder.a")
-set(SKIA_LOCAL_FONTMGR_CUSTOM "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_custom.a")
-set(SKIA_LOCAL_FONTMGR_DIRECTORY "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_directory_freetype.a")
-if(APPLE)
-  set(SKIA_LOCAL_PLATFORM_FONTMGRS
-      "${SKIA_LOCAL_FONTMGR_DIRECTORY};${SKIA_LOCAL_FONTMGR_CUSTOM}")
-  set(SKIA_LOCAL_PLATFORM_FONTMGR_AVAILABLE TRUE)
-else()
-  set(SKIA_LOCAL_PLATFORM_FONTMGR
-      "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_fontconfig.a")
-  set(SKIA_LOCAL_PLATFORM_FONTMGRS
-      "${SKIA_LOCAL_PLATFORM_FONTMGR};${SKIA_LOCAL_FONTMGR_DIRECTORY};${SKIA_LOCAL_FONTMGR_CUSTOM}")
-  if(EXISTS "${SKIA_LOCAL_PLATFORM_FONTMGR}")
-    set(SKIA_LOCAL_PLATFORM_FONTMGR_AVAILABLE TRUE)
-  else()
-    set(SKIA_LOCAL_PLATFORM_FONTMGR_AVAILABLE FALSE)
-  endif()
-endif()
-set(SKIA_LOCAL_FREETYPE_SUPPORT "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfreetype_support.a")
-set(SKIA_LOCAL_TYPEFACE_PROXY "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libtypeface_proxy.a")
-set(SKIA_LOCAL_CHAR_TO_GLYPHCACHE "${SKIA_LOCAL_ROOT}/bazel-bin/src/utils/libchar_to_glyphcache.a")
-set(SKIA_LOCAL_FREETYPE "${SKIA_LOCAL_ROOT}/bazel-bin/external/+cpp_modules+freetype/libfreetype.a")
-set(SKIA_LOCAL_OPTS_ML3 "${SKIA_LOCAL_ROOT}/bazel-bin/src/opts/libml3.a")
-set(SKIA_LOCAL_SKCMS "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_public/skcms.pic.o")
-set(SKIA_LOCAL_SKCMS_BASELINE
-    "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_TransformBaseline/skcms_TransformBaseline.pic.o")
-set(SKIA_LOCAL_SKCMS_HSW
-    "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_TransformHsw/skcms_TransformHsw.pic.o")
-set(SKIA_LOCAL_SKCMS_SKX
-    "${SKIA_LOCAL_ROOT}/bazel-bin/modules/skcms/_objs/skcms_TransformSkx/skcms_TransformSkx.pic.o")
-
-# Bazel emits position-independent objects as .pic.o on Linux but plain .o on macOS.
-foreach(skcms_var SKIA_LOCAL_SKCMS SKIA_LOCAL_SKCMS_BASELINE SKIA_LOCAL_SKCMS_HSW SKIA_LOCAL_SKCMS_SKX)
-  if(NOT EXISTS "${${skcms_var}}")
-    string(REGEX REPLACE "\\.pic\\.o$" ".o" skcms_plain_object "${${skcms_var}}")
-    if(EXISTS "${skcms_plain_object}")
-      set(${skcms_var} "${skcms_plain_object}")
-    endif()
-  endif()
-endforeach()
-
-set(SKIA_LOCAL_CPU_OPT_LIBRARIES)
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
-  list(APPEND SKIA_LOCAL_CPU_OPT_LIBRARIES
-    "${SKIA_LOCAL_OPTS_ML3}"
-    "${SKIA_LOCAL_SKCMS_HSW}"
-    "${SKIA_LOCAL_SKCMS_SKX}")
-endif()
-
-set(SKIA_LOCAL_CPU_OPT_AVAILABLE TRUE)
-foreach(cpu_opt_library IN LISTS SKIA_LOCAL_CPU_OPT_LIBRARIES)
-  if(NOT EXISTS "${cpu_opt_library}")
-    set(SKIA_LOCAL_CPU_OPT_AVAILABLE FALSE)
-  endif()
-endforeach()
-
-if("${SKIA_INCLUDE_DIRS}" STREQUAL "" AND EXISTS "${SKIA_LOCAL_ROOT}/include/core/SkCanvas.h")
-  set(SKIA_INCLUDE_DIRS "${SKIA_LOCAL_ROOT}")
-endif()
-
-if("${SKIA_LIBRARIES}" STREQUAL "" AND
-   EXISTS "${SKIA_LOCAL_CORE}" AND
-   EXISTS "${SKIA_LOCAL_BASE}" AND
-   EXISTS "${SKIA_LOCAL_PNG_ENCODE}" AND
-   EXISTS "${SKIA_LOCAL_PNG_ENCODE_BASE}" AND
-   EXISTS "${SKIA_LOCAL_ENCODER_COMMON}" AND
-   EXISTS "${SKIA_LOCAL_ICC_SUPPORT}" AND
-   EXISTS "${SKIA_LOCAL_ANY_DECODER}" AND
-   SKIA_LOCAL_PLATFORM_FONTMGR_AVAILABLE AND
-   EXISTS "${SKIA_LOCAL_FONTMGR_CUSTOM}" AND
-   EXISTS "${SKIA_LOCAL_FONTMGR_DIRECTORY}" AND
-   EXISTS "${SKIA_LOCAL_FREETYPE_SUPPORT}" AND
-   EXISTS "${SKIA_LOCAL_TYPEFACE_PROXY}" AND
-   EXISTS "${SKIA_LOCAL_CHAR_TO_GLYPHCACHE}" AND
-   EXISTS "${SKIA_LOCAL_FREETYPE}" AND
-   EXISTS "${SKIA_LOCAL_SKCMS}" AND
-   EXISTS "${SKIA_LOCAL_SKCMS_BASELINE}" AND
-   SKIA_LOCAL_CPU_OPT_AVAILABLE)
-  set(SKIA_LIBRARIES
-    "${SKIA_LOCAL_PNG_ENCODE};${SKIA_LOCAL_PNG_ENCODE_BASE};${SKIA_LOCAL_ENCODER_COMMON};${SKIA_LOCAL_ANY_DECODER};${SKIA_LOCAL_ICC_SUPPORT};${SKIA_LOCAL_PLATFORM_FONTMGRS};${SKIA_LOCAL_TYPEFACE_PROXY};${SKIA_LOCAL_FREETYPE_SUPPORT};${SKIA_LOCAL_CHAR_TO_GLYPHCACHE};${SKIA_LOCAL_FREETYPE};${SKIA_LOCAL_CORE};${SKIA_LOCAL_BASE};${SKIA_LOCAL_SKCMS};${SKIA_LOCAL_SKCMS_BASELINE};${SKIA_LOCAL_CPU_OPT_LIBRARIES}")
-endif()
-
-if("${SKIA_LIBRARIES}" STREQUAL "")
-  foreach(skia_artifact
-      "${SKIA_LOCAL_CORE}" "${SKIA_LOCAL_BASE}" "${SKIA_LOCAL_PNG_ENCODE}"
-      "${SKIA_LOCAL_PNG_ENCODE_BASE}" "${SKIA_LOCAL_ENCODER_COMMON}" "${SKIA_LOCAL_ICC_SUPPORT}"
-      "${SKIA_LOCAL_ANY_DECODER}" "${SKIA_LOCAL_FREETYPE_SUPPORT}" "${SKIA_LOCAL_TYPEFACE_PROXY}"
-      "${SKIA_LOCAL_CHAR_TO_GLYPHCACHE}" "${SKIA_LOCAL_FREETYPE}" "${SKIA_LOCAL_SKCMS}"
-      "${SKIA_LOCAL_SKCMS_BASELINE}" ${SKIA_LOCAL_CPU_OPT_LIBRARIES})
-    if(NOT EXISTS "${skia_artifact}")
-      message(STATUS "Missing local Skia artifact: ${skia_artifact}")
-    endif()
-  endforeach()
-endif()
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+find_package(Skia REQUIRED)
 
 foreach(required_var
     V8_INCLUDE_DIRS
     V8_LIBRARIES
-    SKIA_INCLUDE_DIRS
-    SKIA_LIBRARIES)
+    SKIA_INCLUDE_DIRS)
   if("${${required_var}}" STREQUAL "")
     message(FATAL_ERROR
       "${required_var} is empty. Configure this project with explicit V8/Skia include paths and libraries.")
@@ -175,6 +68,7 @@ find_package(Threads REQUIRED)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 find_package(PNG REQUIRED)
 find_package(ZLIB REQUIRED)
+include(cmake/DetectV8.cmake)
 include(CTest)
 include(GNUInstallDirs)
 include(cmake/fonts.cmake)
@@ -251,7 +145,7 @@ endif()
 target_link_libraries(canvas_engine_core
   PUBLIC
     ${V8_LIBRARIES}
-    ${SKIA_LIBRARIES}
+    Skia::Skia
     Threads::Threads
   PRIVATE
     ZLIB::ZLIB
@@ -536,8 +430,15 @@ if(BUILD_TESTING)
   add_test(
     NAME render_regression_verify
     COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_render_regression.py
-            ${CMAKE_CURRENT_BINARY_DIR}/test_output/render_regression.png
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/golden_test.py
+            --actual
+            "${CMAKE_CURRENT_BINARY_DIR}/test_output/render_regression.png"
+            --golden
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/render_regression.png"
+            --config
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/tolerances.json"
+            --diff
+            "${CMAKE_CURRENT_BINARY_DIR}/golden-diffs/render_regression.png"
   )
   set_tests_properties(render_regression_verify PROPERTIES
     DEPENDS render_regression_render
@@ -557,8 +458,15 @@ if(BUILD_TESTING)
   add_test(
     NAME text_rotate_regression_verify
     COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_text_rotate_regression.py
-            ${CMAKE_CURRENT_BINARY_DIR}/test_output/text_rotate_regression.png
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/golden_test.py
+            --actual
+            "${CMAKE_CURRENT_BINARY_DIR}/test_output/text_rotate_regression.png"
+            --golden
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/text_rotate_regression.png"
+            --config
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/tolerances.json"
+            --diff
+            "${CMAKE_CURRENT_BINARY_DIR}/golden-diffs/text_rotate_regression.png"
   )
   set_tests_properties(text_rotate_regression_verify PROPERTIES
     DEPENDS text_rotate_regression_render
@@ -576,6 +484,28 @@ if(BUILD_TESTING)
   set(ECHARTS_DIST_PATH
       "${CMAKE_CURRENT_SOURCE_DIR}/node_modules/echarts/dist/echarts.js")
   if(EXISTS "${ECHARTS_DIST_PATH}")
+    file(GLOB ECHARTS_EXAMPLE_SCRIPTS CONFIGURE_DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/examples/echarts_*.js")
+    foreach(example_script IN LISTS ECHARTS_EXAMPLE_SCRIPTS)
+      get_filename_component(example_name "${example_script}" NAME_WE)
+      add_test(
+        NAME "golden_${example_name}"
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/golden_test.py
+                --engine "$<TARGET_FILE:canvas_engine>"
+                --script "${example_script}"
+                --run-dir
+                "${CMAKE_CURRENT_BINARY_DIR}/golden-runs/${example_name}"
+                --output-name "${example_name}.png"
+                --golden
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/${example_name}.png"
+                --config
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/tolerances.json"
+                --diff
+                "${CMAKE_CURRENT_BINARY_DIR}/golden-diffs/${example_name}.png"
+      )
+    endforeach()
+
     add_test(
       NAME cli_render
       COMMAND ${CMAKE_COMMAND}
@@ -631,19 +561,31 @@ if(BUILD_TESTING)
         "wrote ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_image_scatter_regression\\.png"
     )
 
-    add_test(
-      NAME echarts_regression_verify
-      COMMAND ${Python3_EXECUTABLE}
-              ${CMAKE_CURRENT_SOURCE_DIR}/scripts/verify_echarts_regression.py
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_sunburst_regression.png
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_timeline_regression.png
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_custom_series_regression.png
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_pictorial_bar_regression.png
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_gauge_regression.png
-              ${CMAKE_CURRENT_BINARY_DIR}/test_output/echarts_image_scatter_regression.png
-    )
-    set_tests_properties(echarts_regression_verify PROPERTIES
-      DEPENDS echarts_regression_render
-    )
+    foreach(regression_name IN ITEMS
+        sunburst
+        timeline
+        custom_series
+        pictorial_bar
+        gauge
+        image_scatter)
+      set(regression_image "echarts_${regression_name}_regression.png")
+      add_test(
+        NAME "golden_${regression_image}"
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/golden_test.py
+                --actual
+                "${CMAKE_CURRENT_BINARY_DIR}/test_output/${regression_image}"
+                --golden
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/${regression_image}"
+                --config
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/tolerances.json"
+                --diff
+                "${CMAKE_CURRENT_BINARY_DIR}/golden-diffs/${regression_image}"
+      )
+      set_tests_properties("golden_${regression_image}" PROPERTIES
+        DEPENDS echarts_regression_render
+      )
+    endforeach()
+
   endif()
 endif()

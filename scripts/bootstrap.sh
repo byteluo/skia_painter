@@ -93,8 +93,8 @@ ensure_skia_checkout() {
   log "Fetching Skia archive ${SKIA_COMMIT}"
   rm -rf "${SKIA_DIR}"
   mkdir -p "${SKIA_DIR}"
-  curl -fsSL "https://skia.googlesource.com/skia/+archive/${SKIA_COMMIT}.tar.gz" \
-    | tar xz -C "${SKIA_DIR}"
+  curl -fsSL "https://github.com/google/skia/archive/${SKIA_COMMIT}.tar.gz" \
+    | tar xz --strip-components=1 -C "${SKIA_DIR}"
 
   [[ -d "${SKIA_DIR}" ]] || fail "missing Skia checkout at ${SKIA_DIR}"
   [[ -f "${SKIA_DIR}/MODULE.bazel" ]] || fail "Skia checkout is incomplete at ${SKIA_DIR}"
