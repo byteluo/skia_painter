@@ -67,6 +67,8 @@ set(SKIA_LOCAL_ENCODER_COMMON "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libencode
 set(SKIA_LOCAL_ICC_SUPPORT "${SKIA_LOCAL_ROOT}/bazel-bin/src/encode/libicc_support.a")
 set(SKIA_LOCAL_ANY_DECODER "${SKIA_LOCAL_ROOT}/bazel-bin/src/codec/libany_decoder.a")
 set(SKIA_LOCAL_FONTMGR_FONTCONFIG "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_fontconfig.a")
+set(SKIA_LOCAL_FONTMGR_CUSTOM "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_custom.a")
+set(SKIA_LOCAL_FONTMGR_DIRECTORY "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_directory_freetype.a")
 set(SKIA_LOCAL_FREETYPE_SUPPORT "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfreetype_support.a")
 set(SKIA_LOCAL_TYPEFACE_PROXY "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libtypeface_proxy.a")
 set(SKIA_LOCAL_CHAR_TO_GLYPHCACHE "${SKIA_LOCAL_ROOT}/bazel-bin/src/utils/libchar_to_glyphcache.a")
@@ -93,6 +95,8 @@ if("${SKIA_LIBRARIES}" STREQUAL "" AND
    EXISTS "${SKIA_LOCAL_ICC_SUPPORT}" AND
    EXISTS "${SKIA_LOCAL_ANY_DECODER}" AND
    EXISTS "${SKIA_LOCAL_FONTMGR_FONTCONFIG}" AND
+   EXISTS "${SKIA_LOCAL_FONTMGR_CUSTOM}" AND
+   EXISTS "${SKIA_LOCAL_FONTMGR_DIRECTORY}" AND
    EXISTS "${SKIA_LOCAL_FREETYPE_SUPPORT}" AND
    EXISTS "${SKIA_LOCAL_TYPEFACE_PROXY}" AND
    EXISTS "${SKIA_LOCAL_CHAR_TO_GLYPHCACHE}" AND
@@ -103,7 +107,7 @@ if("${SKIA_LIBRARIES}" STREQUAL "" AND
    EXISTS "${SKIA_LOCAL_SKCMS_HSW}" AND
    EXISTS "${SKIA_LOCAL_SKCMS_SKX}")
   set(SKIA_LIBRARIES
-    "${SKIA_LOCAL_PNG_ENCODE};${SKIA_LOCAL_PNG_ENCODE_BASE};${SKIA_LOCAL_ENCODER_COMMON};${SKIA_LOCAL_ANY_DECODER};${SKIA_LOCAL_ICC_SUPPORT};${SKIA_LOCAL_FONTMGR_FONTCONFIG};${SKIA_LOCAL_TYPEFACE_PROXY};${SKIA_LOCAL_FREETYPE_SUPPORT};${SKIA_LOCAL_CHAR_TO_GLYPHCACHE};${SKIA_LOCAL_FREETYPE};${SKIA_LOCAL_CORE};${SKIA_LOCAL_BASE};${SKIA_LOCAL_OPTS_ML3};${SKIA_LOCAL_SKCMS};${SKIA_LOCAL_SKCMS_BASELINE};${SKIA_LOCAL_SKCMS_HSW};${SKIA_LOCAL_SKCMS_SKX}")
+    "${SKIA_LOCAL_PNG_ENCODE};${SKIA_LOCAL_PNG_ENCODE_BASE};${SKIA_LOCAL_ENCODER_COMMON};${SKIA_LOCAL_ANY_DECODER};${SKIA_LOCAL_ICC_SUPPORT};${SKIA_LOCAL_FONTMGR_FONTCONFIG};${SKIA_LOCAL_FONTMGR_DIRECTORY};${SKIA_LOCAL_FONTMGR_CUSTOM};${SKIA_LOCAL_TYPEFACE_PROXY};${SKIA_LOCAL_FREETYPE_SUPPORT};${SKIA_LOCAL_CHAR_TO_GLYPHCACHE};${SKIA_LOCAL_FREETYPE};${SKIA_LOCAL_CORE};${SKIA_LOCAL_BASE};${SKIA_LOCAL_OPTS_ML3};${SKIA_LOCAL_SKCMS};${SKIA_LOCAL_SKCMS_BASELINE};${SKIA_LOCAL_SKCMS_HSW};${SKIA_LOCAL_SKCMS_SKX}")
 endif()
 
 foreach(required_var
@@ -123,10 +127,12 @@ find_package(PNG REQUIRED)
 find_package(ZLIB REQUIRED)
 include(CTest)
 include(GNUInstallDirs)
+include(cmake/fonts.cmake)
 
 add_library(canvas_engine_core STATIC
   src/canvas/CanvasSurface.cc
   src/canvas/Canvas2DContext.cc
+  src/canvas/FontManager.cc
   src/canvas/ColorParser.cc
   src/canvas/FontParser.cc
   src/canvas/ImageAsset.cc
@@ -182,6 +188,16 @@ if(NOT "${SKIA_LINK_DIRECTORIES}" STREQUAL "")
     PUBLIC ${SKIA_LINK_DIRECTORIES})
 endif()
 
+target_compile_definitions(canvas_engine_core PRIVATE
+  "CANVAS_ENGINE_DEFAULT_FONT_DIR=\"${CANVAS_ENGINE_FONTS_DIR}\"")
+if(CANVAS_ENGINE_BUNDLED_FONTS)
+  target_compile_definitions(canvas_engine_core PRIVATE
+    CANVAS_ENGINE_BUNDLED_FONTS=1)
+else()
+  target_compile_definitions(canvas_engine_core PRIVATE
+    CANVAS_ENGINE_BUNDLED_FONTS=0)
+endif()
+
 target_link_libraries(canvas_engine_core
   PUBLIC
     ${V8_LIBRARIES}
@@ -197,6 +213,13 @@ endif()
 
 add_executable(canvas_engine src/main.cc src/cli/Cli.cc)
 target_link_libraries(canvas_engine PRIVATE canvas_engine_core)
+if(CANVAS_ENGINE_BUNDLED_FONTS)
+  target_compile_definitions(canvas_engine PRIVATE
+    CANVAS_ENGINE_BUNDLED_FONTS=1)
+else()
+  target_compile_definitions(canvas_engine PRIVATE
+    CANVAS_ENGINE_BUNDLED_FONTS=0)
+endif()
 
 add_executable(color_parser_test tests/color_parser_test.cc)
 target_link_libraries(color_parser_test PRIVATE canvas_engine_core)
@@ -237,6 +260,10 @@ if(APPLE)
       "-framework CoreText"
       "-framework CoreServices"
   )
+  target_link_libraries(canvas_engine_core PRIVATE
+    "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_directory_freetype.a"
+    "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_custom.a"
+    "${SKIA_LOCAL_ROOT}/bazel-bin/src/ports/libfontmgr_coretext.a")
 elseif(UNIX)
   target_include_directories(canvas_engine_core PRIVATE ${PNG_INCLUDE_DIRS})
   target_link_libraries(canvas_engine_core PRIVATE dl m)
@@ -245,6 +272,10 @@ endif()
 install(TARGETS canvas_engine
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+if(CANVAS_ENGINE_BUNDLED_FONTS)
+  install(DIRECTORY "${CANVAS_ENGINE_FONTS_DIR}/"
+    DESTINATION "${CMAKE_INSTALL_BINDIR}/fonts")
+endif()
 
 if(BUILD_TESTING)
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/test_output")

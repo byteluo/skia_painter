@@ -87,7 +87,10 @@ jobs:
 
       - name: Build Skia (minimal target set)
         run: |
-          if [[ -f "third_party/skia/bazel-bin/src/core/libcore.a" ]]; then
+          if [[ -f "third_party/skia/bazel-bin/src/core/libcore.a" &&
+                -f "third_party/skia/bazel-bin/src/ports/libfontmgr_custom.a" &&
+                -f "third_party/skia/bazel-bin/src/ports/libfontmgr_directory_freetype.a" &&
+                -f "third_party/skia/bazel-bin/src/ports/libfontmgr_coretext.a" ]]; then
             echo "Skia artifacts found in cache"; exit 0
           fi
           cd third_party/skia
@@ -105,6 +108,9 @@ jobs:
             //src/encode:png_encode \
             //src/encode:png_encode_base \
             //src/ports:fontmgr_fontconfig \
+            //src/ports:fontmgr_custom \
+            //src/ports:fontmgr_directory_freetype \
+            //src/ports:fontmgr_coretext \
             //src/ports:freetype_support \
             //src/ports:typeface_proxy \
             //src/utils:char_to_glyphcache \

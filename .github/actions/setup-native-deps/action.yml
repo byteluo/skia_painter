@@ -32,6 +32,12 @@ runs:
         key: skia-linux-${{ hashFiles('.gitmodules') }}
         restore-keys: skia-linux-
 
+    - name: Cache bundled fonts
+      uses: actions/cache@v4
+      with:
+        path: build/dev/font-cache
+        key: fonts-noto-2.015-2.014-cjk-sans2.004-${{ runner.os }}
+
     - name: Download Skia source
       shell: bash
       run: |
@@ -53,7 +59,9 @@ runs:
     - name: Build Skia (minimal target set)
       shell: bash
       run: |
-        if [[ -f "third_party/skia/bazel-bin/src/core/libcore.a" ]]; then
+        if [[ -f "third_party/skia/bazel-bin/src/core/libcore.a" &&
+              -f "third_party/skia/bazel-bin/src/ports/libfontmgr_custom.a" &&
+              -f "third_party/skia/bazel-bin/src/ports/libfontmgr_directory_freetype.a" ]]; then
           echo "Skia artifacts found in cache"; exit 0
         fi
         cd third_party/skia
@@ -71,6 +79,8 @@ runs:
           //src/encode:png_encode \
           //src/encode:png_encode_base \
           //src/ports:fontmgr_fontconfig \
+          //src/ports:fontmgr_custom \
+          //src/ports:fontmgr_directory_freetype \
           //src/ports:freetype_support \
           //src/ports:typeface_proxy \
           //src/utils:char_to_glyphcache \
